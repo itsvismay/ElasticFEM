@@ -1,0 +1,2 @@
+/usr/bin/ar qc libglew.a  CMakeFiles/glew.dir/home/vismay/libigl/external/nanogui/ext/glew/src/glew.c.o
+/usr/bin/ranlib libglew.a

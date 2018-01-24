@@ -1,0 +1,13 @@
+/home/vismay/ElasticFEM/build/CMakeFiles/edit_cache.dir
+/home/vismay/ElasticFEM/build/CMakeFiles/glew.dir
+/home/vismay/ElasticFEM/build/CMakeFiles/elastic.dir
+/home/vismay/ElasticFEM/build/CMakeFiles/rebuild_cache.dir
+/home/vismay/ElasticFEM/build/glfw/CMakeFiles/edit_cache.dir
+/home/vismay/ElasticFEM/build/glfw/CMakeFiles/rebuild_cache.dir
+/home/vismay/ElasticFEM/build/glfw/src/CMakeFiles/edit_cache.dir
+/home/vismay/ElasticFEM/build/glfw/src/CMakeFiles/glfw.dir
+/home/vismay/ElasticFEM/build/glfw/src/CMakeFiles/rebuild_cache.dir
+/home/vismay/ElasticFEM/build/glfw/src/CMakeFiles/glfw_objects.dir
+/home/vismay/ElasticFEM/build/tetgen/CMakeFiles/edit_cache.dir
+/home/vismay/ElasticFEM/build/tetgen/CMakeFiles/rebuild_cache.dir
+/home/vismay/ElasticFEM/build/tetgen/CMakeFiles/tetgen.dir
