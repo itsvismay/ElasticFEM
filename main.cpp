@@ -7,6 +7,7 @@
 #include <igl/readMESH.h>
 #include <igl/readOBJ.h>
 #include <igl/slice.h>
+#include <Eigen/LU>
 #include <json.hpp>
 
 using json = nlohmann::json;
@@ -183,8 +184,8 @@ typedef Matrix<double, 12, 1> Vector12d;
         SparseMatrix<double> RegMass;
         SparseMatrix<double> StiffnessMatrix;
 
-        SparseMatrix<int> Pf_fixMatrix;
-        SparseMatrix<int> Pm_moveMatrix;
+        SparseMatrix<double> Pf_fixMatrix;
+        SparseMatrix<double> Pm_moveMatrix;
         VectorXd x, v, f;
         //end
 
@@ -202,15 +203,17 @@ typedef Matrix<double, 12, 1> Vector12d;
         void setForces(VectorXd& f);
 
         void xToV(VectorXd& x);
-        void setConstraints(std::vector<int>& f, std::vector<int> m, SparseMatrix<int>& Pf, SparseMatrix<int>& Pm);
+        void setConstraints(std::vector<int>& f, std::vector<int> m, SparseMatrix<double>& Pf, SparseMatrix<double>& Pm);
 
 
         std::vector<Tetrahedron> getTets();
-        VectorXd* getx();
-        VectorXd* getv();
-        SparseMatrix<double>* getMass();
-        SparseMatrix<double>* getStiffness();
-        SparseMatrix<int>* getPf();
+        VectorXd getx();
+        VectorXd* get_px();
+        VectorXd* get_pv();
+        SparseMatrix<double>* get_pMass();
+        SparseMatrix<double>* get_pStiffness();
+        SparseMatrix<double>* get_pPf();
+        MatrixXd getCurrentVerts();
     };
 
     SolidMesh::SolidMesh(MatrixXi& TT, MatrixXd& TV, double youngs, double poissons){
@@ -231,28 +234,36 @@ typedef Matrix<double, 12, 1> Vector12d;
 
 
     }
+    MatrixXd SolidMesh::getCurrentVerts(){
+        Eigen::Map<Eigen::MatrixXd> newV(this->x.data(), this->V.rows(), this->V.cols());
+        return newV.transpose();
+    }
 
     std::vector<Tetrahedron> SolidMesh::getTets(){
         return this->tets;
     }
 
-    VectorXd* SolidMesh::getx(){
+    VectorXd SolidMesh::getx(){
+        return this->x;
+    }
+
+    VectorXd* SolidMesh::get_px(){
         return &(this->x);
     }
 
-    VectorXd* SolidMesh::getv(){
+    VectorXd* SolidMesh::get_pv(){
         return &(this->v);
     }
 
-    SparseMatrix<double>* SolidMesh::getMass(){
+    SparseMatrix<double>* SolidMesh::get_pMass(){
         return &(this->RegMass);
     }
 
-    SparseMatrix<double>* SolidMesh::getStiffness(){
+    SparseMatrix<double>* SolidMesh::get_pStiffness(){
         return &(this->StiffnessMatrix);
     }
 
-    SparseMatrix<int>* SolidMesh::getPf(){
+    SparseMatrix<double>* SolidMesh::get_pPf(){
         return &(this->Pf_fixMatrix);
     }
 
@@ -301,7 +312,7 @@ typedef Matrix<double, 12, 1> Vector12d;
         
 
         for(unsigned int i=0; i<this->tets.size(); i++){
-            double vol = (this->tets[i].getUndeformedVolume()/4); //UNITS: kg/m^3
+            double vol = (this->tets[i].getUndeformedVolume()/4)*1e1; //UNITS: kg/m^3
             Vector4i indices = this->tets[i].getIndices();
 
             massVector(3*indices(0)) += vol;
@@ -389,9 +400,9 @@ typedef Matrix<double, 12, 1> Vector12d;
         // //gravity
         f.setZero();
 
-        // for(unsigned int i=0; i<f.size()/3; i++){
-        //     f(3*i+1) += massVector(3*i+2)*gravity;
-        // }
+        for(unsigned int i=0; i<f.size()/3; i++){
+            f(3*i+1) += this->RegMass.coeff(3*i+1, 3*i+1)*-9800;
+        }
 
         //elastic
         for(unsigned int i=0; i<this->tets.size(); i++){
@@ -404,7 +415,7 @@ typedef Matrix<double, 12, 1> Vector12d;
         return;
     }
 
-    void SolidMesh::setConstraints(std::vector<int>& fix, std::vector<int> move, SparseMatrix<int>& Pf, SparseMatrix<int>& Pm){
+    void SolidMesh::setConstraints(std::vector<int>& fix, std::vector<int> move, SparseMatrix<double>& Pf, SparseMatrix<double>& Pm){
         //fix min x
         int axis = 0;
         double tolr = 1e-5;
@@ -414,8 +425,6 @@ typedef Matrix<double, 12, 1> Vector12d;
             if (this->V.col(i)(axis)< minx+tolr ) 
             {
                 fix.push_back(i);
-
-                std::cout<<i<<std::endl;
             }
         }
 
@@ -431,14 +440,12 @@ typedef Matrix<double, 12, 1> Vector12d;
         {
             if(i != fix[c])
             {
-                std::cout<<"not "<<i<<std::endl;
                 Pf.coeffRef(3*i, 3*j) = 1.0;
                 Pf.coeffRef(3*i+1, 3*j+1) =1.0;
                 Pf.coeffRef(3*i+2, 3*j+2) =1.0;
                 j+=1;
             }else
             {
-                std::cout<<"Fixed "<<fix[c]<<std::endl;
                 c+=1;
             }
         }
@@ -466,7 +473,11 @@ typedef Matrix<double, 12, 1> Vector12d;
 
     class Newmark{
     protected:
-        int NEWTON_MAX = 100;
+        int NEWTON_MAX = 10;
+        double beta = 0.25;
+        double gamma = 0.5;
+        double h = 0.001;
+
         SolidMesh* SM;
 
         VectorXd x_k;
@@ -475,6 +486,7 @@ typedef Matrix<double, 12, 1> Vector12d;
 
         SparseMatrix<double> grad_g;
         VectorXd g;
+        SimplicialLLT<SparseMatrix<double>> llt_solver;
 
     public:
         Newmark(SolidMesh* M);
@@ -485,27 +497,80 @@ typedef Matrix<double, 12, 1> Vector12d;
     Newmark::Newmark(SolidMesh* M)
     {
         this->SM = M;
-        double dofs = (*this->SM->getx()).rows();
+        double dofs = (*this->SM->get_px()).rows();
         x_k.resize(dofs);
         v_k.resize(dofs);
         f_o.resize(dofs);
 
+        SparseMatrix<double>* P = this->SM->get_pPf();
+        this->g.resize((*P).cols());
+        this->grad_g.resize((*P).cols(), (*P).cols());
+
+        // this->llt_solver
 
     }
+
     void Newmark::step()
-    {
-        x_k.setZero();
-        v_k.setZero();
-        this->SM->setForces(f_o);
+    {   
+        bool Nan = false;
+        int iter;
+        this->x_k = this->SM->getx();
+        this->v_k.setZero();
+        this->SM->setForces(this->f_o);
 
-        for(int i=0; i<this->NEWTON_MAX; ++i)
+        SparseMatrix<double>* P = this->SM->get_pPf();
+        SparseMatrix<double>* RegMass = this->SM->get_pMass();
+        SparseMatrix<double>* K = this->SM->get_pStiffness();
+        VectorXd *v_old = this->SM->get_pv();
+        VectorXd *x_old = this->SM->get_px();
+        VectorXd force = f_o;
+
+        for(int iter=0; iter<this->NEWTON_MAX; ++iter)
         {
-
-            this->grad_g.setZero();
             this->g.setZero();
+            this->grad_g.setZero();
 
+
+            this->SM->setForces(force);
+            this->SM->setStiffnessMatrix((*K));
+
+            this->g = (*P).transpose()*((*RegMass) * this->x_k - (*RegMass) * (*x_old) - this->h*(*RegMass) * (*v_old) - (this->h*this->h/2)*(1-2*this->beta) * this->f_o - (this->h*this->h*this->beta)*force);
+            this->grad_g = (*P).transpose()* ((*RegMass) - this->h*this->h*this->beta*(*K)) *(*P);
             
+            // std::cout<<this->g.transpose()<<std::endl;
+            llt_solver.compute(this->grad_g);
+            if(llt_solver.info() == Eigen::NumericalIssue){
+                cout<<"Possibly using a non- pos def matrix in the LLT method"<<endl;
+                exit(0);
+            }
+            VectorXd dx = -1* llt_solver.solve(this->g);
+            this->x_k += (*P)*dx;
+            
+            this->SM->xToV(this->x_k);
+            if(this->x_k != this->x_k)
+            {
+                Nan = true;
+                break;
+            }
+            if(this->g.squaredNorm()/this->g.size()< 1e-3)
+            {
+                break;
+            }
+
         }
+
+        if(Nan){
+            cout<<"ERROR: Newton's method doesn't converge"<<endl;
+            cout<<iter<<endl;
+            exit(0);
+        }
+        if(iter== NEWTON_MAX){
+            cout<<"ERROR: Newton max reached"<<endl;
+            cout<<iter<<endl;
+            exit(0);
+        }
+        (*v_old) = (x_k - (*x_old))/this->h;
+        (*x_old) = x_k;
 
     }
 
@@ -544,7 +609,10 @@ int main(int argc, char *argv[])
 
 	igl::viewer::Viewer viewer;
     viewer.callback_pre_draw = [&](igl::viewer::Viewer & viewer)
-    {
+    {   
+        nmrk->step();
+        MatrixXd newV = SM->getCurrentVerts();
+        viewer.data.set_vertices(newV);
     	return false;
     };
 
