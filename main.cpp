@@ -312,7 +312,7 @@ typedef Matrix<double, 12, 1> Vector12d;
         
 
         for(unsigned int i=0; i<this->tets.size(); i++){
-            double vol = (this->tets[i].getUndeformedVolume()/4)*1e1; //UNITS: kg/m^3
+            double vol = (this->tets[i].getUndeformedVolume()/4)*1e3; //UNITS: kg/m^3
             Vector4i indices = this->tets[i].getIndices();
 
             massVector(3*indices(0)) += vol;
@@ -401,7 +401,7 @@ typedef Matrix<double, 12, 1> Vector12d;
         f.setZero();
 
         for(unsigned int i=0; i<f.size()/3; i++){
-            f(3*i+1) += this->RegMass.coeff(3*i+1, 3*i+1)*-9800;
+            f(3*i+1) += this->RegMass.coeff(3*i+1, 3*i+1)*-9.8;
         }
 
         //elastic
@@ -476,7 +476,7 @@ typedef Matrix<double, 12, 1> Vector12d;
         int NEWTON_MAX = 10;
         double beta = 0.25;
         double gamma = 0.5;
-        double h = 0.001;
+        double h = 0.01;
 
         SolidMesh* SM;
 
@@ -610,10 +610,13 @@ int main(int argc, char *argv[])
 	igl::viewer::Viewer viewer;
     viewer.callback_pre_draw = [&](igl::viewer::Viewer & viewer)
     {   
-        nmrk->step();
-        MatrixXd newV = SM->getCurrentVerts();
-        viewer.data.set_vertices(newV);
-    	return false;
+        if(viewer.core.is_animating)
+        {
+            nmrk->step();
+            MatrixXd newV = SM->getCurrentVerts();
+            viewer.data.set_vertices(newV);
+    	}
+        return false;
     };
 
 	std::cout<<V<<std::endl;
