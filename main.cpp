@@ -124,10 +124,103 @@ typedef Matrix<double, 12, 1> Vector12d;
 
         Matrix3d H = -1*this->undeformedVol*P*((this->InvRefShapeMatrix).transpose());
 
-        f.segment<3>(3*verticesIndex(0)) += H.col(0);
-        f.segment<3>(3*verticesIndex(1)) += H.col(1);
-        f.segment<3>(3*verticesIndex(2)) += H.col(2);
-        f.segment<3>(3*verticesIndex(3)) += -1*H.col(0) - H.col(1) - H.col(2);
+
+        //##Muscle force, do the proper math later
+        double v1 =1;
+        double v2 =0;
+        double v3 =0;
+        double a = 50000;
+
+        double o = this->InvRefShapeMatrix(0,0);
+        double p = this->InvRefShapeMatrix(0,1);
+        double q = this->InvRefShapeMatrix(0,2);
+        double t = this->InvRefShapeMatrix(1,0);
+        double r = this->InvRefShapeMatrix(1,1);
+        double s = this->InvRefShapeMatrix(1,2);
+        double u = this->InvRefShapeMatrix(2,0);
+        double w = this->InvRefShapeMatrix(2,1);
+        double e = this->InvRefShapeMatrix(2,2);
+
+        double nx1_nx4 = Ds(0,0);
+        double nx2_nx4 = Ds(0,1);
+        double nx3_nx4 = Ds(0,2);
+        double ny1_ny4 = Ds(1,0);
+        double ny2_ny4 = Ds(1,1);
+        double ny3_ny4 = Ds(1,2);
+        double nz1_nz4 = Ds(2,0);
+        double nz2_nz4 = Ds(2,1);
+        double nz3_nz4 = Ds(2,2);
+
+
+        VectorXd force_muscle(12);
+        force_muscle<<
+        (-1 *a *(o *v1 + p *v2 + q *v3) *this->undeformedVol*
+            (((nx1_nx4)* o + (nx2_nx4) *t + (nx3_nx4) *u)* v1 
+                + (e *(nx3_nx4) + (nx1_nx4) *q + (nx2_nx4)* s)* v3 
+                + v2* ((nx1_nx4) *p + (nx2_nx4) *r + (nx3_nx4)* w))),
+        
+        (-1* a* (o *v1 + p *v2 + q *v3) *this->undeformedVol*
+            (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u) *v1 
+                + (e* (ny3_ny4)* + (ny1_ny4)* q + (ny2_ny4)* s)* v3 
+                + v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
+
+        (-1* a* (o *v1 + p *v2 + q *v3) *this->undeformedVol*
+            (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u) *v1 
+                + (e* (nz3_nz4)* + (nz1_nz4)* q + (nz2_nz4)* s)* v3 
+                + v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w))),
+
+        (-1* a* (t* v1 + r* v2 + s* v3)*this->undeformedVol*
+            (((nx1_nx4)* o + (nx2_nx4) *t + (nx3_nx4) *u)* v1 
+                + (e *(nx3_nx4) + (nx1_nx4) *q + (nx2_nx4)* s)* v3 
+                + v2* ((nx1_nx4) *p + (nx2_nx4) *r + (nx3_nx4)* w))),
+        
+        (-1* a* (t* v1 + r* v2 + s* v3) *this->undeformedVol*
+            (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u) *v1 
+                + (e* (ny3_ny4)* + (ny1_ny4)* q + (ny2_ny4)* s)* v3 
+                + v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
+
+        (-1* a* (t* v1 + r* v2 + s* v3) *this->undeformedVol*
+            (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u) *v1 
+                + (e* (nz3_nz4)* + (nz1_nz4)* q + (nz2_nz4)* s)* v3 
+                + v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w))),
+
+        (-1 *a * (u* v1 + e* v3 + v2* w) *this->undeformedVol*
+            (((nx1_nx4)* o + (nx2_nx4) *t + (nx3_nx4) *u)* v1 
+                + (e *(nx3_nx4) + (nx1_nx4) *q + (nx2_nx4)* s)* v3 
+                + v2* ((nx1_nx4) *p + (nx2_nx4) *r + (nx3_nx4)* w))),
+        
+        (-1 *a * (u* v1 + e* v3 + v2* w) *this->undeformedVol*
+            (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u) *v1 
+                + (e* (ny3_ny4)* + (ny1_ny4)* q + (ny2_ny4)* s)* v3 
+                + v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
+
+        (-1 *a * (u* v1 + e* v3 + v2* w) *this->undeformedVol*
+            (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u) *v1 
+                + (e* (nz3_nz4)* + (nz1_nz4)* q + (nz2_nz4)* s)* v3 
+                + v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w))),
+
+        (-1* a* this->undeformedVol* ((-o - t - u) *v1 + (-e - q - s) *v3 + v2* (-p - r - w)) *
+            (((nx1_nx4)* o + (nx2_nx4)* t + (nx3_nx4)* u)* v1 + 
+                (e *(nx3_nx4) + (nx1_nx4)* q + (nx2_nx4)* s)* v3 + 
+                v2 *((nx1_nx4)* p + (nx2_nx4)* r + (nx3_nx4)* w))),
+
+        (-1* a* this->undeformedVol* ((-o - t - u) *v1 + (-e - q - s) *v3 + v2* (-p - r - w)) *
+            (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u)* v1 + 
+                (e *(ny3_ny4) + (ny1_ny4)* q + (ny2_ny4)* s)* v3 + 
+                v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
+
+        (-1* a* this->undeformedVol* ((-o - t - u) *v1 + (-e - q - s) *v3 + v2* (-p - r - w)) *
+            (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u)* v1 + 
+                (e *(nz3_nz4) + (nz1_nz4)* q + (nz2_nz4)* s)* v3 + 
+                v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w)));
+
+        //--------
+
+
+        f.segment<3>(3*verticesIndex(0)) += H.col(0) + force_muscle.segment<3>(0);
+        f.segment<3>(3*verticesIndex(1)) += H.col(1) + force_muscle.segment<3>(3);
+        f.segment<3>(3*verticesIndex(2)) += H.col(2) + force_muscle.segment<3>(6);
+        f.segment<3>(3*verticesIndex(3)) += -1*H.col(0) - H.col(1) - H.col(2) + force_muscle.segment<3>(9);
     }
 
     MatrixXd Tetrahedron::computeForceDifferentials(MatrixXd& TV, Vector12d& dx){
@@ -399,9 +492,9 @@ typedef Matrix<double, 12, 1> Vector12d;
     void SolidMesh::setForces(VectorXd& f){
         // //gravity
         f.setZero();
-
+        double gravity = 0;
         for(unsigned int i=0; i<f.size()/3; i++){
-            f(3*i+1) += this->RegMass.coeff(3*i+1, 3*i+1)*-9.8;
+            f(3*i+1) += this->RegMass.coeff(3*i+1, 3*i+1);
         }
 
         //elastic
