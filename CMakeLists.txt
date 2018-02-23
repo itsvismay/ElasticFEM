@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.1)
 project(elastic)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-set(JSON_HPP_SRC_DIR "/home/vismay/json/src")
+set(JSON_HPP_SRC_DIR "/home/vismay/json/single_include/nlohmann")
 set(SPECTRA_INCLUDE_DIR "/home/vismay/spectra-0.5.0/include")
 
 
@@ -37,4 +37,4 @@ include_directories(${SPECTRA_INCLUDE_DIR})
 file(GLOB SRCFILES *.cpp)
 #file(GLOB EXTERNALS "../spectra-0.5.0/include/*.h")
 add_executable(${PROJECT_NAME} ${HEADFILES} ${SRCFILES} ${EXTERNALS})
-target_link_libraries(${PROJECT_NAME} igl::core igl::viewer -fopenmp)
+target_link_libraries(${PROJECT_NAME} -lglfw igl::core igl::viewer -fopenmp)
