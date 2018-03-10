@@ -1,10 +1,11 @@
 {
   "mesh_file":"/home/vismay/Scrapts/Beam1e-4.mesh",
-  "youngs": 10000,
-  "poissons": 0.4,
+  "youngs": 5000,
+  "poissons": 0.2,
   "fibre_mag": 1000,
   "fibre_dir": [0, 1, 0],
   "axis": 0,
   "thresh": 0.3,
-  "gravity": 0
+  "gravity": 0,
+  "timestep": 0.01
 }

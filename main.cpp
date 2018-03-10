@@ -22,13 +22,13 @@ json j_input;
 
 //############ TETRAHEDRON 
 
-    class Tetrahedron{
-
+    class Tetrahedron
+    {
     public:
     	Tetrahedron(VectorXi k, double mu, double lambda);
-        void computeElasticForces(MatrixXd& TV, VectorXd& f);
+        void computeElasticForces(VectorXd& xi, VectorXd& f);
         void precompute(MatrixXd& TV);
-        MatrixXd computeForceDifferentials(MatrixXd& TV, Vector12d& dx);
+        MatrixXd computeForceDifferentials(VectorXd& xi, Vector12d& dx);
 
         inline double getUndeformedVolume();
         inline VectorXi& getIndices();
@@ -50,7 +50,8 @@ json j_input;
         Vector3d fibre_dir, tet_centroid;
     };
 
-    Tetrahedron::Tetrahedron(VectorXi k, double mu, double lambda){
+    Tetrahedron::Tetrahedron(VectorXi k, double mu, double lambda)
+    {
         this->verticesIndex = k ;
         this->mu = mu;
         this->lambda = lambda;
@@ -96,12 +97,13 @@ json j_input;
         this->tet_centroid = (1.0/4)*(TV.col(verticesIndex(0)) + TV.col(verticesIndex(1)) + TV.col(verticesIndex(2)) + TV.col(verticesIndex(3)));
     }
 
-    void Tetrahedron::computeElasticForces(MatrixXd &TV, VectorXd& f)
+    void Tetrahedron::computeElasticForces(VectorXd& xi, VectorXd& f)
     {
 
         Matrix3d Ds;
-        for(int i=0; i<3; i++){
-            Ds.col(i) = TV.col(verticesIndex(i)) - TV.col(verticesIndex(3));
+        for(int i=0; i<3; i++)
+        {
+            Ds.col(i) = xi.segment<3>(3*verticesIndex(i)) - xi.segment<3>(3*verticesIndex(3));
         }
 
         Matrix3d F = Ds*this->InvRefShapeMatrix;
@@ -122,13 +124,15 @@ json j_input;
         this->energy = this->undeformedVol*(mu/2.0 * (I1bar - 3) + lambda/2.0 * (J-1.0) * (J-1.0));
 
         
-        if(F.determinant()<0){
+        if(F.determinant()<0)
+        {
             this->energy = 1e40;
             cout<<"ERROR: F determinant is 0"<<endl;
             cout<<"Decrease timestep maybe - instantaneous force is too much with this timestep"<<endl;
             exit(0);
         }
-        if(this->energy != this->energy){
+        if(this->energy != this->energy)
+        {
             //NANS
             cout<<"ENERGY nans"<<endl;
             exit(0);
@@ -235,11 +239,13 @@ json j_input;
         f.segment<3>(3*verticesIndex(3)) += -1*H.col(0) - H.col(1) - H.col(2) + force_muscle.segment<3>(9);
     }
 
-    MatrixXd Tetrahedron::computeForceDifferentials(MatrixXd& TV, Vector12d& dx){
+    MatrixXd Tetrahedron::computeForceDifferentials(VectorXd& xi, Vector12d& dx)
+    {
 
         Matrix3d Ds;
-        for(int i=0; i<3; i++){
-            Ds.col(i) = TV.col(verticesIndex(i)) - TV.col(verticesIndex(3));
+        for(int i=0; i<3; i++)
+        {
+            Ds.col(i) = xi.segment<3>(3*verticesIndex(i)) - xi.segment<3>(3*verticesIndex(3));
         }
 
         Matrix3d dDs;
@@ -275,7 +281,8 @@ json j_input;
 
 //############ SOLID_MESH 
 
-    class SolidMesh{
+    class SolidMesh
+    {
 
     protected:
         MatrixXd V;
@@ -303,11 +310,10 @@ json j_input;
         void initializeMesh();
         void setNewYoungsPoissons(double youngs, double poissons, int index);
         
-        void setStiffnessMatrix(SparseMatrix<double>& K);
+        void setStiffnessMatrix(SparseMatrix<double>& K, VectorXd& xi);
         void setLumpedMassMatrix();
-        void setForces(VectorXd& f);
+        void setForces(VectorXd& f, VectorXd& xi);
 
-        void xToV(VectorXd& x);
         void setConstraints(std::vector<int>& f, std::vector<int> m, SparseMatrix<double>& Pf, SparseMatrix<double>& Pm);
 
 
@@ -323,12 +329,14 @@ json j_input;
         MatrixXd getCurrentVerts();
     };
 
-    SolidMesh::SolidMesh(MatrixXi& TT, MatrixXd& TV, double youngs, double poissons){
+    SolidMesh::SolidMesh(MatrixXi& TT, MatrixXd& TV, double youngs, double poissons)
+    {
         this->V = TV.transpose().eval();
         this->T = TT;
         
         double mu = youngs/(2+ 2*poissons);
         double lambda = youngs*poissons/((1+poissons)*(1-2*poissons));
+        #pragma omp parallel for
         for(int i=0; i<TT.rows(); i++){
             //based on Tet indexes, get the vertices of the tet from TV
             Tetrahedron t(TT.row(i), mu, lambda);
@@ -338,14 +346,13 @@ json j_input;
 
 
     }
-    MatrixXd SolidMesh::getCurrentVerts(){
+    MatrixXd SolidMesh::getCurrentVerts()
+    {
         Eigen::Map<Eigen::MatrixXd> newV(this->x.data(), this->V.rows(), this->V.cols());
         return newV.transpose();
     }
 
-    std::vector<Tetrahedron>& SolidMesh::getTets(){
-        return this->tets;
-    }
+    inline std::vector<Tetrahedron>& SolidMesh::getTets(){ return this->tets; }
 
     inline MatrixXd& SolidMesh::getColwiseV(){ return this->V; }
     
@@ -363,7 +370,8 @@ json j_input;
 
     inline SparseMatrix<double>* SolidMesh::get_pPf(){ return &(this->Pf_fixMatrix);}
 
-    void SolidMesh::initializeMesh(){
+    void SolidMesh::initializeMesh()
+    {
         int vertsNum = this->V.cols();
         InvMass.resize(3*vertsNum, 3*vertsNum); RegMass.resize(3*vertsNum, 3*vertsNum);
         InvMass.setZero();RegMass.setZero();
@@ -372,6 +380,7 @@ json j_input;
 
         x.resize(3*vertsNum);v.resize(3*vertsNum);f.resize(3*vertsNum);
         x.setZero();v.setZero();f.setZero();
+        #pragma omp parallel for
         for(unsigned int k=0; k<this->tets.size(); ++k)
         {
             Vector4i indices = this->tets[k].getIndices();
@@ -394,17 +403,18 @@ json j_input;
 
 
         this->setLumpedMassMatrix();
-        this->setStiffnessMatrix(this->StiffnessMatrix);
+        this->setStiffnessMatrix(this->StiffnessMatrix, this->x);
         this->setConstraints(this->fixVertsIndices, this->movVertsIndices, this->Pf_fixMatrix, this->Pm_moveMatrix);
     }
 
-    void SolidMesh::setLumpedMassMatrix(){
+    void SolidMesh::setLumpedMassMatrix()
+    {
         int vertsNum = this->V.cols();
         VectorXd massVector;
         massVector.resize(3*vertsNum);
         massVector.setZero();
         
-        
+        #pragma omp parallel for
         for(unsigned int i=0; i<this->tets.size(); i++){
             double vol = (this->tets[i].getUndeformedVolume()/4)*1e2; //UNITS: kg/m^3
             Vector4i indices = this->tets[i].getIndices();
@@ -451,13 +461,13 @@ json j_input;
         tets[index].setLambda(lambda);
     }
 
-    void SolidMesh::setStiffnessMatrix(SparseMatrix<double>& K)
+    void SolidMesh::setStiffnessMatrix(SparseMatrix<double>& K, VectorXd& xi)
     {
         this->StiffnessMatrix.setZero();
 
         vector<Trip> triplets1;
         triplets1.reserve(12*12*this->tets.size());
-        
+        #pragma omp parallel for collapse(2)
         for(unsigned int i=0; i<this->tets.size(); i++)
         {
             //Get P(dxn), dx = [1,0, 0...], then [0,1,0,....], and so on... for all 4 vert's x, y, z
@@ -467,11 +477,10 @@ json j_input;
             dx.setZero();
             Vector4i indices = this->tets[i].getIndices();
             int kj;
-            
             for(unsigned int j=0; j<12; j++)
             {
                 dx(j) = 1;
-                MatrixXd dForces = this->tets[i].computeForceDifferentials(this->V, dx);
+                MatrixXd dForces = this->tets[i].computeForceDifferentials(xi, dx);
                 kj = j%3;
                 //row in order for dfxi/dxi ..dfxi/dzl
                 triplets1.push_back(Trip(3*indices[j/3]+kj, 3*indices[0], dForces(0,0)));
@@ -496,7 +505,8 @@ json j_input;
         return;
     }
 
-    void SolidMesh::setForces(VectorXd& f){
+    void SolidMesh::setForces(VectorXd& f, VectorXd& xi)
+    {
         // //gravity
         f.setZero();
         double gravity = j_input["gravity"];
@@ -505,8 +515,9 @@ json j_input;
         }
 
         //elastic
+        #pragma omp parallel for
         for(unsigned int i=0; i<this->tets.size(); i++){
-            this->tets[i].computeElasticForces(this->V, f);
+            this->tets[i].computeElasticForces(xi, f);
         }
         
 
@@ -515,7 +526,8 @@ json j_input;
         return;
     }
 
-    void SolidMesh::setConstraints(std::vector<int>& fix, std::vector<int> move, SparseMatrix<double>& Pf, SparseMatrix<double>& Pm){
+    void SolidMesh::setConstraints(std::vector<int>& fix, std::vector<int> move, SparseMatrix<double>& Pf, SparseMatrix<double>& Pm)
+    {
         //fix max y
         int axis = 1;
         double tolr = 1e-4;
@@ -561,26 +573,12 @@ json j_input;
         this->Pf_fixMatrix = Pf;
     }
 
-    //TODO: make this redundant
-    void SolidMesh::xToV(VectorXd& q){
-        this->V.setZero();
-        
-        for(unsigned int i=0; i<this->tets.size(); ++i)
-        {
-            Vector4i indices = this->tets[i].getIndices();
-            this->V.col(indices(0)) = Vector3d(q(3*indices(0)), q(3*indices(0)+1),q(3*indices(0) +2));
-            this->V.col(indices(1)) = Vector3d(q(3*indices(1)), q(3*indices(1)+1),q(3*indices(1) +2));
-            this->V.col(indices(2)) = Vector3d(q(3*indices(2)), q(3*indices(2)+1),q(3*indices(2) +2));
-            this->V.col(indices(3)) = Vector3d(q(3*indices(3)), q(3*indices(3)+1),q(3*indices(3) +2));
-        }
-        return;
-    }
-
 //############ END 
 
 //############ INTEGRATOR 
 
-    class Newmark{
+    class Newmark
+    {
     protected:
         int NEWTON_MAX = 10;
         double beta = 0.25;
@@ -598,13 +596,14 @@ json j_input;
         CholmodSupernodalLLT<SparseMatrix<double>> llt_solver;
 
     public:
-        Newmark(SolidMesh* M);
+        Newmark(SolidMesh* M, double timestep);
         void step();
 
     };
 
-    Newmark::Newmark(SolidMesh* M)
+    Newmark::Newmark(SolidMesh* M, double timestep)
     {
+        this->h = timestep;
         this->SM = M;
         double dofs = (*this->SM->get_px()).rows();
         x_k.resize(dofs);
@@ -615,7 +614,6 @@ json j_input;
         SparseMatrix<double>* K = this->SM->get_pStiffness();
         this->g.resize((*P).cols());
         this->grad_g.resize((*P).cols(), (*P).cols());
-        this->SM->setStiffnessMatrix((*K));
         SparseMatrix<double> CholeskyAnalyzeBlock = (*P).transpose()*(*K)*(*P);
         llt_solver.analyzePattern(CholeskyAnalyzeBlock);
         // this->llt_solver
@@ -628,7 +626,7 @@ json j_input;
         int iter;
         this->x_k = this->SM->get_copy_x();
         this->v_k.setZero();
-        this->SM->setForces(this->f_o);
+        this->SM->setForces(this->f_o, this->x_k);
         SparseMatrix<double>* P = this->SM->get_pPf();
         SparseMatrix<double>* RegMass = this->SM->get_pMass();
         SparseMatrix<double>* K = this->SM->get_pStiffness();
@@ -642,8 +640,8 @@ json j_input;
             this->grad_g.setZero();
 
 
-            this->SM->setForces(force);
-            this->SM->setStiffnessMatrix((*K));
+            this->SM->setForces(force,this->x_k);
+            this->SM->setStiffnessMatrix((*K), this->x_k);
 
             this->g = (*P).transpose()*((*RegMass) * this->x_k - (*RegMass) * (*x_old) - this->h*(*RegMass) * (*v_old) - (this->h*this->h/2)*(1-2*this->beta) * this->f_o - (this->h*this->h*this->beta)*force);
             this->grad_g = (*P).transpose()* ((*RegMass) - this->h*this->h*this->beta*(*K)) *(*P);
@@ -657,7 +655,6 @@ json j_input;
             VectorXd dx = -1* llt_solver.solve(this->g);
             this->x_k += (*P)*dx;
             
-            this->SM->xToV(this->x_k);
             if(this->x_k != this->x_k)
             {
                 Nan = true;
@@ -711,46 +708,46 @@ int main(int argc, char *argv[])
     
     SM->initializeMesh();
 
-    //SET MUSCLES HERE
-    Eigen::VectorXd Zc;
-    Zc.resize(SM->getColwiseV().cols());
-    Zc.setZero();
-    double mag = j_input["fibre_mag"];
-    int axis = j_input["axis"];
-    Eigen::Vector3d maxs = SM->getColwiseV().rowwise().maxCoeff();
-    Eigen::Vector3d mins = SM->getColwiseV().rowwise().minCoeff();
-    double t = j_input["thresh"];
-    Eigen::Vector3d thresh = mins + t*(maxs - mins);
-    std::cout<<maxs.transpose()<<std::endl;
-    std::cout<<mins.transpose()<<std::endl;
-    std::cout<<thresh.transpose()<<"\naaa"<<std::endl;
-    Eigen::Vector3d fibre_dir(j_input["fibre_dir"][0], j_input["fibre_dir"][1], j_input["fibre_dir"][2]);
-    #pragma omp parallel for
-    for(auto& tet: SM->getTets())
-    {   
-        int i0 = tet.getIndices()(0);
-        int i1 = tet.getIndices()(1);
-        int i2 = tet.getIndices()(2);
-        int i3 = tet.getIndices()(3);
+    //Set Muscle stuff here
+        Eigen::VectorXd Zc;
+        Zc.resize(SM->getColwiseV().cols());
+        Zc.setZero();
+        double mag = j_input["fibre_mag"];
+        int axis = j_input["axis"];
+        Eigen::Vector3d maxs = SM->getColwiseV().rowwise().maxCoeff();
+        Eigen::Vector3d mins = SM->getColwiseV().rowwise().minCoeff();
+        double t = j_input["thresh"];
+        Eigen::Vector3d thresh = mins + t*(maxs - mins);
+        std::cout<<maxs.transpose()<<std::endl;
+        std::cout<<mins.transpose()<<std::endl;
+        std::cout<<thresh.transpose()<<"\naaa"<<std::endl;
+        Eigen::Vector3d fibre_dir(j_input["fibre_dir"][0], j_input["fibre_dir"][1], j_input["fibre_dir"][2]);
+        #pragma omp parallel for
+        for(auto& tet: SM->getTets())
+        {   
+            int i0 = tet.getIndices()(0);
+            int i1 = tet.getIndices()(1);
+            int i2 = tet.getIndices()(2);
+            int i3 = tet.getIndices()(3);
 
-        if(SM->getColwiseV().col(i0)(axis)< thresh(axis))
-        {
-            tet.set_fibre_mag(mag);
-            tet.set_fibre_dir(fibre_dir);
-            Zc(i0/3) = mag;
-            Zc(i1/3) = mag;
-            Zc(i2/3) = mag;
-            Zc(i3/3) = mag;
+            if(SM->getColwiseV().col(i0)(axis)< thresh(axis))
+            {
+                tet.set_fibre_mag(mag);
+                tet.set_fibre_dir(fibre_dir);
+                Zc(i0/3) = mag;
+                Zc(i1/3) = mag;
+                Zc(i2/3) = mag;
+                Zc(i3/3) = mag;
+            }
         }
-    }
-    Eigen::MatrixXd C;
-    igl::jet(Zc, true, C);
-    //Swap RGB colors because libigl background is blue
-    C.col(2).swap(C.col(1));
+        Eigen::MatrixXd C;
+        igl::jet(Zc, true, C);
+        //Swap RGB colors because libigl background is blue
+        C.col(2).swap(C.col(1));
     //---
 
     std::cout<< "STEPPING"<<std::endl;
-    Newmark* nmrk = new Newmark(SM);
+    Newmark* nmrk = new Newmark(SM, j_input["timestep"]);
     nmrk->step();
 
 	igl::viewer::Viewer viewer;
