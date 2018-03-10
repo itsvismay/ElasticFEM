@@ -136,7 +136,7 @@ ENDMACRO(SUITESPARSE_REPORT_NOT_FOUND)
 # directories first if supplied, and search user-installed locations first
 # so that we prefer user installs to system installs where both exist.
 LIST(APPEND SUITESPARSE_CHECK_INCLUDE_DIRS
-  ${SUITESPARSE_INCLUDE_DIR_HINTS}
+  ${SUITESPARSE_HINT}/lib
   /opt/local/include
   /opt/local/include/ufsparse # Mac OS X
   /usr/local/homebrew/include # Mac OS X
@@ -145,7 +145,7 @@ LIST(APPEND SUITESPARSE_CHECK_INCLUDE_DIRS
   /usr/include/suitesparse # Ubuntu
   /usr/include)
 LIST(APPEND SUITESPARSE_CHECK_LIBRARY_DIRS
-  ${SUITESPARSE_LIBRARY_DIR_HINTS}
+  ${SUITESPARSE_HINT}/lib
   /opt/local/lib
   /opt/local/lib/ufsparse # Mac OS X
   /usr/local/homebrew/lib # Mac OS X

@@ -4,7 +4,7 @@ project(elastic)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 set(JSON_HPP_SRC_DIR "/home/vismay/json/single_include/nlohmann")
 set(SPECTRA_INCLUDE_DIR "/home/vismay/spectra-0.5.0/include")
-
+set(SUITESPARSE_HINT "/home/vismay/SuiteSparse")
 
 # libigl
 option(LIBIGL_USE_STATIC_LIBRARY "Use libigl as static library" OFF)
@@ -27,14 +27,15 @@ option(LIBIGL_WITH_VIEWER           "Use OpenGL viewer"  ON)
 option(LIBIGL_WITH_XML              "Use XML"            OFF)
 
 find_package(LIBIGL REQUIRED QUIET)
-#find_package(SUITESPARSE REQUIRED QUIET)
+find_package(SUITESPARSE REQUIRED QUIET)
 
 include_directories(${JSON_HPP_SRC_DIR})
 include_directories(${SPECTRA_INCLUDE_DIR})
+include_directories(${SUITESPARSE_INCLUDE_DIRS})
 
 # Add your project files
 #file(GLOB HEADFILES *.h)
 file(GLOB SRCFILES *.cpp)
 #file(GLOB EXTERNALS "../spectra-0.5.0/include/*.h")
 add_executable(${PROJECT_NAME} ${HEADFILES} ${SRCFILES} ${EXTERNALS})
-target_link_libraries(${PROJECT_NAME} -lglfw igl::core igl::viewer -fopenmp)
+target_link_libraries(${PROJECT_NAME} -lglfw igl::core igl::viewer -fopenmp ${SUITESPARSE_LIBRARIES})

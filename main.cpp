@@ -9,6 +9,7 @@
 #include <igl/slice.h>
 #include <Eigen/LU>
 #include <json.hpp>
+#include <Eigen/CholmodSupport>
 
 using json = nlohmann::json;
 
@@ -17,6 +18,7 @@ using namespace std;
 
 typedef Eigen::Triplet<double> Trip;
 typedef Matrix<double, 12, 1> Vector12d;
+json j_input;
 
 //############ TETRAHEDRON 
 
@@ -28,64 +30,74 @@ typedef Matrix<double, 12, 1> Vector12d;
         void precompute(MatrixXd& TV);
         MatrixXd computeForceDifferentials(MatrixXd& TV, Vector12d& dx);
 
-        double getUndeformedVolume();
-        VectorXi getIndices();
-        double getMu();
-        double getLambda();
+        inline double getUndeformedVolume();
+        inline VectorXi& getIndices();
+        inline double getMu();
+        inline double getLambda();
+        inline Vector3d& getCentroid();
 
         void setMu(double mu);
         void setLambda(double lambda);
+        void set_fibre_mag(double mag);
+        void set_fibre_dir(Vector3d& v);
 
 
     protected:
     	Matrix3d DeformedShapeMatrix, ReferenceShapeMatrix, InvRefShapeMatrix;
         VectorXi verticesIndex;
         double undeformedVol, energy, currentVol;
-        double mu, lambda;
+        double mu, lambda, fibre_mag;
+        Vector3d fibre_dir, tet_centroid;
     };
 
     Tetrahedron::Tetrahedron(VectorXi k, double mu, double lambda){
-        verticesIndex = k ;
+        this->verticesIndex = k ;
         this->mu = mu;
         this->lambda = lambda;
+        this->fibre_mag = 0;
+        this->fibre_dir.setZero();
     }
 
-    double Tetrahedron::getUndeformedVolume(){  
-       return this->undeformedVol;
-    } 
+    inline double Tetrahedron::getUndeformedVolume(){ return this->undeformedVol; } 
     
-    VectorXi Tetrahedron::getIndices(){  
-       return this->verticesIndex;
-    } 
+    inline VectorXi& Tetrahedron::getIndices(){ return this->verticesIndex; } 
 
-    double Tetrahedron::getMu(){  
-       return this->mu;
-    } 
+    inline double Tetrahedron::getMu(){ return this->mu; } 
 
-    double Tetrahedron::getLambda(){  
-       return this->lambda;
-    } 
+    inline double Tetrahedron::getLambda(){ return this->lambda; } 
 
-    void Tetrahedron::setMu(double mu){  
-       this->mu =mu;
-    } 
+    inline Vector3d& Tetrahedron::getCentroid() { return this->tet_centroid; }
 
-    void Tetrahedron::setLambda(double lambda){  
-       this->lambda=lambda;
-    } 
+    void Tetrahedron::setMu(double mu){ this->mu =mu; } 
+
+    void Tetrahedron::setLambda(double lambda){ this->lambda=lambda; }
+
+    void Tetrahedron::set_fibre_mag(double mag){ this->fibre_mag = mag; }
+
+    void Tetrahedron::set_fibre_dir(Vector3d& v)
+    {
+        this->fibre_dir(0) = v(0);
+        this->fibre_dir(1) = v(1);
+        this->fibre_dir(2) = v(2);
+
+    }
         
-    void Tetrahedron::precompute(MatrixXd& TV){
-    	Matrix3d Dm;
-        for(int i=0; i<3; i++){
+    void Tetrahedron::precompute(MatrixXd& TV)
+    {
+        Matrix3d Dm;
+        for(int i=0; i<3; i++)
+        {
             Dm.col(i) = TV.col(verticesIndex(i)) - TV.col(verticesIndex(3));
         }
-    	
+        
         this->ReferenceShapeMatrix = Dm;
         this->InvRefShapeMatrix = Dm.inverse();
         this->undeformedVol = (1.0/6)*fabs(Dm.determinant());
+        this->tet_centroid = (1.0/4)*(TV.col(verticesIndex(0)) + TV.col(verticesIndex(1)) + TV.col(verticesIndex(2)) + TV.col(verticesIndex(3)));
     }
 
-    void Tetrahedron::computeElasticForces(MatrixXd &TV, VectorXd& f){
+    void Tetrahedron::computeElasticForces(MatrixXd &TV, VectorXd& f)
+    {
 
         Matrix3d Ds;
         for(int i=0; i<3; i++){
@@ -126,11 +138,11 @@ typedef Matrix<double, 12, 1> Vector12d;
 
 
         //##Muscle force, do the proper math later
-        double v1 =1;
-        double v2 =0;
-        double v3 =0;
-        double a = 50000;
-
+        double v1 =this->fibre_dir[0];
+        double v2 =this->fibre_dir[1];
+        double v3 =this->fibre_dir[2];
+        double a = this->fibre_mag;
+        
         double o = this->InvRefShapeMatrix(0,0);
         double p = this->InvRefShapeMatrix(0,1);
         double q = this->InvRefShapeMatrix(0,2);
@@ -151,7 +163,7 @@ typedef Matrix<double, 12, 1> Vector12d;
         double nz2_nz4 = Ds(2,1);
         double nz3_nz4 = Ds(2,2);
 
-
+        //Symbolic derivative for P_muscle = dEnergy_muscle / dF, because I can't do tensor calc
         VectorXd force_muscle(12);
         force_muscle<<
         (-1 *a *(o *v1 + p *v2 + q *v3) *this->undeformedVol*
@@ -299,13 +311,15 @@ typedef Matrix<double, 12, 1> Vector12d;
         void setConstraints(std::vector<int>& f, std::vector<int> m, SparseMatrix<double>& Pf, SparseMatrix<double>& Pm);
 
 
-        std::vector<Tetrahedron> getTets();
-        VectorXd getx();
-        VectorXd* get_px();
-        VectorXd* get_pv();
-        SparseMatrix<double>* get_pMass();
-        SparseMatrix<double>* get_pStiffness();
-        SparseMatrix<double>* get_pPf();
+        inline std::vector<Tetrahedron>& getTets();
+        inline MatrixXd& getColwiseV();
+        inline MatrixXi& getT();
+        inline VectorXd get_copy_x();
+        inline VectorXd* get_px();
+        inline VectorXd* get_pv();
+        inline SparseMatrix<double>* get_pMass();
+        inline SparseMatrix<double>* get_pStiffness();
+        inline SparseMatrix<double>* get_pPf();
         MatrixXd getCurrentVerts();
     };
 
@@ -315,9 +329,6 @@ typedef Matrix<double, 12, 1> Vector12d;
         
         double mu = youngs/(2+ 2*poissons);
         double lambda = youngs*poissons/((1+poissons)*(1-2*poissons));
-        cout<<"Setting Mu and Lambda from Youngs and Poissons"<<endl;
-        cout<<"SolidMesh init Youngs, poissons ="<<youngs<<", "<<poissons<<endl;
-        cout<<"SolidMesh init Mu, Lambda ="<<mu<<", "<<lambda<<endl<<endl;
         for(int i=0; i<TT.rows(); i++){
             //based on Tet indexes, get the vertices of the tet from TV
             Tetrahedron t(TT.row(i), mu, lambda);
@@ -332,33 +343,25 @@ typedef Matrix<double, 12, 1> Vector12d;
         return newV.transpose();
     }
 
-    std::vector<Tetrahedron> SolidMesh::getTets(){
+    std::vector<Tetrahedron>& SolidMesh::getTets(){
         return this->tets;
     }
 
-    VectorXd SolidMesh::getx(){
-        return this->x;
-    }
+    inline MatrixXd& SolidMesh::getColwiseV(){ return this->V; }
+    
+    inline MatrixXi& SolidMesh::getT(){ return this->T; }
 
-    VectorXd* SolidMesh::get_px(){
-        return &(this->x);
-    }
+    inline VectorXd SolidMesh::get_copy_x(){ return this->x; }
 
-    VectorXd* SolidMesh::get_pv(){
-        return &(this->v);
-    }
+    inline VectorXd* SolidMesh::get_px(){ return &(this->x); }
 
-    SparseMatrix<double>* SolidMesh::get_pMass(){
-        return &(this->RegMass);
-    }
+    inline VectorXd* SolidMesh::get_pv(){ return &(this->v);}
 
-    SparseMatrix<double>* SolidMesh::get_pStiffness(){
-        return &(this->StiffnessMatrix);
-    }
+    inline SparseMatrix<double>* SolidMesh::get_pMass(){ return &(this->RegMass);}
 
-    SparseMatrix<double>* SolidMesh::get_pPf(){
-        return &(this->Pf_fixMatrix);
-    }
+    inline SparseMatrix<double>* SolidMesh::get_pStiffness(){ return &(this->StiffnessMatrix);}
+
+    inline SparseMatrix<double>* SolidMesh::get_pPf(){ return &(this->Pf_fixMatrix);}
 
     void SolidMesh::initializeMesh(){
         int vertsNum = this->V.cols();
@@ -369,7 +372,6 @@ typedef Matrix<double, 12, 1> Vector12d;
 
         x.resize(3*vertsNum);v.resize(3*vertsNum);f.resize(3*vertsNum);
         x.setZero();v.setZero();f.setZero();
-
         for(unsigned int k=0; k<this->tets.size(); ++k)
         {
             Vector4i indices = this->tets[k].getIndices();
@@ -401,11 +403,10 @@ typedef Matrix<double, 12, 1> Vector12d;
         VectorXd massVector;
         massVector.resize(3*vertsNum);
         massVector.setZero();
-
         
-
+        
         for(unsigned int i=0; i<this->tets.size(); i++){
-            double vol = (this->tets[i].getUndeformedVolume()/4)*1e3; //UNITS: kg/m^3
+            double vol = (this->tets[i].getUndeformedVolume()/4)*1e2; //UNITS: kg/m^3
             Vector4i indices = this->tets[i].getIndices();
 
             massVector(3*indices(0)) += vol;
@@ -440,7 +441,8 @@ typedef Matrix<double, 12, 1> Vector12d;
         cout<<this->medianMass<<endl;
     }
 
-    void SolidMesh::setNewYoungsPoissons(double youngs, double poissons, int index){
+    void SolidMesh::setNewYoungsPoissons(double youngs, double poissons, int index)
+    {
         double mu = youngs/(2+ 2*poissons);
         double lambda = youngs*poissons/((1+poissons)*(1-2*poissons));
         cout<<"NEW** Mu and Lambda from Youngs and Poissons"<<endl;
@@ -449,12 +451,15 @@ typedef Matrix<double, 12, 1> Vector12d;
         tets[index].setLambda(lambda);
     }
 
-    void SolidMesh::setStiffnessMatrix(SparseMatrix<double>& K){
+    void SolidMesh::setStiffnessMatrix(SparseMatrix<double>& K)
+    {
         this->StiffnessMatrix.setZero();
 
         vector<Trip> triplets1;
         triplets1.reserve(12*12*this->tets.size());
-        for(unsigned int i=0; i<this->tets.size(); i++){
+        
+        for(unsigned int i=0; i<this->tets.size(); i++)
+        {
             //Get P(dxn), dx = [1,0, 0...], then [0,1,0,....], and so on... for all 4 vert's x, y, z
             //P is the compute Force Differentials blackbox fxn
 
@@ -462,7 +467,9 @@ typedef Matrix<double, 12, 1> Vector12d;
             dx.setZero();
             Vector4i indices = this->tets[i].getIndices();
             int kj;
-            for(unsigned int j=0; j<12; j++){
+            
+            for(unsigned int j=0; j<12; j++)
+            {
                 dx(j) = 1;
                 MatrixXd dForces = this->tets[i].computeForceDifferentials(this->V, dx);
                 kj = j%3;
@@ -492,9 +499,9 @@ typedef Matrix<double, 12, 1> Vector12d;
     void SolidMesh::setForces(VectorXd& f){
         // //gravity
         f.setZero();
-        double gravity = 0;
+        double gravity = j_input["gravity"];
         for(unsigned int i=0; i<f.size()/3; i++){
-            f(3*i+1) += this->RegMass.coeff(3*i+1, 3*i+1);
+            f(3*i+1) += this->RegMass.coeff(3*i+1, 3*i+1)*gravity;
         }
 
         //elastic
@@ -509,26 +516,34 @@ typedef Matrix<double, 12, 1> Vector12d;
     }
 
     void SolidMesh::setConstraints(std::vector<int>& fix, std::vector<int> move, SparseMatrix<double>& Pf, SparseMatrix<double>& Pm){
-        //fix min x
-        int axis = 0;
-        double tolr = 1e-5;
-        double minx = this->V.rowwise().minCoeff()(0);
+        //fix max y
+        int axis = 1;
+        double tolr = 1e-4;
+        double minx = this->V.rowwise().minCoeff()(axis);
+        double maxx = this->V.rowwise().maxCoeff()(axis);
+        
         for(int i=0; i<this->V.cols(); ++i)
         {
-            if (this->V.col(i)(axis)< minx+tolr ) 
+            if (this->V.col(i)(axis)> maxx-tolr ) 
             {
                 fix.push_back(i);
             }
         }
 
 
-
         //TODO: MAKE SURE fix vector is sorted
+        if(fix.size()==0){
+            this->Pf_fixMatrix.resize(3*this->V.cols(), 3*this->V.cols());
+            this->Pf_fixMatrix.setIdentity();
+            return;
+        }
+        
         Pf.resize(3*this->V.cols(), 3*this->V.cols() - 3*fix.size());
         Pf.setZero();
 
         int c =0;
         int j =0;
+        
         for(int i=0; i<this->V.cols(); ++i)
         {
             if(i != fix[c])
@@ -549,6 +564,7 @@ typedef Matrix<double, 12, 1> Vector12d;
     //TODO: make this redundant
     void SolidMesh::xToV(VectorXd& q){
         this->V.setZero();
+        
         for(unsigned int i=0; i<this->tets.size(); ++i)
         {
             Vector4i indices = this->tets[i].getIndices();
@@ -579,7 +595,7 @@ typedef Matrix<double, 12, 1> Vector12d;
 
         SparseMatrix<double> grad_g;
         VectorXd g;
-        SimplicialLLT<SparseMatrix<double>> llt_solver;
+        CholmodSupernodalLLT<SparseMatrix<double>> llt_solver;
 
     public:
         Newmark(SolidMesh* M);
@@ -596,9 +612,12 @@ typedef Matrix<double, 12, 1> Vector12d;
         f_o.resize(dofs);
 
         SparseMatrix<double>* P = this->SM->get_pPf();
+        SparseMatrix<double>* K = this->SM->get_pStiffness();
         this->g.resize((*P).cols());
         this->grad_g.resize((*P).cols(), (*P).cols());
-
+        this->SM->setStiffnessMatrix((*K));
+        SparseMatrix<double> CholeskyAnalyzeBlock = (*P).transpose()*(*K)*(*P);
+        llt_solver.analyzePattern(CholeskyAnalyzeBlock);
         // this->llt_solver
 
     }
@@ -607,10 +626,9 @@ typedef Matrix<double, 12, 1> Vector12d;
     {   
         bool Nan = false;
         int iter;
-        this->x_k = this->SM->getx();
+        this->x_k = this->SM->get_copy_x();
         this->v_k.setZero();
         this->SM->setForces(this->f_o);
-
         SparseMatrix<double>* P = this->SM->get_pPf();
         SparseMatrix<double>* RegMass = this->SM->get_pMass();
         SparseMatrix<double>* K = this->SM->get_pStiffness();
@@ -674,27 +692,62 @@ typedef Matrix<double, 12, 1> Vector12d;
 
 int main(int argc, char *argv[])
 {
-	if(argc<2){
-		std::cout<<"Oh no!"<<std::endl;
-	}else{
-		std::cout<<"No config file specified. Using defaults."<<std::endl;
-		json j_config_parameters;
-		//std::ifstream  config_json_file(std::string(argv[1]));
-		//config_json_file >> j_config_parameters;
-	}
+    std::cout<<"3d Neohookean Muscle\n";
+    json j_config_parameters;
+    std::ifstream i("../input/input.json");
+    i >> j_input;
 
-    double youngs_mod = 1e6;
-    double poisson = 0.45;
+    double youngs_mod = j_input["youngs"];
+    double poisson = j_input["poissons"];
+
 	MatrixXd V;
 	MatrixXi T;
 	MatrixXi F;
-	igl::readMESH("/home/vismay/Scrapts/Beam.1.mesh", V, T, F);
+	igl::readMESH(j_input["mesh_file"], V, T, F);
 
 
     SolidMesh* SM = new SolidMesh(T, V, youngs_mod, poisson);
     
     
     SM->initializeMesh();
+
+    //SET MUSCLES HERE
+    Eigen::VectorXd Zc;
+    Zc.resize(SM->getColwiseV().cols());
+    Zc.setZero();
+    double mag = j_input["fibre_mag"];
+    int axis = j_input["axis"];
+    Eigen::Vector3d maxs = SM->getColwiseV().rowwise().maxCoeff();
+    Eigen::Vector3d mins = SM->getColwiseV().rowwise().minCoeff();
+    double t = j_input["thresh"];
+    Eigen::Vector3d thresh = mins + t*(maxs - mins);
+    std::cout<<maxs.transpose()<<std::endl;
+    std::cout<<mins.transpose()<<std::endl;
+    std::cout<<thresh.transpose()<<"\naaa"<<std::endl;
+    Eigen::Vector3d fibre_dir(j_input["fibre_dir"][0], j_input["fibre_dir"][1], j_input["fibre_dir"][2]);
+    #pragma omp parallel for
+    for(auto& tet: SM->getTets())
+    {   
+        int i0 = tet.getIndices()(0);
+        int i1 = tet.getIndices()(1);
+        int i2 = tet.getIndices()(2);
+        int i3 = tet.getIndices()(3);
+
+        if(SM->getColwiseV().col(i0)(axis)< thresh(axis))
+        {
+            tet.set_fibre_mag(mag);
+            tet.set_fibre_dir(fibre_dir);
+            Zc(i0/3) = mag;
+            Zc(i1/3) = mag;
+            Zc(i2/3) = mag;
+            Zc(i3/3) = mag;
+        }
+    }
+    Eigen::MatrixXd C;
+    igl::jet(Zc, true, C);
+    //Swap RGB colors because libigl background is blue
+    C.col(2).swap(C.col(1));
+    //---
 
     std::cout<< "STEPPING"<<std::endl;
     Newmark* nmrk = new Newmark(SM);
@@ -712,12 +765,12 @@ int main(int argc, char *argv[])
         return false;
     };
 
-	std::cout<<V<<std::endl;
 	viewer.data.set_mesh(V,F);
     viewer.core.show_lines = true;
     viewer.core.invert_normals = true;
     viewer.core.is_animating = false;
     viewer.data.face_based = true;
+    viewer.data.set_colors(C);
 
     viewer.launch();
     return EXIT_SUCCESS;
