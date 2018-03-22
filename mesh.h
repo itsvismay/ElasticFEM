@@ -27,7 +27,9 @@ protected:
 
     SparseMatrix<double> Pf_fixMatrix;
     SparseMatrix<double> Pm_moveMatrix;
-    VectorXd x, v, f;
+    SparseMatrix<double> RSJacobian;
+    VectorXd x, v, f, xr, vr;
+    int handle;
     //end
 
     std::vector<int> fixVertsIndices;
@@ -44,7 +46,7 @@ public:
         #pragma omp parallel for
         for(int i=0; i<TT.rows(); i++){
             //based on Tet indexes, get the vertices of the tet from TV
-            Tetrahedron t(TT.row(i), mu, lambda);
+            Tetrahedron t(TT.row(i), mu, lambda, i);
             t.precompute(this->V);
             this->tets.push_back(t);
         }
@@ -86,6 +88,58 @@ public:
         this->setConstraints(this->fixVertsIndices, this->movVertsIndices, this->Pf_fixMatrix, this->Pm_moveMatrix);
     }
 
+    void initializeRSCoords(){
+        xr.resize(9*tets.size());
+        vr.resize(9*tets.size());
+        xr.setZero();
+        vr.setZero();
+        handle = 1;
+        
+        RSJacobian.resize(3*this->V.cols(), 9*tets.size());
+        RSJacobian.setZero();
+        setRSJacobian(RSJacobian, xr);
+
+    }
+
+    void setRSJacobian(SparseMatrix<double>& RSJac, VectorXd& xr)
+    {
+        VectorXd seen;
+        seen.resize(this->V.cols());
+        seen.setZero();
+
+        vector<Trip> triplets;
+        triplets.reserve(3*9*4*this->tets.size());
+
+        for(unsigned int t =0; t<this->tets.size(); ++t)
+        {
+            Vector4i indices = this->tets[t].getIndices();
+            for(unsigned int i=0; i<4; ++i)
+            {
+                if(seen(indices(i))< 1e-8){
+                    Vector3d v = this->V.col(indices(i)) - this->V.col(handle); 
+                    MatrixXd localJac = this->tets[t].getdxdxrJacobian(xr, v);
+                    
+                    for(unsigned r =0; r<9; ++r){
+                        triplets.push_back(Trip(3*indices(i), 9*this->tets[i].getRSIndex()+r, localJac(0,r)));
+                        
+                    }
+                    for(unsigned r =0; r<9; ++r){
+                        triplets.push_back(Trip(3*indices(i)+1, 9*this->tets[i].getRSIndex()+r, localJac(1,r)));
+                        
+                    }
+                    for(unsigned r =0; r<9; ++r){
+                        triplets.push_back(Trip(3*indices(i)+2, 9*this->tets[i].getRSIndex()+r, localJac(2,r)));
+                        
+                    }
+                    seen(indices(i)) +=1;
+                    std::cout<<indices(i)<<std::endl;
+                }
+            }
+        }
+        RSJacobian.setFromTriplets(triplets.begin(), triplets.end());
+        std::cout<<RSJacobian<<std::endl;
+    }
+
     void setNewYoungsPoissons(double youngs, double poissons, int index){
         double mu = youngs/(2+ 2*poissons);
         double lambda = youngs*poissons/((1+poissons)*(1-2*poissons));
@@ -95,7 +149,7 @@ public:
         tets[index].setLambda(lambda);
     }
     
-    void setStiffnessMatrix(SparseMatrix<double>& K, VectorXd& xi){
+    void setStiffnessMatrix(SparseMatrix<double>& K, VectorXd& xv){
         this->StiffnessMatrix.setZero();
 
         vector<Trip> triplets1;
@@ -113,7 +167,7 @@ public:
             for(unsigned int j=0; j<12; j++)
             {
                 dx(j) = 1;
-                MatrixXd dForces = this->tets[i].computeForceDifferentials(xi, dx);
+                MatrixXd dForces = this->tets[i].computeForceDifferentials(xv, dx);
                 kj = j%3;
                 //row in order for dfxi/dxi ..dfxi/dzl
                 triplets1.push_back(Trip(3*indices[j/3]+kj, 3*indices[0], dForces(0,0)));
@@ -134,7 +188,7 @@ public:
                 dx(j) = 0; //ASK check is this efficient?
             }
         }
-        this->StiffnessMatrix.setFromTriplets(triplets1.begin(), triplets1.end());
+        K.setFromTriplets(triplets1.begin(), triplets1.end());
         return;
     }
     
@@ -211,7 +265,7 @@ public:
         {
             if (this->V.col(i)(axis)> maxx-tolr ) 
             {
-                fix.push_back(i);
+                // fix.push_back(i);
             }
         }
 
@@ -252,6 +306,39 @@ public:
         return newV.transpose();
     }
 
+    double rsx_to_x(){
+
+        double error = 0;
+        VectorXd seen;
+        seen.resize(this->V.cols());
+        seen.setZero();
+
+        for(auto& e: tets)
+        {
+            std::cout<<e.getRSF()<<std::endl;
+            VectorXi indices = e.getIndices();
+            for(unsigned int j =0; j<indices.size(); ++j)
+            {
+                Vector3d v = this->V.col(indices(j)) - this->V.col(handle);
+                if(seen(indices(j)) > 1e-8){
+                    error = (x.segment<3>(3*indices(j)) - e.getRSF()*v + this->V.col(handle)).squaredNorm();
+                }else{
+                    x.segment<3>(3*indices(j)) = e.getRSF()*v + this->V.col(handle);
+                    seen(indices(j)) += 1;
+                }
+                
+            }
+        }
+
+        std::cout<<"error: "<<error<<std::endl;
+        return error;
+    }
+
+    void set_rsx(VectorXd& xr){
+        for(auto& e: tets){
+            e.setRSU(xr);
+        }
+    }
 
     inline std::vector<Tetrahedron>& getTets(){ return this->tets; }
 
@@ -265,13 +352,17 @@ public:
 
     inline VectorXd& get_v(){ return this->v;}
 
+    inline VectorXd& get_rsx(){ return this->xr; }
+
+    inline VectorXd& get_rsv(){ return this->vr;}
+
     inline SparseMatrix<double>& get_Mass(){ return this->RegMass;}
 
     inline SparseMatrix<double>& get_Stiffness(){ return this->StiffnessMatrix;}
 
     inline SparseMatrix<double>& get_Pf(){ return this->Pf_fixMatrix;}
 
-
+    inline SparseMatrix<double>& get_RSJacobian(){ return this->RSJacobian; }
 };
 
 #endif
