@@ -247,9 +247,9 @@ public:
             this->tets[i].computeElasticForces(xi, f);
         }
         
-
         // //damping
-        // f -= rayleighCoeff*forceGradient*(x_k - x_old)/h;
+
+        
         return;
     }
 

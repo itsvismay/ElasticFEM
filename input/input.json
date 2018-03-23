@@ -6,6 +6,6 @@
   "fibre_dir": [1, 0, 1],
   "axis": 0,
   "thresh": 1,
-  "gravity": 0,
-  "timestep": 0.01
+  "gravity": -10,
+  "timestep": 0.1
 }
