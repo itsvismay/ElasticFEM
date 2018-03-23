@@ -45,9 +45,9 @@ public:
         x_k = SM->get_copy_x();
         v_k.setZero();
         SM->setForces(f_o, x_k);
-        SparseMatrix<double> P = SM->get_Pf();
-        SparseMatrix<double> RegMass = SM->get_Mass();
-        SparseMatrix<double> K = SM->get_Stiffness();
+        SparseMatrix<double>& P = SM->get_Pf();
+        SparseMatrix<double>& RegMass = SM->get_Mass();
+        SparseMatrix<double>& K = SM->get_Stiffness();
         VectorXd& v_old = SM->get_v();
         VectorXd& x_old = SM->get_x();
         VectorXd force = f_o;
