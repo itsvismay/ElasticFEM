@@ -132,12 +132,11 @@ public:
                         
                     }
                     seen(indices(i)) +=1;
-                    std::cout<<indices(i)<<std::endl;
                 }
             }
         }
         RSJacobian.setFromTriplets(triplets.begin(), triplets.end());
-        std::cout<<RSJacobian<<std::endl;
+        // std::cout<<RSJacobian<<std::endl;
     }
 
     void setNewYoungsPoissons(double youngs, double poissons, int index){
@@ -339,6 +338,17 @@ public:
             e.setRSU(xr);
         }
     }
+
+    double getInternalEnergy(VectorXd& xi){
+        double E = 0;
+        #pragma omp parallel for 
+        for(auto& tet: this->tets){
+            E += tet.getInternalEnergy(xi);
+        }
+        return E;
+    }
+
+    inline double get_gravity(){ return this->m_gravity; } 
 
     inline std::vector<Tetrahedron>& getTets(){ return this->tets; }
 
