@@ -2,6 +2,7 @@
 #define MESH
 
 #include "tetrahedron.h"
+#include "dg_element.h"
 #include <Eigen/CholmodSupport>
 
 using namespace Eigen;
@@ -98,6 +99,8 @@ public:
         RSJacobian.resize(3*this->V.cols(), 9*tets.size());
         RSJacobian.setZero();
         setRSJacobian(RSJacobian, xr);
+
+
 
     }
 
