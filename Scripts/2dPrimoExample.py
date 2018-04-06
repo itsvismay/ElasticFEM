@@ -10,7 +10,8 @@ import pyigl as igl
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.2f}'.format(x)})
 
 V = []
-
+T = []
+E = [] #each dg edge element is (nf, T_ind1, T_ind2, V_ind1, V_ind2)
 
 def get_area(p1, p2, p3):
 	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))*0.5
@@ -22,24 +23,46 @@ def rectangle_mesh(x, y):
 	for i in range(0,x):
 		for j in range(0,y):
 			V.append([i, j])
-rectangle_mesh(8, 8)
 
 def torus_mesh(r1, r2):
 	for theta in range(0, 12):
 		angle = theta*np.pi/6.0
 		V.append([r1*np.cos(angle), r1*np.sin(angle)])
 		V.append([r2*np.cos(angle), r2*np.sin(angle)])
-# torus_mesh(7, 9)
 
-T = []
-# for e in Delaunay(V).simplices:
-# 	if get_area(V[e[0]], V[e[1]], V[e[2]])<5:
-# 		T.append(list(e))
+if(True):	
+	rectangle_mesh(4, 4)
+	T = Delaunay(V).simplices #[e for e in Delaunay(V).simplices if get_area(V[e[0]], V[e[1]], V[e[2]])<3]
 
-T = Delaunay(V).simplices #[e for e in Delaunay(V).simplices if get_area(V[e[0]], V[e[1]], V[e[2]])<3]
-E = [] #each dg edge element is (nf, T_ind1, T_ind2, V_ind1, V_ind2)
+else:
+	torus_mesh(7, 9)
+	for e in Delaunay(V).simplices:
+		if get_area(V[e[0]], V[e[1]], V[e[2]])<5:
+			T.append(list(e))
 
-# exit()
+
+print(V)
+print(T)
+def createP():
+	#P = 6Tx2V matrix that creates tet-based positions from V and T
+	P = np.zeros((6*len(T), 2*len(V)))
+	for i in range(len(T)):
+		e = T[i]
+		for j in range(len(e)):
+			v = e[j]
+			P[6*i+2*j, 2*v] = 1
+			P[6*i+2*j+1, 2*v+1] = 1
+	return P 
+
+def createA():
+	#edge matrix for each tet
+	A = np.zeros((6*len(T), 6*len(T)))
+	sub_A = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [-1, 0, 1]]), np.eye(2))
+	for i in range(len(T)):
+		A[6*i:6*i+6, 6*i:6*i+6] = sub_A
+	return A 
+
+AP = np.matmul(createA(), createP())
 
 def internal_edges():
 	_n_ = 100
@@ -75,32 +98,50 @@ def internal_edges():
 		else:
 			edges[(T[i][0], T[i][2])] = i 
 			edges[(T[i][2], T[i][0])] = i
-internal_edges()
+
+# internal_edges()
 
 q = np.zeros((1+2+4)*len(T)) #1degree for 2d rotation, 2 degree 2d translation, 4 degrees 2d strain
 r = np.zeros((1+2)*len(T))
 
-def set_initial_strains(s):
+def set_initial_strains(sx, sy):
 	for i in range(len(T)):
-		q[7*i+3] = s
-		q[7*i+6] = 0.3*s
+		q[7*i+3] = sx
+		if i==1:
+			q[7*i+6] = sy
+		else:
+			q[7*i+6] = sy
 			
-set_initial_strains(1)
+set_initial_strains(1, 0.5)
 
-def getF(ind):
+def getU(ind):
+	if ind%2== 1:
+		alpha = np.pi/4.5
+	else:
+		alpha = np.pi/4
+
+	cU, sU = np.cos(alpha), np.sin(alpha)
+	U = np.array(((cU,-sU), (sU, cU)))
+	return U
+
+def getR(ind):
 	theta = q[7*ind]
 	c, s = np.cos(theta), np.sin(theta)
 	R = np.array(((c,-s), (s, c)))
+	# print("R",scipy.linalg.logm(R))
+	return R
 
-	alpha = np.pi/4
-	cU, sU = np.cos(alpha), np.sin(alpha)
-	U = np.array(((cU,-sU), (sU, cU)))
+def getS(ind):
 	S = np.array([[q[7*ind+3], q[7*ind+4]], [q[7*ind+5], q[7*ind+6]]])  
+	return S
+
+def getF(ind):
+	U = getU(ind)
+	S = getS(ind)
+	R = getR(ind)
 	F =  np.matmul(R, np.matmul(U, np.matmul(S, U.transpose())))
 	return F
 
-def get_new_x():
-	return getF(t).dot()
 def reduced_to_q(lr):
 	for i in range(len(T)):
 		q[7*i]   = lr[3*i] 
@@ -113,54 +154,100 @@ def q_to_reduced():
 		r[3*i+1]=q[7*i+1] 
 		r[3*i+2]=q[7*i+2] 
 
+def createGlobalR():
+	GR = np.zeros((6*len(T), 6*len(T)))
+	for i in range(len(T)):
+		F = getF(i)
+		F_e = np.kron(np.eye(3), F)
+		GR[6*i:6*i+6, 6*i:6*i+6] = F_e
+	return GR
+
+A = createA()
+P = createP()
+
+def updatePg(ng):
+	print(ng)
+	Pg = P.dot(ng)
+	return Pg
+
 def solve():
-	newV = np.zeros((len(V), len(V[0])))
-	RecV = np.zeros((3*len(T), 2))
-	RecT = []
+	x = np.ravel(V)
+	g = np.ravel(V)
+	Px = P.dot(x)
+	AP = np.matmul(A, P)
+	PTAT = np.matmul(P.T, A.T)
+	PTATAP = np.matmul(PTAT, AP)
+	PTATAPInv = np.linalg.pinv(PTATAP)
+	# CholFac, Lower = scipy.linalg.cho_factor(PTATAP)
 
-	def func(r_k):
-		reduced_to_q(r_k)
+	def updateR(g):
+		Pg = updatePg(g)
+		sub_A = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [-1, 0, 1]]), np.eye(2))
+		for i in range(len(T)):
+			e = T[i]
+			APx =sub_A.dot(Px[6*i:6*i+6])
+			APg =sub_A.dot(Pg[6*i:6*i+6])
+			Ue = np.kron(np.eye(3), getU(i))
+			Se = np.kron(np.eye(3), getS(i))
+			USUAPx = Ue.dot(Se.dot(Ue.T.dot(APx.T)))
 
-		totalE = 0
-		for e in E:
-			t1 = e[1]
-			t2 = e[2]
-			u1 = getF(t1).dot(np.array(V[e[3]]) - get_centroid(V[T[t1][0]], V[T[t1][1]], V[T[t1][2]])) + get_centroid(V[T[t1][0]], V[T[t1][1]], V[T[t1][2]]) + np.array([r[3*t1+1], r[3*t1+2]])
-			u2 = getF(t1).dot(np.array(V[e[4]]) - get_centroid(V[T[t1][0]], V[T[t1][1]], V[T[t1][2]])) + get_centroid(V[T[t1][0]], V[T[t1][1]], V[T[t1][2]]) + np.array([r[3*t1+1], r[3*t1+2]])
-			u3 = getF(t2).dot(np.array(V[e[3]]) - get_centroid(V[T[t2][0]], V[T[t2][1]], V[T[t2][2]])) + get_centroid(V[T[t2][0]], V[T[t2][1]], V[T[t2][2]]) + np.array([r[3*t2+1], r[3*t2+2]])
-			u4 = getF(t2).dot(np.array(V[e[4]]) - get_centroid(V[T[t2][0]], V[T[t2][1]], V[T[t2][2]])) + get_centroid(V[T[t2][0]], V[T[t2][1]], V[T[t2][2]]) + np.array([r[3*t2+1], r[3*t2+2]])
+			m_APg = np.zeros((3,2))
+			m_APg[0:1, 0:2] = APg[0,0:2]
+			m_APg[1:2, 0:2] = APg[0,2:4]
+			m_APg[2:3, 0:2] = APg[0,4:6]
 
-			u_left = np.concatenate((u1, u2))
-			u_right = np.concatenate((u3, u4))
-			totalE += e[0]*np.dot((u_left - u_right), (u_left - u_right))
-		return totalE
+			m_USUAPx = np.zeros((3,2))
+			m_USUAPx[0:1, 0:2] = USUAPx[0:2].T
+			m_USUAPx[1:2, 0:2] = USUAPx[2:4].T
+			m_USUAPx[2:3, 0:2] = USUAPx[4:6].T
+			F = np.matmul(m_APg.T,m_USUAPx)
 
-	def dfunc(r_k):
-		J = nd.Gradient(func)(r_k)
-		return J.ravel()
+			U, s, VT = np.linalg.svd(F, full_matrices=True)
+			R = np.matmul(VT.T, U.T)
+			veca = np.array([1,0])
+			vecb = np.dot(R, veca)
+			theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
+			print("theta", np.linalg.det(R), theta)
+			q[7*i] = theta
+
+			# exit()
+
+	def updateT():
+		globalR = createGlobalR()
+		APx = A.dot(Px)
+		GRAPx = globalR.dot(APx)
+		PTATGRAPx = PTAT.dot(GRAPx)
+		newg = PTATAPInv.dot(PTATGRAPx)
+		return newg
+
+	for i in range(10):
+		updateR(g)
+		g = updateT()
 
 
-	# res = minimize(func, r, method='Nelder-Mead', options={'disp': True})
-	for t in range(len(T)):
-		tv0 = getF(t).dot(np.array(V[T[t][0]]) - get_centroid(V[T[t][0]], V[T[t][1]], V[T[t][2]])) + get_centroid(V[T[t][0]], V[T[t][1]], V[T[t][2]]) + np.array([q[7*t+1], q[7*t+2]])
-		tv1 = getF(t).dot(np.array(V[T[t][1]]) - get_centroid(V[T[t][0]], V[T[t][1]], V[T[t][2]])) + get_centroid(V[T[t][0]], V[T[t][1]], V[T[t][2]]) + np.array([q[7*t+1], q[7*t+2]])
-		tv2 = getF(t).dot(np.array(V[T[t][2]]) - get_centroid(V[T[t][0]], V[T[t][1]], V[T[t][2]])) + get_centroid(V[T[t][0]], V[T[t][1]], V[T[t][2]]) + np.array([q[7*t+1], q[7*t+2]])
-		RecV[3*t,   0] = tv0[0]
-		RecV[3*t,   1] = tv0[1]
-		RecV[3*t+1, 0] = tv1[0]
-		RecV[3*t+1, 1] = tv1[1]
-		RecV[3*t+2, 0] = tv2[0]
-		RecV[3*t+2, 1] = tv2[1]
-		RecT.append([3*t, 3*t+1, 3*t+2])
+	# RecV = np.zeros((3*len(T), 2))
+	# RecT = []
+	# for t in range(len(T)):
+	# 	tv0 = getF(t).dot(Px[6*t:6*t+2])
+	# 	tv1 = getF(t).dot(Px[6*t+2:6*t+4])
+	# 	tv2 = getF(t).dot(Px[6*t+4:6*t+6])
+	# 	RecV[3*t,   0] = tv0[0]
+	# 	RecV[3*t,   1] = tv0[1]
+	# 	RecV[3*t+1, 0] = tv1[0]
+	# 	RecV[3*t+1, 1] = tv1[1]
+	# 	RecV[3*t+2, 0] = tv2[0]
+	# 	RecV[3*t+2, 1] = tv2[1]
+	# 	RecT.append([3*t, 3*t+1, 3*t+2])
 
-		# newV[T[t][0], 0] = tv0[0]
-		# newV[T[t][0], 1] = tv0[1]
-		# newV[T[t][1], 0] = tv1[0]
-		# newV[T[t][1], 1] = tv1[1]
-		# newV[T[t][2], 0] = tv2[0]
-		# newV[T[t][2], 1] = tv2[1]
+	RecV = np.zeros((2*len(V), 2))
+	RecT = T 
+	for i in range(len(g)/2):
+		RecV[i, 0] = g[2*i]
+		RecV[i, 1] = g[2*i+1]
+
 
 	print("Reconstructed V")
+	print(RecV, RecT)
 	return RecV, RecT
 
 def display():
@@ -169,9 +256,20 @@ def display():
 
 		V_new, T1 = solve()
 
-		V1 = igl.eigen.MatrixXd(V_new)
+		V2 = igl.eigen.MatrixXd(V_new)
 		T2 = igl.eigen.MatrixXi(T1)
-		viewer.data.set_mesh(V1, T2)
+		viewer.data.set_mesh(V2, T2)
+
+		red = igl.eigen.MatrixXd([[1,0,0]])
+		i =0
+		for e in T1:
+			centroid = get_centroid(V_new[e[0]], V_new[e[1]], V_new[e[2]])
+			C = np.matrix([centroid,centroid])
+			U = 0.1*getU(i).transpose()+C
+			viewer.data.add_edges(igl.eigen.MatrixXd(C),
+							igl.eigen.MatrixXd(U),
+							red)
+			i+=1
 
 		return True
 	key_down(viewer, "a", 1)
