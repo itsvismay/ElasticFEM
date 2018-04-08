@@ -17,29 +17,6 @@ using namespace Eigen;
 using namespace std;
 json j_input;
 
-void rep(const real_1d_array &x, double func, void *ptr)
-{}
-
-void func(const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
-{
-    Euler* euler = (Euler*) ptr;
-    VectorXd& xbfgs = euler->get_xbfgs();
-    for(unsigned int i=0; i<xbfgs.size(); ++i)
-    {
-        xbfgs(i) = x[i];
-    }
-
-    func = euler->getZeroOrder(xbfgs);
-    std::cout<<"F: "<<func<<std::endl;
-    VectorXd& g = euler->get_g();
-    std::cout<<g<<std::endl;
-    euler->getFirstOrder(xbfgs, g);
-    for(unsigned i=0; i<g.size(); ++i)
-    {
-        grad[i] = g(i);
-    }
-}
-
 int main(int argc, char *argv[])
 {
     std::cout<<"3d Neohookean Muscle\n";
@@ -59,7 +36,7 @@ int main(int argc, char *argv[])
 
     Mesh* SM = new Mesh(T, V, youngs_mod, poisson, gravity);
     SM->initializeMesh();
-    SM->initializeRSCoords();
+    // SM->initializeRSCoords();
 
     //Set Muscle stuff here
         // Eigen::VectorXd Zc;
