@@ -64,43 +64,6 @@ def createA():
 
 AP = np.matmul(createA(), createP())
 
-def internal_edges():
-	_n_ = 100
-	edges = {}
-	for i in range(len(T)):
-		p1 = (T[i][0], T[i][1])
-		p2 = (T[i][2], T[i][1])
-		p3 = (T[i][2], T[i][0])
-
-		if p1 in edges:
-			area1 = get_area(V[T[i][0]], V[T[i][1]], V[T[i][2]])
-			area2 = get_area(V[T[edges[p1]][0]], V[T[edges[p1]][1]], V[T[edges[p1]][2]])
-			nf = _n_*np.linalg.norm(np.array(V[p1[0]]) - np.array(V[p1[1]]))*((1.0/area1) + (1.0/area2))
-			E.append((nf, edges[p1], i, p1[0], p1[1]))
-		else:
-			edges[(T[i][0], T[i][1])] = i 
-			edges[(T[i][1], T[i][0])] = i
-
-		if p2 in edges:
-			area1 = get_area(V[T[i][0]], V[T[i][1]], V[T[i][2]])
-			area2 = get_area(V[T[edges[p2]][0]], V[T[edges[p2]][1]], V[T[edges[p2]][2]])
-			nf = _n_*np.linalg.norm(np.array(V[p2[0]]) - np.array(V[p2[1]]))*((1.0/area1) + (1.0/area2)) 
-			E.append((nf, edges[p2], i, p2[0], p2[1]))
-		else:
-			edges[(T[i][2], T[i][1])] = i 
-			edges[(T[i][1], T[i][2])] = i
-
-		if p3 in edges:
-			area1 = get_area(V[T[i][0]], V[T[i][1]], V[T[i][2]])
-			area2 = get_area(V[T[edges[p3]][0]], V[T[edges[p3]][1]], V[T[edges[p3]][2]])
-			nf = _n_*np.linalg.norm(np.array(V[p3[0]]) - np.array(V[p3[1]]))*((1.0/area1) + (1.0/area2))
-			E.append((nf, edges[p3], i, p3[0], p3[1]))
-		else:
-			edges[(T[i][0], T[i][2])] = i 
-			edges[(T[i][2], T[i][0])] = i
-
-# internal_edges()
-
 q = np.zeros((1+2+4)*len(T)) #1degree for 2d rotation, 2 degree 2d translation, 4 degrees 2d strain
 r = np.zeros((1+2)*len(T))
 

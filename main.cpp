@@ -17,13 +17,6 @@ using namespace Eigen;
 using namespace std;
 json j_input;
 
-void rep(const real_1d_array &x, double func, void *ptr)
-{}
-
-void func(const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)
-{
-}
-
 int main(int argc, char *argv[])
 {
     std::cout<<"3d Neohookean Muscle\n";
