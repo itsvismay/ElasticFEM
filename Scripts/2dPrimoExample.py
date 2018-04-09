@@ -31,7 +31,7 @@ def torus_mesh(r1, r2):
 		V.append([r2*np.cos(angle), r2*np.sin(angle)])
 
 if(True):	
-	rectangle_mesh(4, 4)
+	rectangle_mesh(3, 3)
 	T = Delaunay(V).simplices #[e for e in Delaunay(V).simplices if get_area(V[e[0]], V[e[1]], V[e[2]])<3]
 
 else:
@@ -40,9 +40,11 @@ else:
 		if get_area(V[e[0]], V[e[1]], V[e[2]])<5:
 			T.append(list(e))
 
+def createBlockingMatrix():
+	to_fix = [0]
+	P = np.kron(np.delete(np.eye(len(V)), to_fix, axis =1), np.eye(2))
+	return P
 
-print(V)
-print(T)
 def createP():
 	#P = 6Tx2V matrix that creates tet-based positions from V and T
 	P = np.zeros((6*len(T), 2*len(V)))
@@ -127,11 +129,13 @@ def createGlobalR():
 
 A = createA()
 P = createP()
+BLOCK = createBlockingMatrix()
 
 def updatePg(ng):
 	print(ng)
 	Pg = P.dot(ng)
 	return Pg
+
 
 def solve():
 	x = np.ravel(V)
@@ -140,8 +144,16 @@ def solve():
 	AP = np.matmul(A, P)
 	PTAT = np.matmul(P.T, A.T)
 	PTATAP = np.matmul(PTAT, AP)
-	PTATAPInv = np.linalg.pinv(PTATAP)
-	# CholFac, Lower = scipy.linalg.cho_factor(PTATAP)
+	BPAAPB = BLOCK.T.dot(PTATAP.dot(BLOCK))
+
+	if(False):
+		PTATAPInv = np.linalg.pinv(BPAAPB)
+	else:
+		KKT_matrix1 = np.concatenate((np.eye(BPAAPB.shape[0]), BPAAPB), axis=0)
+		KKT_matrix2 = np.concatenate((BPAAPB.T, np.zeros(BPAAPB.shape)), axis=0)
+		KKT = np.concatenate((KKT_matrix1, KKT_matrix2), axis=1)
+		#print("KKT", scipy.linalg.eig(KKT)[0])
+		CholFac, Lower = scipy.linalg.lu_factor(KKT)
 
 	def updateR(g):
 		Pg = updatePg(g)
@@ -179,8 +191,17 @@ def solve():
 		globalR = createGlobalR()
 		APx = A.dot(Px)
 		GRAPx = globalR.dot(APx)
-		PTATGRAPx = PTAT.dot(GRAPx)
-		newg = PTATAPInv.dot(PTATGRAPx)
+		BPTATGRAPx = BLOCK.T.dot(PTAT.dot(GRAPx))
+
+		if(False):
+			newg = BLOCK.dot(PTATAPInv.dot(BPTATGRAPx))
+			print(newg)
+		else:
+			ob = np.concatenate((np.zeros(len(BPTATGRAPx)), BPTATGRAPx))
+			print(ob)
+			gu = scipy.linalg.lu_solve((CholFac, Lower), ob)
+			print(gu)
+			newg = BLOCK.dot(gu[0:len(BPTATGRAPx)])
 		return newg
 
 	for i in range(10):

@@ -80,13 +80,13 @@ int main(int argc, char *argv[])
     // Newmark* nmrk = new Newmark(SM, j_input["timestep"]);
     // nmrk->step();
     Euler *elr = new Euler(SM, j_input["timestep"]);
-    elr->bfgs_step(func, rep);
+    elr->bfgs_step();
 	igl::viewer::Viewer viewer;
     viewer.callback_pre_draw = [&](igl::viewer::Viewer & viewer)
     {   
         if(viewer.core.is_animating)
         {
-            elr->bfgs_step(func, rep);
+            elr->bfgs_step();
             MatrixXd newV = SM->getCurrentVerts();
             viewer.data.set_vertices(newV);
     	}

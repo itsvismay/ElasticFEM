@@ -37,7 +37,9 @@ include_directories(${ALGLIB_SRC_DIR})
 
 # Add your project files
 file(GLOB HEADFILES "*.h" "${ALGLIB_SRC_DIR}/*.h")
-file(GLOB SRCFILES "*.cpp" "${ALGLIB_SRC_DIR}/*.cpp")
+file(GLOB SRCFILES "${ALGLIB_SRC_DIR}/*.cpp")
 #file(GLOB EXTERNALS "../spectra-0.5.0/include/*.h")
-add_executable(${PROJECT_NAME} ${HEADFILES} ${SRCFILES} ${EXTERNALS})
+add_executable(${PROJECT_NAME} "main.cpp" ${HEADFILES} ${SRCFILES} ${EXTERNALS})
+add_executable(arap_ex "arap_main.cpp" ${HEADFILES} ${SRCFILES} ${EXTERNALS})
 target_link_libraries(${PROJECT_NAME} -lglfw igl::core igl::viewer -fopenmp ${SUITESPARSE_LIBRARIES})
+target_link_libraries(arap_ex -lglfw igl::core igl::viewer -fopenmp ${SUITESPARSE_LIBRARIES})

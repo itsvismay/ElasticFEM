@@ -208,7 +208,7 @@ public:
         x_old = x_k;
     }
 
-    void bfgs_step(void (*bfgs_grad)(const real_1d_array &x, double &func, real_1d_array &grad, void *ptr)=NULL, void  (*bfgs_rep)(const real_1d_array &x, double func, void *ptr) = NULL)
+    void bfgs_step()
     {
         SparseMatrix<double>& P = SM->get_Pf();
         xbfgs = P.transpose()*SM->get_copy_x();
