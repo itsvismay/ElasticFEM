@@ -180,6 +180,33 @@ class ARAP:
 		self.CholFac, self.Lower = scipy.linalg.lu_factor(KKT)
 
 	def energy(self):
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		FPAx = F.dot(self.PAx)
+		return 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
+
+	def dEdr():
+		#TODO
+		dEdR = 0
+		dRdr = 0
+		return dEdR*dRdr
+
+	def dEdg():
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		AtPtPAg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(PAg))
+		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
+		return AtPtPAg - AtPtFPAx
+
+	def dEds():
+		#TODO
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		UtPAx = gU.T.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
+		RU = gR.dot(gU)
+		
+
+		dEdS =  np.multiply.outer(gS.dot(UtPAx), UtPAx) - np.multiply.outer(np.dot(RU.T, PAg), UtPAx)
+		dSds = 0 #rank 3 tensor
+		return dEdS*dSds
 
 	def itR(self):
 		theta_list = []
