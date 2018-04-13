@@ -58,7 +58,6 @@ class Mesh:
 		for i in range(len(self.T)):
 			self.q[3*i] = np.pi
 			break
-		print(self.q)
 
 	def createBlockingMatrix(self, to_fix=[]):
 		b = np.kron(np.delete(np.eye(len(self.V)), to_fix, axis =1), np.eye(2))
@@ -114,8 +113,7 @@ class Mesh:
 		F =  np.matmul(R, np.matmul(U, np.matmul(S, U.transpose())))
 		return F
 
-	def getGlobalF(self):
-		print("q", self.q)
+	def getGlobalF(self, onlyget=0):
 		GF = np.zeros((6*len(self.T), 6*len(self.T)))
 		GR = np.zeros((6*len(self.T), 6*len(self.T)))
 		GS = np.zeros((6*len(self.T), 6*len(self.T)))
@@ -133,9 +131,7 @@ class Mesh:
 			GR[6*i:6*i+6, 6*i:6*i+6] = r_e
 			GS[6*i:6*i+6, 6*i:6*i+6] = s_e
 			GU[6*i:6*i+6, 6*i:6*i+6] = u_e
-		# print(GF)
-		# print(GR.dot(GU.dot(GS.dot(GU.T))))
-		# exit()
+
 		return GF, GR, GS, GU
 
 	def getDiscontinuousVT(self):
@@ -184,29 +180,100 @@ class ARAP:
 		FPAx = F.dot(self.PAx)
 		return 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
 
-	def dEdr():
+	def d_gradEdr(self):
 		#TODO
-		dEdR = 0
-		dRdr = 0
-		return dEdR*dRdr
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		USUt = gU.dot(gS.dot(gU.T))
+		dEdR = -1*np.multiply.outer(PAg, USUt.dot(self.PAx))
+		_dRdr = self.dRdr()
+		dEdr = []
+		for i in range(len(self.mesh.T)):
+			dEdr_i = np.sum(np.multiply(dEdR, _dRdr[:,:,i]))
+			dEdr.append(dEdr_i)
+		print(dEdr)
+		return np.array(dEdr)
+	
+	def dRdr(self):
+		#	Iterate through each element, 
+		#		set dRdrx and dRdry 
+		#		then insert into a global dRdr matrix 
+		#		then assemble them into tensor
+		_dRdr = None
+		for t in range(0, len(self.mesh.T)):
+			c, s = np.cos(self.mesh.q[3*t]), np.sin(self.mesh.q[3*t])
+			dRdr_e = np.kron(np.eye(3), np.array(((-s,-c), (c, -s))))
 
-	def dEdg():
+			gdRdr = np.zeros((6*len(self.mesh.T), 6*len(self.mesh.T))) 
+			for i in range(len(self.mesh.T)):
+				if(i==t):
+					gdRdr[6*i:6*i+6, 6*i:6*i+6] = dRdr_e
+				else:
+					r = self.mesh.getR(i)
+					r_e = np.kron(np.eye(3), r)
+					gdRdr[6*i:6*i+6, 6*i:6*i+6] = r_e
+
+			if t == 0:
+				_dRdr = np.dstack([gdRdr])
+			else:
+				_dRdr = np.dstack([_dRdr, gdRdr])
+
+		return _dRdr
+
+	def d_gradEdg(self):
+		F = self.mesh.getGlobalF()[0]
+		FPAx = F.dot(self.PAx)
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		AtPtPAg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(PAg))
 		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
 		return AtPtPAg - AtPtFPAx
 
-	def dEds():
+	def d_gradEds(self):
 		#TODO
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		gF, gR, gS, gU = self.mesh.getGlobalF()
 		UtPAx = gU.T.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
 		RU = gR.dot(gU)
-		
-
 		dEdS =  np.multiply.outer(gS.dot(UtPAx), UtPAx) - np.multiply.outer(np.dot(RU.T, PAg), UtPAx)
-		dSds = 0 #rank 3 tensor
-		return dEdS*dSds
+		_dSds = self.dSds()#rank 3 tensor
+		dEds = []
+		for i in range(2*len(self.mesh.T)):
+			dEds_i = np.sum(np.multiply(dEdS, _dSds[:,:,i]))
+			dEds.append(dEds_i)
+		print(dEds)
+		return np.array(dEds)
+		
+	def dSds(self):
+		#	Iterate through each element, 
+		#		set dSdsx and dSdsy 
+		#		then insert into a global dSds matrix 
+		#		assemble them into tensor
+		_dSds = None
+		for t in range(0, len(self.mesh.T)):
+			dSdsx = self.mesh.getS(t)
+			dSdsy = self.mesh.getS(t)
+			dSdsx[0,0] = 1
+			dSdsy[1,1] = 1
+			dSdsx_e = np.kron(np.eye(3), dSdsx)
+			dSdsy_e = np.kron(np.eye(3), dSdsy)
+
+			gdSdsx = np.zeros((6*len(self.mesh.T), 6*len(self.mesh.T))) 
+			gdSdsy = np.zeros((6*len(self.mesh.T), 6*len(self.mesh.T)))
+			for i in range(len(self.mesh.T)):
+				if(i==t):
+					gdSdsx[6*i:6*i+6, 6*i:6*i+6] = dSdsx_e
+					gdSdsy[6*i:6*i+6, 6*i:6*i+6] = dSdsy_e
+				else:
+					s = self.mesh.getS(i)
+					s_e = np.kron(np.eye(3), s)
+					gdSdsx[6*i:6*i+6, 6*i:6*i+6] = s_e
+					gdSdsy[6*i:6*i+6, 6*i:6*i+6] = s_e
+
+			if t == 0:
+				_dSds = np.dstack([gdSdsx, gdSdsy])
+			else:
+				_dSds = np.dstack([_dSds, gdSdsx, gdSdsy])
+		return _dSds
 
 	def itR(self):
 		theta_list = []
@@ -244,12 +311,12 @@ class ARAP:
 		if useKKT:
 			ob = np.concatenate((np.zeros(len(BtAtPtFPAx)), BtAtPtFPAx))
 			gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), ob)
-			self.mesh.g = BLOCK.dot(gu[0:len(BtAtPtFPAx)])
+			# self.mesh.g = BLOCK.dot(gu[0:len(BtAtPtFPAx)])
 			
 			return 1
 		else:
 			BtAtPtFPAx = self.BLOCK.T.dot(self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx)))
-			self.mesh.g = self.BLOCK.dot(self.pinvBtAtPtPAB.dot(BtAtPtFPAx))
+			# self.mesh.g = self.BLOCK.dot(self.pinvBtAtPtPAB.dot(BtAtPtFPAx))
 
 			return 1
 
@@ -260,6 +327,8 @@ class ARAP:
 def display():
 	mesh = Mesh(rectangle_mesh(2,2))
 	arap = ARAP(mesh)
+	arap.d_gradEdr()
+	exit()
 	viewer = igl.viewer.Viewer()
 	def key_down(viewer, b, c):
 		RV, RT = mesh.getDiscontinuousVT()
