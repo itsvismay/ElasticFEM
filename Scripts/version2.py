@@ -267,6 +267,18 @@ class ARAP:
 				_dSds = np.dstack([_dSds, gdSdsx, gdSdsy])
 		return _dSds
 
+	def d_gradEgrdg(self):
+		PA = self.mesh.getP().dot(self.mesh.getA())
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		USUt = gU.dot(gS.dot(gU.T))
+		USUtPAx = USUt.dot(self.PAx)
+
+		d_gEgdg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
+		_dRdr = self.dRdr()
+		d_gErdg = np.tensordot(np.multiply.outer(PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
+		print(d_gEgdg)
+		print(d_gErdg)
+
 	def itR(self):
 		theta_list = []
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
@@ -375,9 +387,14 @@ def FiniteDifferences():
 		print(realdEdr)
 		print(dEdr)
 
+	def check_d_gradEgrdg():
+		real = arap.d_gradEgrdg()
+		print(real)
+
+	check_d_gradEgrdg()
+	# check_dEdg()
 	# check_dEdr()
 	# check_dEds()
-	# check_dEdg()
 
 FiniteDifferences()
 
