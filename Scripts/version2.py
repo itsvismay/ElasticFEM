@@ -45,7 +45,7 @@ class Mesh:
 		self.P = None
 		self.A = None
 		self.x0 = np.ravel(self.V)
-		self.g = np.ravel(self.V)
+		self.g = np.zeros(len(self.V)*2)+np.ravel(self.V)
 
 		self.q = np.zeros(len(self.T)*(1+2)) #theta, sx, sy
 
@@ -180,9 +180,6 @@ class ARAP:
 		FPAx = _R.dot(_U.dot(_S.dot(_U.T.dot(self.PAx))))
 		return 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
 
-	def dEdgrs(self):
-		pass
-
 	def dEdr(self):
 		#TODO
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
@@ -190,12 +187,9 @@ class ARAP:
 		USUt = gU.dot(gS.dot(gU.T))
 		dEdR = -1*np.multiply.outer(PAg, USUt.dot(self.PAx))
 		_dRdr = self.dRdr()
-		dEdr = []
-		for i in range(len(self.mesh.T)):
-			dEdr_i = np.sum(np.multiply(dEdR, _dRdr[:,:,i]))
-			dEdr.append(dEdr_i)
+		dEdr = np.tensordot(dEdR, _dRdr, axes = ([0,1],[0,1]))
 
-		return dEdR, np.array(dEdr)
+		return dEdR, dEdr
 	
 	def dRdr(self):
 		#	Iterate through each element, 
@@ -235,12 +229,9 @@ class ARAP:
 		dEdS =  np.multiply.outer(gS.dot(UtPAx), UtPAx) - np.multiply.outer(np.dot(RU.T, PAg), UtPAx)
 		dSds_ = self.dSds()#rank 3 tensor
 		
-		dEds = []
-		for i in range(2*len(self.mesh.T)):
-			dEds_i = np.sum(np.multiply(dEdS, dSds_[:,:,i]))
-			dEds.append(dEds_i)
+		dEds = np.tensordot(dEdS, _dSds, axes = ([0,1], [0,1]))
 		
-		return dEdS, np.array(dEds)
+		return dEdS, dEds
 		
 	def dSds(self):
 		#	Iterate through each element, 
@@ -275,9 +266,37 @@ class ARAP:
 
 		d_gEgdg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
 		_dRdr = self.dRdr()
-		d_gErdg = np.tensordot(np.multiply.outer(PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
-		print(d_gEgdg)
-		print(d_gErdg)
+		d_gErdg = np.tensordot(np.multiply.outer(-1*PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
+
+		return np.concatenate((d_gEgdg, d_gErdg.T))
+
+	def d_gradEgrdr(self):
+		PA = self.mesh.getP().dot(self.mesh.getA())
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		USUt = gU.dot(gS.dot(gU.T))
+		USUtPAx = USUt.dot(self.PAx)
+
+		d_gEgdR = np.multiply.outer(PA.T, USUtPAx.T)
+
+	def d_gradEgrds(self):
+		PA = self.mesh.getP().dot(self.mesh.getA())
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		UtPAx = gU.dot(self.PAx)
+		PAg = PA.dot(self.mesh.g)
+		_dSds = self.dSds()
+		_dRdr = self.dRdr()
+		PAtRU = PA.T.dot(gR.dot(gU))
+		PAtRU_UtPAx = np.multiply.outer(-1*PAtRU, UtPAx)
+		print(np.sum(np.multiply(PAtRU_UtPAx[0,:,:].T,_dSds[:,:,0])))
+		d_gEgds = np.tensordot(PAtRU_UtPAx, _dSds, axes =([1,2],[0,1]))
+		return d_gEgds
+
+		# negPAg_U_UtPAx = np.multiply.outer(-1*PAg, np.multiply.outer(gU, UtPAx).T)
+		# negPAg_U_UtPAx_dRdr = np.tensordot(negPAg_U_UtPAx.T, _dRdr, axes=([2,3],[0,1]))
+		# d_gErds = np.tensordot(negPAg_U_UtPAx_dRdr, _dSds, axes=([0,1],[0,1]))
+		# return np.concatenate((d_gEgds, d_gErds))
+		
+
 
 	def itR(self):
 		theta_list = []
@@ -329,7 +348,7 @@ class ARAP:
 		g = self.itT(useKKT = useKKT)
 
 def FiniteDifferences():
-	eps = 1e-5
+	eps = 1e-3
 	mesh = Mesh(rectangle_mesh(2,2))
 	arap = ARAP(mesh)
 	
@@ -389,9 +408,40 @@ def FiniteDifferences():
 
 	def check_d_gradEgrdg():
 		real = arap.d_gradEgrdg()
-		print(real)
+		fake = np.zeros(real.shape)
+		
+		dEdg = arap.dEdg()
+		for i in range(len(mesh.g)):
+			mesh.g[i] += eps
+			fake[0:len(mesh.g), i] = (arap.dEdg() - dEdg)/eps
+			mesh.g[i] -= eps
 
-	check_d_gradEgrdg()
+		dEdr = arap.dEdr()
+		for i in range(len(mesh.g)):
+			mesh.g[i] += eps
+			fake[len(mesh.g):, i] = (arap.dEdr()[1] - dEdr[1])/eps
+			mesh.g[i] -= eps
+
+
+		print(np.linalg.norm(fake - real))
+
+	def check_d_gradEgrds():
+		real = arap.d_gradEgrds()
+		fake = np.zeros(real.shape)
+
+		dEdg = arap.dEdg()
+		for i in range(len(mesh.T)):
+			for j in range(1,3):
+				mesh.q[3*i+j] += eps
+				fake[0:len(mesh.g),2*i+(j-1)] = (arap.dEdg() - dEdg)/eps
+				mesh.q[3*i+j] -= eps
+
+		print(real)
+		print("fake")
+		print(fake)
+
+	check_d_gradEgrds()
+	# check_d_gradEgrdg()
 	# check_dEdg()
 	# check_dEdr()
 	# check_dEds()
