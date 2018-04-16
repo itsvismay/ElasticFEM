@@ -287,14 +287,14 @@ class ARAP:
 		_dRdr = self.dRdr()
 		PAtRU = PA.T.dot(gR.dot(gU))
 		PAtRU_UtPAx = np.multiply.outer(-1*PAtRU, UtPAx)
-		print(np.sum(np.multiply(PAtRU_UtPAx[0,:,:].T,_dSds[:,:,0])))
+		# print(np.sum(np.multiply(PAtRU_UtPAx[0,:,:].T,_dSds[:,:,0])))
 		d_gEgds = np.tensordot(PAtRU_UtPAx, _dSds, axes =([1,2],[0,1]))
-		return d_gEgds
+		# return d_gEgds
 
-		# negPAg_U_UtPAx = np.multiply.outer(-1*PAg, np.multiply.outer(gU, UtPAx).T)
-		# negPAg_U_UtPAx_dRdr = np.tensordot(negPAg_U_UtPAx.T, _dRdr, axes=([2,3],[0,1]))
-		# d_gErds = np.tensordot(negPAg_U_UtPAx_dRdr, _dSds, axes=([0,1],[0,1]))
-		# return np.concatenate((d_gEgds, d_gErds))
+		negPAg_U_UtPAx = np.multiply.outer(-1*PAg, np.multiply.outer(gU, UtPAx).T)
+		negPAg_U_UtPAx_dRdr = np.tensordot(negPAg_U_UtPAx.T, _dRdr, axes=([1,3],[0,1]))
+		d_gErds = np.tensordot(negPAg_U_UtPAx_dRdr, _dSds, axes=([0,1],[0,1]))
+		return np.concatenate((d_gEgds, d_gErds))
 		
 
 
@@ -435,6 +435,14 @@ def FiniteDifferences():
 				mesh.q[3*i+j] += eps
 				fake[0:len(mesh.g),2*i+(j-1)] = (arap.dEdg() - dEdg)/eps
 				mesh.q[3*i+j] -= eps
+
+		dEdr = arap.dEdr()
+		for i in range(len(mesh.T)):
+			for j in range(1,3):
+				mesh.q[3*i+j] += eps
+				fake[len(mesh.g): ,2*i+(j-1)] = (arap.dEdr()[1] - dEdr[1])/eps
+				mesh.q[3*i+j] -= eps
+
 
 		print(real)
 		print("fake")
