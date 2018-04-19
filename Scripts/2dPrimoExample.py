@@ -40,8 +40,8 @@ else:
 		if get_area(V[e[0]], V[e[1]], V[e[2]])<5:
 			T.append(list(e))
 
-def createBlockingMatrix():
-	to_fix = [0]
+def createPBlockingMatrix():
+	to_fix = [0,1]
 	P = np.kron(np.delete(np.eye(len(V)), to_fix, axis =1), np.eye(2))
 	return P
 

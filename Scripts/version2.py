@@ -33,13 +33,14 @@ def torus_mesh(r1, r2):
 	for e in Delaunay(V).simplices:
 		if get_area(V[e[0]], V[e[1]], V[e[2]])<5:
 			T.append(list(e))
-	return V, T	
+	return np.array(V), np.array(T)	
 
 class Mesh:
 	#class vars
 
 	def __init__(self, VT):
 		#object vars
+		self.fixed = []
 		self.V = VT[0]
 		self.T = VT[1]
 		self.P = None
@@ -55,13 +56,21 @@ class Mesh:
 			self.q[3*i + 2] = 1
 
 		#set initial rots
-		for i in range(len(self.T)):
-			self.q[3*i] = np.pi/100
-			break
+		# for i in range(len(self.T)):
+		# 	self.q[3*i] = np.pi/100
+		# 	break
 
 	def createBlockingMatrix(self, to_fix=[]):
+		self.fixed = to_fix
 		b = np.kron(np.delete(np.eye(len(self.V)), to_fix, axis =1), np.eye(2))
-		return b
+
+		ab = np.zeros(len(self.V))
+		ab[to_fix] = 1
+		to_reset = [i for i in range(len(ab)) if ab[i]==0]
+		
+		anti_b = np.kron(np.delete(np.eye(len(self.V)), to_reset, axis =1), np.eye(2))
+
+		return b, anti_b
 
 	def getP(self):
 		if(self.P is None):
@@ -87,9 +96,9 @@ class Mesh:
 
 	def getU(self, ind):
 		if ind%2== 1:
-			alpha = np.pi/4
+			alpha = 0# np.pi/4
 		else:
-			alpha = np.pi/4
+			alpha = 0# np.pi/4
 
 		cU, sU = np.cos(alpha), np.sin(alpha)
 		U = np.array(((cU,-sU), (sU, cU)))
@@ -153,17 +162,21 @@ class Mesh:
 		return RecV, RecT
 
 	def getContinuousVT(self):
-		RecV = np.zeros((2*len(V), 2))
+		RecV = np.zeros((2*len(self.V), 2))
 		for i in range(len(self.g)/2):
 			RecV[i, 0] = self.g[2*i]
 			RecV[i, 1] = self.g[2*i+1]
 		return RecV, self.T
 
+
 class ARAP:
 
 	def __init__(self, imesh):
 		self.mesh = imesh
-		self.BLOCK = self.mesh.createBlockingMatrix(to_fix = [0])
+		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix(to_fix = [0])
+		#these are the fixed vertices which stay constant
+		self.AbAbtg = self.ANTI_BLOCK.dot(self.ANTI_BLOCK.T.dot(self.mesh.g))
+
 		A = self.mesh.getA()
 		P = self.mesh.getP()
 		self.PAx = P.dot(A.dot(self.mesh.x0))
@@ -179,6 +192,30 @@ class ARAP:
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(_g))
 		FPAx = _R.dot(_U.dot(_S.dot(_U.T.dot(self.PAx))))
 		return 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
+
+	def Energy(self):
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		F,R,S,U = self.mesh.getGlobalF()
+		FPAx = R.dot(U.dot(S.dot(U.T.dot(self.PAx))))
+		return 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
+
+	def Jacobian(self):
+		lhs_left = self.d_gradEgrdg()
+		lhs_right = self.d_gradEgrdr()
+
+		lhs = np.concatenate((lhs_left, lhs_right), axis =1)
+		rhs = self.d_gradEgrds()
+
+		SVDinv_Jac_s = np.matmul(np.linalg.pinv(lhs), rhs)
+
+		dgds = SVDinv_Jac_s[0:lhs_left.shape[1],:]
+		drds = SVDinv_Jac_s[lhs_left.shape[1]:,:]
+		
+		dEds = np.matmul(self.dEdg(),dgds) + np.matmul(self.dEdr()[1], drds) + self.dEds()[1]
+
+
+		return dEds
+		# KKTinv_Jac_s
 
 	def dEdr(self):
 		#TODO
@@ -315,24 +352,14 @@ class ARAP:
 		PAtRU = PA.T.dot(gR.dot(gU))
 
 		d_gEgdS = np.multiply.outer(-1*PAtRU, UtPAx.T)
-		# d_gEgdS = []
-		# for i in range(PAtRU.shape[0]):
-		# 	# print(PAtRU[i,])
-		# 	d_gEgdS.append(np.multiply.outer(-1*PAtRU[i,:], UtPAx.T))
-		# print(d_gEgdS[0])
-		# return d_gEgdS, None
 
-		# print(_dSds[1,1,1])
-		# print(np.sum(np.multiply(d_gEgdS[7,:,:],_dSds[:,:,3])))
 		d_gEgds = np.tensordot(d_gEgdS, _dSds, axes =([1,2],[0,1]))
 
 		negPAg_U_UtPAx = np.multiply.outer(-1*PAg, np.multiply.outer(gU, UtPAx))
-
 		negPAg_U_UtPAx_dRdr = np.tensordot(negPAg_U_UtPAx, _dRdr, axes=([0,1],[0,1]))
 		d_gErds = np.tensordot(negPAg_U_UtPAx_dRdr, _dSds, axes=([0,1],[0,1]))
-		return d_gEgdS, np.concatenate((d_gEgds, d_gErds))
-		
 
+		return np.concatenate((d_gEgds, d_gErds))
 
 	def itR(self):
 		theta_list = []
@@ -370,18 +397,25 @@ class ARAP:
 		if useKKT:
 			ob = np.concatenate((np.zeros(len(BtAtPtFPAx)), BtAtPtFPAx))
 			gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), ob)
-			# self.mesh.g = BLOCK.dot(gu[0:len(BtAtPtFPAx)])
+			self.mesh.g = self.BLOCK.dot(gu[0:len(BtAtPtFPAx)]) + self.AbAbtg
 			
 			return 1
 		else:
 			BtAtPtFPAx = self.BLOCK.T.dot(self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx)))
-			# self.mesh.g = self.BLOCK.dot(self.pinvBtAtPtPAB.dot(BtAtPtFPAx))
+			self.mesh.g = self.BLOCK.dot(self.pinvBtAtPtPAB.dot(BtAtPtFPAx)) + self.AbAbtg
 
 			return 1
 
-	def iterate(self, useKKT = False):
-		r = self.itR()
-		g = self.itT(useKKT = useKKT)
+	def iterate(self, its=2, useKKT = True):
+		for i in range(its):
+			r = self.itR()
+			g = self.itT(useKKT = useKKT)
+		# print(self.mesh.g)
+
+class LinearElastic:
+
+	def __init__(self, imesh):
+		pass
 
 def FiniteDifferences():
 	eps = 1e-4
@@ -486,7 +520,7 @@ def FiniteDifferences():
 		return real
 
 	def check_d_gradEgrds():
-		real = arap.d_gradEgrds()[1]
+		real = arap.d_gradEgrds()
 		fake = np.zeros(real.shape)
 
 		dEdg = arap.dEdg()
@@ -544,11 +578,9 @@ def FiniteDifferences():
 
 		# print(np.sum(np.multiply(dEgdS[:,:,0], _dSds[:,:,0])))
 		# print(np.sum(np.multiply(real[0,:,:], _dSds[:,:,0])))
-
-
 	
 	# check_d_gradEgdS()
-	check_d_gradEgrds()
+	# check_d_gradEgrds()
 	# right = check_d_gradEgrdr()
 	# left = check_d_gradEgrdg()
 	# check_dEdg()
@@ -557,25 +589,95 @@ def FiniteDifferences():
 	# FLHS = np.concatenate((left, right), axis =1)
 	# print(len(mesh.q)/3)
 	# np.savetxt('full-left.csv', FLHS, delimiter=',')
+# FiniteDifferences()
 
-
-FiniteDifferences()
-
-def display():
+def test():
 	mesh = Mesh(rectangle_mesh(2,2))
 	arap = ARAP(mesh)
-	viewer = igl.viewer.Viewer()
-	def key_down(viewer, b, c):
-		RV, RT = mesh.getDiscontinuousVT()
-		V2 = igl.eigen.MatrixXd(RV)
-		T2 = igl.eigen.MatrixXi(RT)
-		viewer.data.set_mesh(V2, T2)
-		arap.iterate()
+	arap.Energy()
+	arap.Jacobian()
+# test()
 
-		return True
-	key_down(viewer, "a", 1)
-	viewer.core.is_animating = False
-	viewer.callback_key_down = key_down
-	viewer.launch()
+class TimeIntegrator:
 
-# display()
+	def __init__(self, imesh, iarap, ielastic = None):
+		self.time = 0
+		self.mesh = imesh
+		self.arap = iarap 
+		self.elastic = ielastic 
+
+		self.set_random_strain()
+
+	def set_strain(self):
+		for i in range(len(self.mesh.T)):
+			self.mesh.q[3*i +1] = 1 + np.sin(self.time)
+			# self.mesh.q[3*i +2] = 1+ np.sin(self.time)
+
+	def set_random_strain(self):
+		for i in range(len(self.mesh.T)):
+			self.mesh.q[3*i + 1] = 1 + np.random.uniform(0,1)
+			self.mesh.q[3*i + 2] = 1 + np.random.uniform(0,1)
+
+	def iterate(self):
+		self.arap.iterate()
+		self.set_random_strain()
+
+		self.time += 0.01
+
+	def solve(self):
+		s0 = []
+		for i in range(len(self.mesh.T)):
+			s0.append(self.mesh.q[3*i + 1])
+			s0.append(self.mesh.q[3*i + 2])
+
+		print("initial s: ", s0)
+		def energy(s):
+			for i in range(len(self.mesh.T)):
+				self.mesh.q[3*i + 1] = s[2*i]
+				self.mesh.q[3*i + 2] = s[2*i +1]
+
+			return self.arap.Energy()
+
+		def jacobian(s):
+			for i in range(len(self.mesh.T)):
+				self.mesh.q[3*i + 1] = s[2*i]
+				self.mesh.q[3*i + 2] = s[2*i +1]
+
+			return self.arap.Jacobian()
+
+		res = scipy.optimize.minimize(energy, np.array(s0), method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True})
+		print(res.x)
+
+def display():
+	mesh = Mesh(rectangle_mesh(3,3))
+	arap = ARAP(mesh)
+	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = None)
+	time_integrator.solve()
+	# viewer = igl.viewer.Viewer()
+
+	# def key_down(viewer, c, b):
+	# 	viewer.data.clear()
+	# 	time_integrator.solve()
+	# 	RV, RT = mesh.getDiscontinuousVT()
+	# 	V2 = igl.eigen.MatrixXd(RV)
+	# 	T2 = igl.eigen.MatrixXi(RT)
+	# 	viewer.data.set_mesh(V2, T2)
+
+
+	# 	red = igl.eigen.MatrixXd([[1,0,0]])
+	# 	C = []
+	# 	for i in range(len(mesh.fixed)):
+	# 		C.append(mesh.V[mesh.fixed[i]])
+
+	# 	# print(C)
+	# 	viewer.data.add_points(igl.eigen.MatrixXd(C), red)
+	# 	# viewer.data.add_points(igl.eigen.MatrixXd(mesh.V[1]), red)
+		
+	# 	return True
+
+	# key_down(viewer, 'a', 1)
+	# viewer.callback_key_down = key_down
+	# viewer.core.is_animating = False
+	# viewer.launch()
+
+display()
