@@ -35,6 +35,11 @@ def torus_mesh(r1, r2):
 			T.append(list(e))
 	return np.array(V), np.array(T)	
 
+def triangle_mesh():
+	V = [[0,0], [1,0], [0,1]]
+	T = [[0,1,2]]
+	return V, T
+
 class Mesh:
 	#class vars
 
@@ -75,7 +80,8 @@ class Mesh:
 	def getP(self):
 		if(self.P is None):
 			P = np.zeros((6*len(self.T), 6*len(self.T)))
-			sub_P = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [-1, 0, 1]]), np.eye(2))
+			# sub_P = np.kron(np.matrix([[2, -1, -1], [-1, 2, -1], [-1, -1, 2]]), np.eye(2))
+			sub_P = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [1, 0, -1]]), np.eye(2))
 			for i in range(len(self.T)):
 				P[6*i:6*i+6, 6*i:6*i+6] = sub_P
 			self.P = P
@@ -173,14 +179,17 @@ class ARAP:
 
 	def __init__(self, imesh):
 		self.mesh = imesh
-		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix(to_fix = [0])
+		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix(to_fix = [1,2])
 		#these are the fixed vertices which stay constant
 		self.AbAbtg = self.ANTI_BLOCK.dot(self.ANTI_BLOCK.T.dot(self.mesh.g))
 
 		A = self.mesh.getA()
 		P = self.mesh.getP()
 		self.PAx = P.dot(A.dot(self.mesh.x0))
+		print(self.BLOCK)
 		BtAtPtPAB = self.BLOCK.T.dot(A.T.dot(P.T.dot(P.dot(A.dot(self.BLOCK)))))
+		print("not inverse")
+		print(A.T.dot(P.T.dot(P.dot(A))))
 		self.pinvBtAtPtPAB = np.linalg.pinv(BtAtPtPAB)
 
 		KKT_matrix1 = np.concatenate((np.eye(BtAtPtPAB.shape[0]), BtAtPtPAB), axis=0)
@@ -197,7 +206,12 @@ class ARAP:
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		F,R,S,U = self.mesh.getGlobalF()
 		FPAx = R.dot(U.dot(S.dot(U.T.dot(self.PAx))))
-		return 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
+		en = 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
+		print("en ", en)
+		print("g", self.mesh.g)
+		print("q", self.mesh.q)
+		print("F", F.dot(self.PAx))
+		return en
 
 	def Jacobian(self):
 		lhs_left = self.d_gradEgrdg()
@@ -363,7 +377,8 @@ class ARAP:
 
 	def itR(self):
 		theta_list = []
-		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))*0
+
 		for i in range(len(self.mesh.T)):
 			PAx_e = self.PAx[6*i:6*i+6]
 			PAg_e = PAg[6*i:6*i+6]
@@ -388,12 +403,20 @@ class ARAP:
 			theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
 			theta_list.append(theta)
 			self.mesh.q[3*i] = theta
+
 		return theta_list
 	
 	def itT(self, useKKT=False):
 		F = self.mesh.getGlobalF()[0]
-		FPAx = F.dot(self.PAx)
-		BtAtPtFPAx = self.BLOCK.T.dot(self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx)))
+		# FPAx = self.BLOCK.dot(self.BLOCK.T.dot(F.dot(self.PAx)))
+		BtFPAx = self.BLOCK.T.dot(
+						F.dot(
+							self.mesh.getP().dot(
+								self.BLOCK.dot(
+									self.BLOCK.T.dot(
+										self.mesh.getA().dot(self.mesh.x0))))))
+		BtAtPtB = self.BLOCK.T.dot(self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.BLOCK)))
+		BtAtPtFPAx = BtAtPtB.dot(BtFPAx)
 		if useKKT:
 			ob = np.concatenate((np.zeros(len(BtAtPtFPAx)), BtAtPtFPAx))
 			gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), ob)
@@ -401,16 +424,18 @@ class ARAP:
 			
 			return 1
 		else:
-			BtAtPtFPAx = self.BLOCK.T.dot(self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx)))
 			self.mesh.g = self.BLOCK.dot(self.pinvBtAtPtPAB.dot(BtAtPtFPAx)) + self.AbAbtg
+			print(self.mesh.g)
+			print(self.AbAbtg)
 
 			return 1
 
-	def iterate(self, its=2, useKKT = True):
+	def iterate(self, its=1, useKKT = False):
+		print(self.mesh.getA())
 		for i in range(its):
+			self.Energy()
 			r = self.itR()
 			g = self.itT(useKKT = useKKT)
-		# print(self.mesh.g)
 
 class LinearElastic:
 
@@ -606,7 +631,6 @@ class TimeIntegrator:
 		self.arap = iarap 
 		self.elastic = ielastic 
 
-		self.set_random_strain()
 
 	def set_strain(self):
 		for i in range(len(self.mesh.T)):
@@ -619,10 +643,10 @@ class TimeIntegrator:
 			self.mesh.q[3*i + 2] = 1 + np.random.uniform(0,1)
 
 	def iterate(self):
-		self.arap.iterate()
-		self.set_random_strain()
-
-		self.time += 0.01
+		# self.set_random_strain()
+		self.arap.iterate(its=1)
+		self.set_strain()
+		self.time += 0.1
 
 	def solve(self):
 		s0 = []
@@ -649,35 +673,35 @@ class TimeIntegrator:
 		print(res.x)
 
 def display():
-	mesh = Mesh(rectangle_mesh(3,3))
+	mesh = Mesh(triangle_mesh())
 	arap = ARAP(mesh)
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = None)
-	time_integrator.solve()
-	# viewer = igl.viewer.Viewer()
+	# time_integrator.solve()
+	viewer = igl.viewer.Viewer()
 
-	# def key_down(viewer, c, b):
-	# 	viewer.data.clear()
-	# 	time_integrator.solve()
-	# 	RV, RT = mesh.getDiscontinuousVT()
-	# 	V2 = igl.eigen.MatrixXd(RV)
-	# 	T2 = igl.eigen.MatrixXi(RT)
-	# 	viewer.data.set_mesh(V2, T2)
+	def key_down(viewer, c, b):
+		viewer.data.clear()
+		time_integrator.iterate()
+		# RV, RT = mesh.getDiscontinuousVT()
+		RV, RT = mesh.getContinuousVT()
+		V2 = igl.eigen.MatrixXd(RV)
+		T2 = igl.eigen.MatrixXi(RT)
+		viewer.data.set_mesh(V2, T2)
 
+		red = igl.eigen.MatrixXd([[1,0,0]])
+		C = []
+		for i in range(len(mesh.fixed)):
+			C.append(mesh.V[mesh.fixed[i]])
 
-	# 	red = igl.eigen.MatrixXd([[1,0,0]])
-	# 	C = []
-	# 	for i in range(len(mesh.fixed)):
-	# 		C.append(mesh.V[mesh.fixed[i]])
-
-	# 	# print(C)
-	# 	viewer.data.add_points(igl.eigen.MatrixXd(C), red)
-	# 	# viewer.data.add_points(igl.eigen.MatrixXd(mesh.V[1]), red)
+		# print(C)
+		viewer.data.add_points(igl.eigen.MatrixXd(C), red)
+		# viewer.data.add_points(igl.eigen.MatrixXd(mesh.V[1]), red)
 		
-	# 	return True
+		return True
 
-	# key_down(viewer, 'a', 1)
-	# viewer.callback_key_down = key_down
-	# viewer.core.is_animating = False
-	# viewer.launch()
+	key_down(viewer, 'a', 1)
+	viewer.callback_key_down = key_down
+	viewer.core.is_animating = False
+	viewer.launch()
 
 display()
