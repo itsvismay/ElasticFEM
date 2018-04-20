@@ -42,6 +42,7 @@ class Mesh:
 		#object vars
 		self.V = VT[0]
 		self.T = VT[1]
+		self.fixedOnElement = np.zeros(6*len(self.T))
 		self.P = None
 		self.A = None
 		self.x0 = np.ravel(self.V)
@@ -61,8 +62,23 @@ class Mesh:
 		print(self.q)
 
 	def createBlockingMatrix(self, to_fix=[]):
+
+		self.fixed = to_fix
+
+		onVerts = np.zeros(len(self.V))
+		onVerts[to_fix] = 1
+		# self.fixedOnElement = self.getA().dot(onVerts, np.ones(2))
+		# print("on e",)
 		b = np.kron(np.delete(np.eye(len(self.V)), to_fix, axis =1), np.eye(2))
-		return b
+
+		ab = np.zeros(len(self.V))
+		ab[to_fix] = 1
+		to_reset = [i for i in range(len(ab)) if ab[i]==0]
+		
+		anti_b = np.kron(np.delete(np.eye(len(self.V)), to_reset, axis =1), np.eye(2))
+
+		# self.P = None #reset P because blocking verts will change P
+		return b, anti_b
 
 	def getP(self):
 		if(self.P is None):
@@ -70,6 +86,15 @@ class Mesh:
 			sub_P = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [-1, 0, 1]]), np.eye(2))
 			for i in range(len(self.T)):
 				P[6*i:6*i+6, 6*i:6*i+6] = sub_P
+				# if(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) == 0):
+				# 	P[6*i:6*i+6, 6*i:6*i+6] = sub_P
+
+				# elif(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) == 2):
+				# 	P[6*i:6*i+6, 6*i:6*i+6] = 
+
+				# elif(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) >= 3):
+				# 	continue 
+
 			self.P = P
 
 		return self.P
@@ -88,9 +113,9 @@ class Mesh:
 
 	def getU(self, ind):
 		if ind%2== 1:
-			alpha = np.pi/3
+			alpha = 0*np.pi/4
 		else:
-			alpha = np.pi/4
+			alpha = 0*np.pi/4
 
 		cU, sU = np.cos(alpha), np.sin(alpha)
 		U = np.array(((cU,-sU), (sU, cU)))
@@ -179,7 +204,183 @@ class ARAP:
 		KKT = np.concatenate((KKT_matrix1, KKT_matrix2), axis=1)
 		self.CholFac, self.Lower = scipy.linalg.lu_factor(KKT)
 
+<<<<<<< Updated upstream
 	def energy(self):
+=======
+	def energy(self, _g, _R, _S, _U):
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(_g))
+		FPAx = _R.dot(_U.dot(_S.dot(_U.T.dot(self.PAx))))
+		return 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
+
+	def Energy(self):
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		F,R,S,U = self.mesh.getGlobalF()
+		FPAx = R.dot(U.dot(S.dot(U.T.dot(self.PAx))))
+		en = 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
+		print("en", en)
+		# print("q", self.mesh.q)
+		return en
+
+	def Jacobian(self):
+		lhs_left = self.d_gradEgrdg()
+		lhs_right = self.d_gradEgrdr()
+
+		lhs = np.concatenate((lhs_left, lhs_right), axis =1)
+		rhs = self.d_gradEgrds()
+
+		SVDinv_Jac_s = np.matmul(np.linalg.pinv(lhs), rhs)
+
+		dgds = SVDinv_Jac_s[0:lhs_left.shape[1],:]
+		drds = SVDinv_Jac_s[lhs_left.shape[1]:,:]
+		
+		dEds = np.matmul(self.dEdg(),dgds) + np.matmul(self.dEdr()[1], drds) + self.dEds()[1]
+
+		return dEds
+		# KKTinv_Jac_s
+
+	def dEdr(self):
+		#TODO
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		USUt = gU.dot(gS.dot(gU.T))
+		dEdR = -1*np.multiply.outer(PAg, USUt.dot(self.PAx))
+		_dRdr = self.dRdr()
+		dEdr = np.tensordot(dEdR, _dRdr, axes = ([0,1],[0,1]))
+
+		return dEdR, dEdr
+	
+	def dRdr(self):
+		#	Iterate through each element, 
+		#		set dRdrx and dRdry 
+		#		then insert into a global dRdr matrix 
+		#		then assemble them into tensor
+		_dRdr = None
+		for t in range(0, len(self.mesh.T)):
+			c, s = np.cos(self.mesh.q[3*t]), np.sin(self.mesh.q[3*t])
+			dRdr_e = np.kron(np.eye(3), np.array(((-s,-c), (c, -s))))
+
+			gdRdr = np.zeros((6*len(self.mesh.T), 6*len(self.mesh.T))) 
+			gdRdr[6*t:6*t+6, 6*t:6*t+6] = dRdr_e
+
+
+			if t == 0:
+				_dRdr = np.dstack([gdRdr])
+			else:
+				_dRdr = np.dstack([_dRdr, gdRdr])
+
+		return _dRdr
+
+	def d2Rdr2(self):
+		_d2Rdr2 = []
+		for t in range(0,len(self.mesh.T)):
+			ddRdrdrt = None
+			for r in range(len(self.mesh.T)): 
+				gddRdrdr = np.zeros((6*len(self.mesh.T), 6*len(self.mesh.T)))
+
+				if(t==r):
+					c, s = np.cos(self.mesh.q[3*t]), np.sin(self.mesh.q[3*t])
+					ddR_e = np.kron(np.eye(3), np.array(((-c,s), (-s, -c))))
+					gddRdrdr[6*t:6*t+6, 6*t:6*t+6] = ddR_e 
+
+				if r == 0:
+					ddRdrdrt = np.dstack([gddRdrdr])
+				else:
+					ddRdrdrt = np.dstack([ddRdrdrt, gddRdrdr])
+			_d2Rdr2.append(ddRdrdrt)	
+		return np.array(_d2Rdr2)
+
+	def dEdg(self):
+		F = self.mesh.getGlobalF()[0]
+		FPAx = F.dot(self.PAx)
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		AtPtPAg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(PAg))
+		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
+		return AtPtPAg - AtPtFPAx
+
+	def dEds(self):
+		#TODO
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		UtPAx = gU.T.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
+		RU = gR.dot(gU)
+		dEdS =  np.multiply.outer(gS.dot(UtPAx), UtPAx) - np.multiply.outer(np.dot(RU.T, PAg), UtPAx)
+		_dSds = self.dSds()#rank 3 tensor
+		
+		dEds = np.tensordot(dEdS, _dSds, axes = ([0,1], [0,1]))
+		
+		return dEdS, dEds
+		
+	def dSds(self):
+		#	Iterate through each element, 
+		#		set dSdsx and dSdsy 
+		#		then insert into a global dSds matrix 
+		#		assemble them into tensor
+		_dSds = None
+		for t in range(0, len(self.mesh.T)):
+			dSdsx = np.array([[1,0],[0,0]])
+			dSdsy = np.array([[0,0],[0,1]])
+			
+			dSdsx_e = np.kron(np.eye(3), dSdsx)
+			dSdsy_e = np.kron(np.eye(3), dSdsy)
+
+			gdSdsx = np.zeros((6*len(self.mesh.T), 6*len(self.mesh.T))) 
+			gdSdsy = np.zeros((6*len(self.mesh.T), 6*len(self.mesh.T)))
+			gdSdsx[6*t:6*t+6, 6*t:6*t+6] = dSdsx_e
+			gdSdsy[6*t:6*t+6, 6*t:6*t+6] = dSdsy_e
+				
+
+			if t == 0:
+				_dSds = np.dstack([gdSdsx, gdSdsy])
+			else:
+				_dSds = np.dstack([_dSds, gdSdsx, gdSdsy])
+		return _dSds
+
+	def d_gradEgrdg(self):
+		PA = self.mesh.getP().dot(self.mesh.getA())
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		USUt = gU.dot(gS.dot(gU.T))
+		USUtPAx = USUt.dot(self.PAx)
+
+		d_gEgdg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
+		_dRdr = self.dRdr()
+		d_gErdg = np.tensordot(np.multiply.outer(-1*PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
+
+		return np.concatenate((d_gEgdg, d_gErdg.T))
+
+	def d_gradEgrdr(self):
+		PA = self.mesh.getP().dot(self.mesh.getA())
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		USUt = gU.dot(gS.dot(gU.T))
+		USUtPAx = USUt.dot(self.PAx)
+
+		_dRdr = self.dRdr()
+		d_gEgdR = np.multiply.outer(-1*PA.T, USUtPAx.T)
+		d_gEgdr = np.tensordot(d_gEgdR, _dRdr, axes =([1,2],[0,1]))
+		
+		_ddRdrdr = self.d2Rdr2()
+		negPAg_USUtPAx = np.multiply.outer( -1*PA.dot(self.mesh.g), USUtPAx)
+		d_gErdr = np.tensordot(negPAg_USUtPAx, _ddRdrdr, axes = ([0,1],[1,2]))
+		
+		return np.concatenate((d_gEgdr, d_gErdr))
+
+	def d_gradEgrds(self):
+		PA = self.mesh.getP().dot(self.mesh.getA())
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		UtPAx = gU.T.dot(PA.dot(self.mesh.x0))
+		PAg = PA.dot(self.mesh.g)
+		_dSds = self.dSds()
+		_dRdr = self.dRdr()
+		PAtRU = PA.T.dot(gR.dot(gU))
+
+		d_gEgdS = np.multiply.outer(-1*PAtRU, UtPAx.T)
+
+		d_gEgds = np.tensordot(d_gEgdS, _dSds, axes =([1,2],[0,1]))
+
+		negPAg_U_UtPAx = np.multiply.outer(-1*PAg, np.multiply.outer(gU, UtPAx))
+		negPAg_U_UtPAx_dRdr = np.tensordot(negPAg_U_UtPAx, _dRdr, axes=([0,1],[0,1]))
+		d_gErds = np.tensordot(negPAg_U_UtPAx_dRdr, _dSds, axes=([0,1],[0,1]))
+
+		return np.concatenate((d_gEgds, d_gErds))
 
 	def itR(self):
 		theta_list = []
@@ -226,13 +427,247 @@ class ARAP:
 
 			return 1
 
-	def iterate(self, useKKT = False):
-		r = self.itR()
-		g = self.itT(useKKT = useKKT)
+	def iterate(self, its=1, useKKT = False):
+		for i in range(its):
+			self.Energy()
+			r = self.itR()
+			g = self.itT(useKKT = useKKT)
 
-def display():
+class LinearElastic:
+
+	def __init__(self, imesh):
+		pass
+
+def FiniteDifferences():
+	eps = 1e-4
 	mesh = Mesh(rectangle_mesh(2,2))
 	arap = ARAP(mesh)
+	
+	F0,R0,S0,U0 = mesh.getGlobalF()
+	E0 = arap.energy(_g=mesh.g, _R =R0, _S=S0, _U=U0)
+	print("Default Energy ", E0)
+	
+	def check_dEdg():
+		dEdg = []
+		dg = np.zeros(len(mesh.g)) + mesh.g
+		for i in range(len(mesh.g)):
+			dg[i] += eps
+			Ei = arap.energy(_g=dg, _R =R0, _S=S0, _U=U0)
+			dEdg.append((Ei - E0)/eps)
+			dg[i] -= eps
+
+		print(arap.dEdg() - np.array(dEdg))
+
+	def check_dEds():
+		realdEdS, realdEds = arap.dEds()
+		dEds = []
+		for i in range(len(mesh.T)):
+			mesh.q[3*i+1] += eps
+			F,R,S,U = mesh.getGlobalF()
+			Ei = arap.energy(_g =mesh.g, _R=R0, _S=S, _U=U0)
+			dEds.append((Ei - E0)/eps)
+			mesh.q[3*i+1] -= eps
+
+			mesh.q[3*i+2] += eps
+			F,R,S,U = mesh.getGlobalF()
+			Ei = arap.energy(_g =mesh.g, _R=R0, _S=S, _U=U0)
+			dEds.append((Ei - E0)/eps)
+			mesh.q[3*i+2] -=eps
+
+		print(realdEds)
+		print(np.array(dEds))
+
+	def check_dEdS():
+		dEdS_real, dEds_real = arap.dEds()
+		F,R,S,U = mesh.getGlobalF()
+		
+		S[0,0] += eps
+		Ei = arap.energy(_g=mesh.g, _R =R0, _S=S, _U=U0)
+		print((Ei - E0)/eps - dEdS_real[0,0])
+
+	def check_dEdr():
+		realdEdR, realdEdr = arap.dEdr()
+		dEdr = []
+		for i in range(len(mesh.T)):
+			mesh.q[3*i] += eps
+			F,R,S,U = mesh.getGlobalF()
+			Ei = arap.energy(_g =mesh.g, _R=R, _S=S0, _U=U0)
+			dEdr.append((Ei - E0)/eps)
+			mesh.q[3*i] -= eps
+
+		print(realdEdr)
+		print(dEdr)
+
+	def check_d_gradEgrdg():
+		real = arap.d_gradEgrdg()
+		fake = np.zeros(real.shape)
+		
+		dEdg = arap.dEdg()
+		for i in range(len(mesh.g)):
+			mesh.g[i] += eps
+			fake[0:len(mesh.g), i] = (arap.dEdg() - dEdg)/eps
+			mesh.g[i] -= eps
+
+		dEdr = arap.dEdr()
+		for i in range(len(mesh.g)):
+			mesh.g[i] += eps
+			fake[len(mesh.g):, i] = (arap.dEdr()[1] - dEdr[1])/eps
+			mesh.g[i] -= eps
+
+
+		# print(np.linalg.norm(fake - real))
+		# print(real)
+		return real
+
+	def check_d_gradEgrdr():
+		real = arap.d_gradEgrdr()
+		fake = np.zeros(real.shape)
+
+		dEdg = arap.dEdg()
+		for i in range(len(mesh.T)):
+			mesh.q[3*i] += eps
+			fake[0:len(mesh.g), i] = (arap.dEdg() - dEdg)/eps
+			mesh.q[3*i] -= eps
+
+		dEdr = arap.dEdr()
+		for i in range(len(mesh.T)):
+			mesh.q[3*i] += eps
+			fake[len(mesh.g): , i] = (arap.dEdr()[1] - dEdr[1])/eps
+			mesh.q[3*i] -= eps
+
+		# print(real)
+		# print("fake")
+		# print(fake)
+		return real
+
+	def check_d_gradEgrds():
+		real = arap.d_gradEgrds()
+		fake = np.zeros(real.shape)
+
+		dEdg = arap.dEdg()
+		for i in range(len(mesh.T)):
+			for j in range(1,3):
+				print(3*i+j, 2*i+(j-1))
+				mesh.q[3*i+j] += eps
+				fake[0:len(mesh.g),2*i+(j-1)] = (arap.dEdg() - dEdg)/eps
+				mesh.q[3*i+j] -= eps
+
+		dEdr = arap.dEdr()
+		for i in range(len(mesh.T)):
+			for j in range(1,3):
+				print(3*i+j, 2*i+(j-1))
+				mesh.q[3*i+j] += eps
+				fake[len(mesh.g): ,2*i+(j-1)] = (arap.dEdr()[1] - dEdr[1])/eps
+				mesh.q[3*i+j] -= eps
+
+		print(real)
+		print("fake")
+		print(fake)
+		print(fake - real)
+
+	def check_d_gradEgdS():
+		real = arap.d_gradEgrds()[0]
+		F,R,S,U = mesh.getGlobalF()
+
+		dEdg = arap.dEdg()
+
+		P = mesh.getP()
+		A = mesh.getA()
+		PAg = P.dot(A.dot(mesh.g))
+		AtPtPAg = A.T.dot(P.T.dot(PAg))
+		print(U.T.dot(P.dot(A.dot(mesh.x0))) - real)
+		return
+		dEgdS = []
+		for i in range(12):
+			dEgdS.append([])
+			for j in range(0,12):
+				S[i, j] += eps
+				GF = R.dot(U.dot(S.dot(U.T)))
+				FPAx = GF.dot(P.dot(A.dot(mesh.x0)))
+				AtPtFPAx = A.T.dot(P.T.dot(FPAx))
+				dEdg_new = AtPtPAg - AtPtFPAx 
+				S[i, j] -= eps
+				dEgdS[i].append((dEdg_new - dEdg)/eps)
+			
+
+		dEgdS = np.array(dEgdS)
+		_dSds = arap.dSds()
+		print("diff")
+		print(dEgdS[:,:,0])
+		print(real[0])
+		# print(real[0].shape)
+
+		# print(np.sum(np.multiply(dEgdS[:,:,0], _dSds[:,:,0])))
+		# print(np.sum(np.multiply(real[0,:,:], _dSds[:,:,0])))
+	
+	# check_d_gradEgdS()
+	# check_d_gradEgrds()
+	# right = check_d_gradEgrdr()
+	# left = check_d_gradEgrdg()
+	# check_dEdg()
+	# check_dEdr()
+	# check_dEds()
+	# FLHS = np.concatenate((left, right), axis =1)
+	# print(len(mesh.q)/3)
+	# np.savetxt('full-left.csv', FLHS, delimiter=',')
+# FiniteDifferences()
+
+
+class TimeIntegrator:
+
+	def __init__(self, imesh, iarap, ielastic = None):
+		self.time = 0
+		self.mesh = imesh
+		self.arap = iarap 
+		self.elastic = ielastic 
+
+
+	def set_strain(self):
+		for i in range(len(self.mesh.T)):
+			# pass
+			self.mesh.q[3*i +1] = 1 + np.sin(self.time)
+			self.mesh.q[3*i +2] = 1+ np.sin(self.time)
+
+	def set_random_strain(self):
+		for i in range(len(self.mesh.T)):
+			self.mesh.q[3*i + 1] = 1 + np.random.uniform(0,1)
+			self.mesh.q[3*i + 2] = 1 + np.random.uniform(0,1)
+
+	def iterate(self):
+		# self.set_random_strain()
+		self.arap.iterate(its=4)
+		self.set_strain()
+		self.time += 0.1
+
+	def solve(self):
+		s0 = []
+		for i in range(len(self.mesh.T)):
+			s0.append(self.mesh.q[3*i + 1])
+			s0.append(self.mesh.q[3*i + 2])
+
+		print("initial s: ", s0)
+		def energy(s):
+			for i in range(len(self.mesh.T)):
+				self.mesh.q[3*i + 1] = s[2*i]
+				self.mesh.q[3*i + 2] = s[2*i +1]
+
+			return self.arap.Energy()
+
+		def jacobian(s):
+			for i in range(len(self.mesh.T)):
+				self.mesh.q[3*i + 1] = s[2*i]
+				self.mesh.q[3*i + 2] = s[2*i +1]
+
+			return self.arap.Jacobian()
+
+		res = scipy.optimize.minimize(energy, np.array(s0), method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True})
+		print(res.x)
+
+def display():
+	mesh = Mesh(rectangle_mesh(3,3))
+	arap = ARAP(imesh=mesh, ito_fix = [6,8])
+	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = None)
+	# time_integrator.solve()
 	viewer = igl.viewer.Viewer()
 	def key_down(viewer, b, c):
 		RV, RT = mesh.getDiscontinuousVT()
