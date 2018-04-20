@@ -80,8 +80,8 @@ class Mesh:
 	def getP(self):
 		if(self.P is None):
 			P = np.zeros((6*len(self.T), 6*len(self.T)))
-			# sub_P = np.kron(np.matrix([[2, -1, -1], [-1, 2, -1], [-1, -1, 2]]), np.eye(2))
-			sub_P = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [1, 0, -1]]), np.eye(2))
+			sub_P = np.kron(np.matrix([[2, -1, -1], [-1, 2, -1], [-1, -1, 2]]), np.eye(2))
+			# sub_P = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [1, 0, -1]]), np.eye(2))
 			for i in range(len(self.T)):
 				P[6*i:6*i+6, 6*i:6*i+6] = sub_P
 			self.P = P
@@ -102,9 +102,9 @@ class Mesh:
 
 	def getU(self, ind):
 		if ind%2== 1:
-			alpha = 0# np.pi/4
+			alpha = np.pi/3.8
 		else:
-			alpha = 0# np.pi/4
+			alpha = np.pi/4
 
 		cU, sU = np.cos(alpha), np.sin(alpha)
 		U = np.array(((cU,-sU), (sU, cU)))
@@ -177,19 +177,16 @@ class Mesh:
 
 class ARAP:
 
-	def __init__(self, imesh):
+	def __init__(self, imesh, ito_fix = []):
 		self.mesh = imesh
-		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix(to_fix = [1,2])
+		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix(to_fix = ito_fix)
 		#these are the fixed vertices which stay constant
 		self.AbAbtg = self.ANTI_BLOCK.dot(self.ANTI_BLOCK.T.dot(self.mesh.g))
 
 		A = self.mesh.getA()
 		P = self.mesh.getP()
 		self.PAx = P.dot(A.dot(self.mesh.x0))
-		print(self.BLOCK)
 		BtAtPtPAB = self.BLOCK.T.dot(A.T.dot(P.T.dot(P.dot(A.dot(self.BLOCK)))))
-		print("not inverse")
-		print(A.T.dot(P.T.dot(P.dot(A))))
 		self.pinvBtAtPtPAB = np.linalg.pinv(BtAtPtPAB)
 
 		KKT_matrix1 = np.concatenate((np.eye(BtAtPtPAB.shape[0]), BtAtPtPAB), axis=0)
@@ -207,10 +204,6 @@ class ARAP:
 		F,R,S,U = self.mesh.getGlobalF()
 		FPAx = R.dot(U.dot(S.dot(U.T.dot(self.PAx))))
 		en = 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
-		print("en ", en)
-		print("g", self.mesh.g)
-		print("q", self.mesh.q)
-		print("F", F.dot(self.PAx))
 		return en
 
 	def Jacobian(self):
@@ -408,15 +401,12 @@ class ARAP:
 	
 	def itT(self, useKKT=False):
 		F = self.mesh.getGlobalF()[0]
-		# FPAx = self.BLOCK.dot(self.BLOCK.T.dot(F.dot(self.PAx)))
-		BtFPAx = self.BLOCK.T.dot(
-						F.dot(
-							self.mesh.getP().dot(
-								self.BLOCK.dot(
-									self.BLOCK.T.dot(
-										self.mesh.getA().dot(self.mesh.x0))))))
-		BtAtPtB = self.BLOCK.T.dot(self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.BLOCK)))
-		BtAtPtFPAx = BtAtPtB.dot(BtFPAx)
+		B = self.BLOCK
+		ABBtx = self.mesh.getA().dot(B.dot(B.T.dot(self.mesh.x0)))
+		AtPtFPABBtx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(F.dot(self.mesh.getP().dot(ABBtx))))
+		
+		BtAtPtFPAx = B.T.dot(AtPtFPABBtx)
+
 		if useKKT:
 			ob = np.concatenate((np.zeros(len(BtAtPtFPAx)), BtAtPtFPAx))
 			gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), ob)
@@ -425,13 +415,12 @@ class ARAP:
 			return 1
 		else:
 			self.mesh.g = self.BLOCK.dot(self.pinvBtAtPtPAB.dot(BtAtPtFPAx)) + self.AbAbtg
-			print(self.mesh.g)
-			print(self.AbAbtg)
+			# print(self.mesh.g)
+			# print(self.AbAbtg)
 
 			return 1
 
 	def iterate(self, its=1, useKKT = False):
-		print(self.mesh.getA())
 		for i in range(its):
 			self.Energy()
 			r = self.itR()
@@ -616,12 +605,6 @@ def FiniteDifferences():
 	# np.savetxt('full-left.csv', FLHS, delimiter=',')
 # FiniteDifferences()
 
-def test():
-	mesh = Mesh(rectangle_mesh(2,2))
-	arap = ARAP(mesh)
-	arap.Energy()
-	arap.Jacobian()
-# test()
 
 class TimeIntegrator:
 
@@ -640,7 +623,7 @@ class TimeIntegrator:
 	def set_random_strain(self):
 		for i in range(len(self.mesh.T)):
 			self.mesh.q[3*i + 1] = 1 + np.random.uniform(0,1)
-			self.mesh.q[3*i + 2] = 1 + np.random.uniform(0,1)
+			# self.mesh.q[3*i + 2] = 1 + np.random.uniform(0,1)
 
 	def iterate(self):
 		# self.set_random_strain()
@@ -673,8 +656,8 @@ class TimeIntegrator:
 		print(res.x)
 
 def display():
-	mesh = Mesh(triangle_mesh())
-	arap = ARAP(mesh)
+	mesh = Mesh(rectangle_mesh(2,2))
+	arap = ARAP(imesh=mesh, ito_fix = [0,2])
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = None)
 	# time_integrator.solve()
 	viewer = igl.viewer.Viewer()
@@ -682,20 +665,23 @@ def display():
 	def key_down(viewer, c, b):
 		viewer.data.clear()
 		time_integrator.iterate()
-		# RV, RT = mesh.getDiscontinuousVT()
+		DV, DT = mesh.getDiscontinuousVT()
 		RV, RT = mesh.getContinuousVT()
 		V2 = igl.eigen.MatrixXd(RV)
 		T2 = igl.eigen.MatrixXi(RT)
 		viewer.data.set_mesh(V2, T2)
 
+		purple = igl.eigen.MatrixXd([[1,0,1]])
+		for e in DT:
+			P = DV[e]
+			DP = np.array([P[1], P[2], P[0]])
+			viewer.data.add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
+
 		red = igl.eigen.MatrixXd([[1,0,0]])
 		C = []
 		for i in range(len(mesh.fixed)):
 			C.append(mesh.V[mesh.fixed[i]])
-
-		# print(C)
 		viewer.data.add_points(igl.eigen.MatrixXd(C), red)
-		# viewer.data.add_points(igl.eigen.MatrixXd(mesh.V[1]), red)
 		
 		return True
 
