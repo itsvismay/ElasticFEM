@@ -190,7 +190,7 @@ class Mesh:
 
 class ARAP:
 
-	def __init__(self, imesh):
+	def __init__(self, imesh, ito_fix = []):
 		self.mesh = imesh
 		self.BLOCK = self.mesh.createBlockingMatrix(to_fix = [0])
 		A = self.mesh.getA()
@@ -204,9 +204,6 @@ class ARAP:
 		KKT = np.concatenate((KKT_matrix1, KKT_matrix2), axis=1)
 		self.CholFac, self.Lower = scipy.linalg.lu_factor(KKT)
 
-<<<<<<< Updated upstream
-	def energy(self):
-=======
 	def energy(self, _g, _R, _S, _U):
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(_g))
 		FPAx = _R.dot(_U.dot(_S.dot(_U.T.dot(self.PAx))))
