@@ -50,6 +50,7 @@ class Mesh:
 		self.T = VT[1]
 		self.P = None
 		self.A = None
+		self.C = None
 		self.x0 = np.ravel(self.V)
 		self.g = np.zeros(len(self.V)*2)+np.ravel(self.V)
 
@@ -80,8 +81,8 @@ class Mesh:
 	def getP(self):
 		if(self.P is None):
 			P = np.zeros((6*len(self.T), 6*len(self.T)))
-			sub_P = np.kron(np.matrix([[2, -1, -1], [-1, 2, -1], [-1, -1, 2]]), np.eye(2))
-			# sub_P = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [1, 0, -1]]), np.eye(2))
+			# sub_P = np.kron(np.matrix([[2, -1, -1], [-1, 2, -1], [-1, -1, 2]]), np.eye(2))
+			sub_P = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [1, 0, -1]]), np.eye(2))
 			for i in range(len(self.T)):
 				P[6*i:6*i+6, 6*i:6*i+6] = sub_P
 			self.P = P
@@ -100,9 +101,15 @@ class Mesh:
 			self.A = A
 		return self.A
 
+	def getC(self):
+		if(self.C is None):
+			self.C = np.kron(np.eye(len(self.T)), np.kron(np.ones((3,3))/3 , np.eye(2)))
+			print(self.C.shape)
+		return self.C
+
 	def getU(self, ind):
 		if ind%2== 1:
-			alpha = np.pi/3.8
+			alpha = np.pi/4
 		else:
 			alpha = np.pi/4
 
@@ -150,19 +157,18 @@ class Mesh:
 		return GF, GR, GS, GU
 
 	def getDiscontinuousVT(self):
+		CAg = self.getC().dot(self.getA().dot(self.g))
 		Ax = self.getA().dot(self.x0)
+		new = self.getGlobalF()[0].dot(Ax)
 		RecV = np.zeros((3*len(self.T), 2))
 		RecT = []
 		for t in range(len(self.T)):
-			tv0 = self.getF(t).dot(Ax[6*t:6*t+2])
-			tv1 = self.getF(t).dot(Ax[6*t+2:6*t+4])
-			tv2 = self.getF(t).dot(Ax[6*t+4:6*t+6])
-			RecV[3*t,   0] = tv0[0]
-			RecV[3*t,   1] = tv0[1]
-			RecV[3*t+1, 0] = tv1[0]
-			RecV[3*t+1, 1] = tv1[1]
-			RecV[3*t+2, 0] = tv2[0]
-			RecV[3*t+2, 1] = tv2[1]
+			RecV[3*t,   0] = new[6*t + 0]
+			RecV[3*t,   1] = new[6*t + 1]
+			RecV[3*t+1, 0] = new[6*t + 2]
+			RecV[3*t+1, 1] = new[6*t + 3]
+			RecV[3*t+2, 0] = new[6*t + 4]
+			RecV[3*t+2, 1] = new[6*t + 5]
 			RecT.append([3*t, 3*t+1, 3*t+2])
 
 		return RecV, RecT
@@ -415,7 +421,6 @@ class ARAP:
 			return 1
 		else:
 			self.mesh.g = self.BLOCK.dot(self.pinvBtAtPtPAB.dot(BtAtPtFPAx)) + self.AbAbtg
-			# print(self.mesh.g)
 			# print(self.AbAbtg)
 
 			return 1
@@ -627,8 +632,8 @@ class TimeIntegrator:
 
 	def iterate(self):
 		# self.set_random_strain()
-		self.arap.iterate(its=1)
 		self.set_strain()
+		self.arap.iterate(its=1, useKKT = True)
 		self.time += 0.1
 
 	def solve(self):
@@ -656,8 +661,8 @@ class TimeIntegrator:
 		print(res.x)
 
 def display():
-	mesh = Mesh(triangle_mesh())
-	arap = ARAP(imesh=mesh, ito_fix = [1])
+	mesh = Mesh(rectangle_mesh(3,3))
+	arap = ARAP(imesh=mesh, ito_fix = [4])
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = None)
 	# time_integrator.solve()
 	viewer = igl.viewer.Viewer()
@@ -681,8 +686,15 @@ def display():
 		C = []
 		for i in range(len(mesh.fixed)):
 			C.append(mesh.V[mesh.fixed[i]])
+		# print(C)
 		viewer.data.add_points(igl.eigen.MatrixXd(C), red)
-		
+
+		green = igl.eigen.MatrixXd([[0,1,0]])
+		CAg = mesh.getC().dot(mesh.getA().dot(mesh.g))
+		cag = []
+		for i in range(len(mesh.T)):
+			cag.append(CAg[6*i:6*i+2])
+		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
 		return True
 
 	key_down(viewer, 'a', 1)
