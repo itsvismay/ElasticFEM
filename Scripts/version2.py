@@ -588,7 +588,6 @@ def FiniteDifferences():
 		print("diff")
 		print(dEgdS[:,:,0])
 		print(real[0])
-		# print(real[0].shape)
 
 		# print(np.sum(np.multiply(dEgdS[:,:,0], _dSds[:,:,0])))
 		# print(np.sum(np.multiply(real[0,:,:], _dSds[:,:,0])))
@@ -617,6 +616,7 @@ class TimeIntegrator:
 
 	def set_strain(self):
 		for i in range(len(self.mesh.T)):
+			# pass
 			self.mesh.q[3*i +1] = 1 + np.sin(self.time)
 			# self.mesh.q[3*i +2] = 1+ np.sin(self.time)
 
@@ -656,8 +656,8 @@ class TimeIntegrator:
 		print(res.x)
 
 def display():
-	mesh = Mesh(rectangle_mesh(2,2))
-	arap = ARAP(imesh=mesh, ito_fix = [0,2])
+	mesh = Mesh(triangle_mesh())
+	arap = ARAP(imesh=mesh, ito_fix = [1])
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = None)
 	# time_integrator.solve()
 	viewer = igl.viewer.Viewer()
