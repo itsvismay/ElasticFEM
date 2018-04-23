@@ -48,6 +48,7 @@ class Mesh:
 		self.fixed = []
 		self.V = VT[0]
 		self.T = VT[1]
+		self.fixedOnElement = None
 		self.P = None
 		self.A = None
 		self.C = None
@@ -65,26 +66,54 @@ class Mesh:
 		# for i in range(len(self.T)):
 		# 	self.q[3*i] = np.pi/100
 		# 	break
-
 	def createBlockingMatrix(self, to_fix=[]):
+		self.P = None #reset P because blocking verts will change P
+
 		self.fixed = to_fix
+
+		onVerts = np.zeros(len(self.V))
+		onVerts[to_fix] = 1
+		self.fixedOnElement = self.getA().dot(np.kron(onVerts, np.ones(2)))
+		
 		b = np.kron(np.delete(np.eye(len(self.V)), to_fix, axis =1), np.eye(2))
 
 		ab = np.zeros(len(self.V))
 		ab[to_fix] = 1
 		to_reset = [i for i in range(len(ab)) if ab[i]==0]
-		
+
+		if (len(to_fix) == 0):
+			return b, np.zeros((2*len(self.V), (2*len(self.V))))
+
 		anti_b = np.kron(np.delete(np.eye(len(self.V)), to_reset, axis =1), np.eye(2))
+		
 
 		return b, anti_b
+
 
 	def getP(self):
 		if(self.P is None):
 			P = np.zeros((6*len(self.T), 6*len(self.T)))
-			# sub_P = np.kron(np.matrix([[2, -1, -1], [-1, 2, -1], [-1, -1, 2]]), np.eye(2))
-			sub_P = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [1, 0, -1]]), np.eye(2))
+			sub_P = np.kron(np.matrix([[2, -1, -1], [-1, 2, -1], [-1, -1, 2]]), np.eye(2))
+			# sub_P = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [1, 0, -1]]), np.eye(2))
+			print(sub_P)
 			for i in range(len(self.T)):
 				P[6*i:6*i+6, 6*i:6*i+6] = sub_P
+				# if(np.sum(self.fixedOnElement[6*i:6*i+6]) == 0):
+				# 	P[6*i:6*i+6, 6*i:6*i+6] = sub_P
+
+				# elif(np.sum(self.fixedOnElement[6*i:6*i+6]) == 2):
+				# 	print("One rotation")
+				# 	rotate_around = np.concatenate(
+				# 		(np.diag(self.fixedOnElement[6*i:6*i+2]),
+				# 			np.diag(self.fixedOnElement[6*i+2:6*i+4]),
+				# 			np.diag(self.fixedOnElement[6*i+4:6*i+6])), axis =1)
+				# 	r = np.eye(6) - np.concatenate((rotate_around, rotate_around, rotate_around))
+				# 	print(r)
+				# 	P[6*i:6*i+6, 6*i:6*i+6] = r
+
+				# elif(np.sum(self.fixedOnElement[6*i:6*i+6]) >= 3):
+				# 	continue
+					#P[6*i:6*i+6, 6*i:6*i+6] = sub_P 
 			self.P = P
 
 		return self.P
@@ -104,14 +133,13 @@ class Mesh:
 	def getC(self):
 		if(self.C is None):
 			self.C = np.kron(np.eye(len(self.T)), np.kron(np.ones((3,3))/3 , np.eye(2)))
-			print(self.C.shape)
 		return self.C
 
 	def getU(self, ind):
 		if ind%2== 1:
-			alpha = np.pi/4
+			alpha = 0*np.pi/4
 		else:
-			alpha = np.pi/4
+			alpha = 0*np.pi/4
 
 		cU, sU = np.cos(alpha), np.sin(alpha)
 		U = np.array(((cU,-sU), (sU, cU)))
@@ -158,8 +186,9 @@ class Mesh:
 
 	def getDiscontinuousVT(self):
 		CAg = self.getC().dot(self.getA().dot(self.g))
-		Ax = self.getA().dot(self.x0)
-		new = self.getGlobalF()[0].dot(Ax)
+		Ax = self.getA().dot(self.x0) - CAg
+		Fax = self.getGlobalF()[0].dot(Ax)
+		new = Fax - self.getC().dot(Fax) + CAg
 		RecV = np.zeros((3*len(self.T), 2))
 		RecT = []
 		for t in range(len(self.T)):
@@ -193,12 +222,20 @@ class ARAP:
 		P = self.mesh.getP()
 		self.PAx = P.dot(A.dot(self.mesh.x0))
 		BtAtPtPAB = self.BLOCK.T.dot(A.T.dot(P.T.dot(P.dot(A.dot(self.BLOCK)))))
-		self.pinvBtAtPtPAB = np.linalg.pinv(BtAtPtPAB)
+		print("not inv")
+		print(BtAtPtPAB)
 
+		#SVD inverse
+		self.pinvBtAtPtPAB = np.linalg.pinv(BtAtPtPAB)
+		
+		#KKT Inverse
 		KKT_matrix1 = np.concatenate((np.eye(BtAtPtPAB.shape[0]), BtAtPtPAB), axis=0)
 		KKT_matrix2 = np.concatenate((BtAtPtPAB.T, np.zeros(BtAtPtPAB.shape)), axis=0)
 		KKT = np.concatenate((KKT_matrix1, KKT_matrix2), axis=1)
-		self.CholFac, self.Lower = scipy.linalg.lu_factor(KKT)
+		self.KKTCholFac, self.KKTLower = scipy.linalg.lu_factor(KKT)
+
+		#LU inverse
+		self.CholFac, self.Lower = scipy.linalg.lu_factor(BtAtPtPAB)
 
 	def energy(self, _g, _R, _S, _U):
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(_g))
@@ -208,8 +245,13 @@ class ARAP:
 	def Energy(self):
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		F,R,S,U = self.mesh.getGlobalF()
+		# print(R)
+		# print(S)
+		# print(U - np.eye(12))
 		FPAx = R.dot(U.dot(S.dot(U.T.dot(self.PAx))))
 		en = 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
+		print("en", en)
+		print("q", self.mesh.q)
 		return en
 
 	def Jacobian(self):
@@ -376,13 +418,31 @@ class ARAP:
 
 	def itR(self):
 		theta_list = []
-		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))*0
-
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		Ax = self.mesh.getA().dot(self.mesh.x0)
 		for i in range(len(self.mesh.T)):
-			PAx_e = self.PAx[6*i:6*i+6]
+			if(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) == 0):
+				print("None")
+				PAx_e = self.PAx[6*i:6*i+1]
+			elif(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) == 2):
+				print("One rotation")
+				rotate_around = np.concatenate(
+					(np.diag(self.mesh.fixedOnElement[6*i:6*i+2]),
+						np.diag(self.mesh.fixedOnElement[6*i+2:6*i+4]),
+						np.diag(self.mesh.fixedOnElement[6*i+4:6*i+6])), axis =1)
+				r = np.eye(6) - np.concatenate((rotate_around, rotate_around, rotate_around))
+				print(r)
+				PAx_e = r.dot(Ax[6*i:6*i+6])
+
+			elif(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) >= 3):
+				print("No rotation")
+				continue
+				print("shit, fix this")
+
 			PAg_e = PAg[6*i:6*i+6]
 			Ue = np.kron(np.eye(3), self.mesh.getU(i))
 			Se = np.kron(np.eye(3), self.mesh.getS(i))
+
 			USUPAx = Ue.dot(Se.dot(Ue.T.dot(PAx_e.T)))
 			m_PAg = np.zeros((3,2))
 			m_PAg[0:1, 0:2] = PAg_e[0:2]
@@ -401,6 +461,7 @@ class ARAP:
 			vecb = np.dot(R, veca)
 			theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
 			theta_list.append(theta)
+			print(theta)
 			self.mesh.q[3*i] = theta
 
 		return theta_list
@@ -408,19 +469,23 @@ class ARAP:
 	def itT(self, useKKT=False):
 		F = self.mesh.getGlobalF()[0]
 		B = self.BLOCK
+		# print(B)
 		ABBtx = self.mesh.getA().dot(B.dot(B.T.dot(self.mesh.x0)))
 		AtPtFPABBtx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(F.dot(self.mesh.getP().dot(ABBtx))))
-		
 		BtAtPtFPAx = B.T.dot(AtPtFPABBtx)
-
 		if useKKT:
-			ob = np.concatenate((np.zeros(len(BtAtPtFPAx)), BtAtPtFPAx))
-			gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), ob)
+			ob = np.concatenate((self.BLOCK.T.dot(self.mesh.x0), BtAtPtFPAx))
+			gu = scipy.linalg.lu_solve((self.KKTCholFac, self.KKTLower), ob)
 			self.mesh.g = self.BLOCK.dot(gu[0:len(BtAtPtFPAx)]) + self.AbAbtg
-			
+			print("Using KKT!!")
 			return 1
 		else:
-			self.mesh.g = self.BLOCK.dot(self.pinvBtAtPtPAB.dot(BtAtPtFPAx)) + self.AbAbtg
+			gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), BtAtPtFPAx)
+			self.mesh.g = self.BLOCK.dot(gu) + self.AbAbtg
+			
+			# self.mesh.g = self.BLOCK.dot(self.pinvBtAtPtPAB.dot(BtAtPtFPAx)) + self.AbAbtg
+			print(self.mesh.g)
+			# print(BtAtPtFPAx)
 			# print(self.AbAbtg)
 
 			return 1
@@ -617,23 +682,24 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
+		self.adder = 0.1
 
 
 	def set_strain(self):
 		for i in range(len(self.mesh.T)):
-			# pass
-			self.mesh.q[3*i +1] = 1 + np.sin(self.time)
+			pass
+			self.mesh.q[3*i+1] =1+ np.sin(self.time)
 			# self.mesh.q[3*i +2] = 1+ np.sin(self.time)
 
 	def set_random_strain(self):
 		for i in range(len(self.mesh.T)):
-			self.mesh.q[3*i + 1] = 1 + np.random.uniform(0,1)
+			self.mesh.q[3*i+1] = 1 + np.random.uniform(0,1)
 			# self.mesh.q[3*i + 2] = 1 + np.random.uniform(0,1)
 
 	def iterate(self):
 		# self.set_random_strain()
 		self.set_strain()
-		self.arap.iterate(its=1, useKKT = True)
+		self.arap.iterate(its=1, useKKT = False)
 		self.time += 0.1
 
 	def solve(self):
@@ -661,8 +727,8 @@ class TimeIntegrator:
 		print(res.x)
 
 def display():
-	mesh = Mesh(rectangle_mesh(3,3))
-	arap = ARAP(imesh=mesh, ito_fix = [4])
+	mesh = Mesh(rectangle_mesh(2,2))
+	arap = ARAP(imesh=mesh, ito_fix = [1,3])
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = None)
 	# time_integrator.solve()
 	viewer = igl.viewer.Viewer()
@@ -676,24 +742,30 @@ def display():
 		T2 = igl.eigen.MatrixXi(RT)
 		viewer.data.set_mesh(V2, T2)
 
+		red = igl.eigen.MatrixXd([[1,0,0]])
 		purple = igl.eigen.MatrixXd([[1,0,1]])
+		green = igl.eigen.MatrixXd([[0,1,0]])
+		black = igl.eigen.MatrixXd([[0,0,0]])
+
+		paxes = []
+
 		for e in DT:
 			P = DV[e]
 			DP = np.array([P[1], P[2], P[0]])
 			viewer.data.add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
 
-		red = igl.eigen.MatrixXd([[1,0,0]])
+
 		C = []
 		for i in range(len(mesh.fixed)):
 			C.append(mesh.V[mesh.fixed[i]])
 		# print(C)
 		viewer.data.add_points(igl.eigen.MatrixXd(C), red)
 
-		green = igl.eigen.MatrixXd([[0,1,0]])
 		CAg = mesh.getC().dot(mesh.getA().dot(mesh.g))
 		cag = []
 		for i in range(len(mesh.T)):
 			cag.append(CAg[6*i:6*i+2])
+
 		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
 		return True
 
