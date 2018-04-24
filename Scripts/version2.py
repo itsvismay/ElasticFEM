@@ -137,9 +137,9 @@ class Mesh:
 
 	def getU(self, ind):
 		if ind%2== 1:
-			alpha = 0*np.pi/4
+			alpha = np.pi/4
 		else:
-			alpha = 0*np.pi/4
+			alpha = np.pi/4
 
 		cU, sU = np.cos(alpha), np.sin(alpha)
 		U = np.array(((cU,-sU), (sU, cU)))
@@ -216,23 +216,25 @@ class ARAP:
 		self.mesh = imesh
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix(to_fix = ito_fix)
 		#these are the fixed vertices which stay constant
-		self.AbAbtg = self.ANTI_BLOCK.dot(self.ANTI_BLOCK.T.dot(self.mesh.g))
+		self.Abtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
 
 		A = self.mesh.getA()
 		P = self.mesh.getP()
 		B = self.BLOCK
+		C = self.ANTI_BLOCK.T
 		self.PAx = P.dot(A.dot(self.mesh.x0))
 		AtPtPA = A.T.dot(P.T.dot(P.dot(A)))
-		print(A)
-		print(P.T.dot(P))
 
-		print("not inv")
-		print(A.T.dot(P.T.dot(P.dot(A))))
-		print("Scratchboard", B.T.dot(AtPtPA.dot(self.mesh.g)))
-		print((B.T.dot(self.mesh.g)))
-		exit()
+		print(AtPtPA)
+		print(B.shape)
+		print(C.shape)
+
+		print("CLS")
+		col1 = np.concatenate((AtPtPA, C), axis=0)
+		col2 = np.concatenate((C.T, np.zeros((C.shape[0], C.shape[0]))), axis=0)
+		ConstrainedLS = np.concatenate((col1, col2), axis =1)
 		#LU inverse
-		self.CholFac, self.Lower = scipy.linalg.lu_factor(BtAtPtPAB)
+		self.CholFac, self.Lower = scipy.linalg.lu_factor(ConstrainedLS)
 
 	def energy(self, _g, _R, _S, _U):
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(_g))
@@ -467,19 +469,18 @@ class ARAP:
 		F = self.mesh.getGlobalF()[0]
 		B = self.BLOCK
 
-		print("g", self.mesh.g)
+		# print("g", self.mesh.g)
 		FPAx = F.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
-		print("fpax", FPAx)
+		# print("fpax", FPAx)
 
 		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
-		print("AtPtFpax", AtPtFPAx)
-		BtAtPtFPAx = B.T.dot(AtPtFPAx)
-		print(BtAtPtFPAx)
-	
-		gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), BtAtPtFPAx)
-		print("b", BtAtPtFPAx)
-		print("gu", gu)
-		self.mesh.g = self.BLOCK.dot(gu) + self.AbAbtg
+		
+		#AtPtPA = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
+		#Atb = AtPtPA.T.dot(AtPtFPAx)
+		gd = np.concatenate((AtPtFPAx, self.Abtg))	
+		gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), gd)
+
+		self.mesh.g = gu[0:AtPtFPAx.size]
 		# print("antiblock", self.AbAbtg)
 
 		return 1
@@ -487,7 +488,7 @@ class ARAP:
 	def iterate(self, its=1):
 		for i in range(its):
 			self.Energy()
-			# r = self.itR()
+			r = self.itR()
 			g = self.itT()
 
 class LinearElastic:
@@ -496,7 +497,7 @@ class LinearElastic:
 		pass
 
 def FiniteDifferences():
-	eps = 1e-4
+	eps = 1e-5
 	mesh = Mesh(rectangle_mesh(2,2))
 	arap = ARAP(mesh)
 	
@@ -513,7 +514,7 @@ def FiniteDifferences():
 			dEdg.append((Ei - E0)/eps)
 			dg[i] -= eps
 
-		print(arap.dEdg() - np.array(dEdg))
+		print(np.sum(arap.dEdg() - np.array(dEdg)))
 
 	def check_dEds():
 		realdEdS, realdEds = arap.dEds()
@@ -531,8 +532,7 @@ def FiniteDifferences():
 			dEds.append((Ei - E0)/eps)
 			mesh.q[3*i+2] -=eps
 
-		print(realdEds)
-		print(np.array(dEds))
+		print(np.sum(np.array(dEds)-realdEds))
 
 	def check_dEdS():
 		dEdS_real, dEds_real = arap.dEds()
@@ -552,8 +552,7 @@ def FiniteDifferences():
 			dEdr.append((Ei - E0)/eps)
 			mesh.q[3*i] -= eps
 
-		print(realdEdr)
-		print(dEdr)
+		print(np.sum(np.array(dEdr) - realdEdr))
 
 	def check_d_gradEgrdg():
 		real = arap.d_gradEgrdg()
@@ -572,8 +571,7 @@ def FiniteDifferences():
 			mesh.g[i] -= eps
 
 
-		# print(np.linalg.norm(fake - real))
-		# print(real)
+		print(np.linalg.norm(fake - real))
 		return real
 
 	def check_d_gradEgrdr():
@@ -592,9 +590,7 @@ def FiniteDifferences():
 			fake[len(mesh.g): , i] = (arap.dEdr()[1] - dEdr[1])/eps
 			mesh.q[3*i] -= eps
 
-		# print(real)
-		# print("fake")
-		# print(fake)
+		print(np.linalg.norm(real -fake))
 		return real
 
 	def check_d_gradEgrds():
@@ -604,7 +600,6 @@ def FiniteDifferences():
 		dEdg = arap.dEdg()
 		for i in range(len(mesh.T)):
 			for j in range(1,3):
-				print(3*i+j, 2*i+(j-1))
 				mesh.q[3*i+j] += eps
 				fake[0:len(mesh.g),2*i+(j-1)] = (arap.dEdg() - dEdg)/eps
 				mesh.q[3*i+j] -= eps
@@ -612,15 +607,11 @@ def FiniteDifferences():
 		dEdr = arap.dEdr()
 		for i in range(len(mesh.T)):
 			for j in range(1,3):
-				print(3*i+j, 2*i+(j-1))
 				mesh.q[3*i+j] += eps
 				fake[len(mesh.g): ,2*i+(j-1)] = (arap.dEdr()[1] - dEdr[1])/eps
 				mesh.q[3*i+j] -= eps
 
-		print(real)
-		print("fake")
-		print(fake)
-		print(fake - real)
+		print(np.linalg.norm(fake - real))
 
 	def check_d_gradEgdS():
 		real = arap.d_gradEgrds()[0]
@@ -656,16 +647,13 @@ def FiniteDifferences():
 		# print(np.sum(np.multiply(dEgdS[:,:,0], _dSds[:,:,0])))
 		# print(np.sum(np.multiply(real[0,:,:], _dSds[:,:,0])))
 	
-	# check_d_gradEgdS()
-	# check_d_gradEgrds()
-	# right = check_d_gradEgrdr()
-	# left = check_d_gradEgrdg()
-	# check_dEdg()
-	# check_dEdr()
-	# check_dEds()
-	# FLHS = np.concatenate((left, right), axis =1)
-	# print(len(mesh.q)/3)
-	# np.savetxt('full-left.csv', FLHS, delimiter=',')
+	check_dEdg()
+	check_dEds()
+	check_dEdr()
+	left = check_d_gradEgrdg()
+	right = check_d_gradEgrdr()
+	check_d_gradEgrds()
+
 # FiniteDifferences()
 
 
@@ -681,19 +669,18 @@ class TimeIntegrator:
 
 	def set_strain(self):
 		for i in range(len(self.mesh.T)):
-			pass
-			self.mesh.q[3*i+1] =1+ np.sin(self.time)
-			# self.mesh.q[3*i +2] = 1-np.sin(self.time)
+			# self.mesh.q[3*i+1] =1.01+ np.sin(self.time)
+			self.mesh.q[3*i +2] = 1.01 + np.sin(self.time)
 
 	def set_random_strain(self):
 		for i in range(len(self.mesh.T)):
-			self.mesh.q[3*i+1] = 1 + np.random.uniform(0,1)
+			self.mesh.q[3*i] = 1 + np.random.uniform(0,1)
 			# self.mesh.q[3*i + 2] = 1 + np.random.uniform(0,1)
 
 	def iterate(self):
 		# self.set_random_strain()
 		self.set_strain()
-		self.arap.iterate(its=1)
+		self.arap.iterate(its=10)
 		self.time += 0.1
 
 	def solve(self):
@@ -721,8 +708,8 @@ class TimeIntegrator:
 		print(res.x)
 
 def display():
-	mesh = Mesh(triangle_mesh())
-	arap = ARAP(imesh=mesh, ito_fix = [1,2])
+	mesh = Mesh(rectangle_mesh(2,2))
+	arap = ARAP(imesh=mesh, ito_fix = [1])
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = None)
 	# time_integrator.solve()
 	viewer = igl.viewer.Viewer()
@@ -770,4 +757,4 @@ def display():
 	viewer.core.is_animating = False
 	viewer.launch()
 
-display()
+# display()
