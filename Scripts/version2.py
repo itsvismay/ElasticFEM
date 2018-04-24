@@ -36,7 +36,7 @@ def torus_mesh(r1, r2):
 	return np.array(V), np.array(T)	
 
 def triangle_mesh():
-	V = [[0,0], [1,0], [0,1]]
+	V = [[0,0], [1,0], [1,1]]
 	T = [[0,1,2]]
 	return V, T
 
@@ -220,20 +220,17 @@ class ARAP:
 
 		A = self.mesh.getA()
 		P = self.mesh.getP()
+		B = self.BLOCK
 		self.PAx = P.dot(A.dot(self.mesh.x0))
-		BtAtPtPAB = self.BLOCK.T.dot(A.T.dot(P.T.dot(P.dot(A.dot(self.BLOCK)))))
+		AtPtPA = A.T.dot(P.T.dot(P.dot(A)))
+		print(A)
+		print(P.T.dot(P))
+
 		print("not inv")
-		print(BtAtPtPAB)
-
-		#SVD inverse
-		self.pinvBtAtPtPAB = np.linalg.pinv(BtAtPtPAB)
-		
-		#KKT Inverse
-		KKT_matrix1 = np.concatenate((np.eye(BtAtPtPAB.shape[0]), BtAtPtPAB), axis=0)
-		KKT_matrix2 = np.concatenate((BtAtPtPAB.T, np.zeros(BtAtPtPAB.shape)), axis=0)
-		KKT = np.concatenate((KKT_matrix1, KKT_matrix2), axis=1)
-		self.KKTCholFac, self.KKTLower = scipy.linalg.lu_factor(KKT)
-
+		print(A.T.dot(P.T.dot(P.dot(A))))
+		print("Scratchboard", B.T.dot(AtPtPA.dot(self.mesh.g)))
+		print((B.T.dot(self.mesh.g)))
+		exit()
 		#LU inverse
 		self.CholFac, self.Lower = scipy.linalg.lu_factor(BtAtPtPAB)
 
@@ -252,6 +249,7 @@ class ARAP:
 		en = 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
 		print("en", en)
 		print("q", self.mesh.q)
+		print("Fpax", FPAx)
 		return en
 
 	def Jacobian(self):
@@ -421,23 +419,22 @@ class ARAP:
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 		for i in range(len(self.mesh.T)):
-			if(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) == 0):
-				print("None")
-				PAx_e = self.PAx[6*i:6*i+1]
-			elif(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) == 2):
-				print("One rotation")
-				rotate_around = np.concatenate(
-					(np.diag(self.mesh.fixedOnElement[6*i:6*i+2]),
-						np.diag(self.mesh.fixedOnElement[6*i+2:6*i+4]),
-						np.diag(self.mesh.fixedOnElement[6*i+4:6*i+6])), axis =1)
-				r = np.eye(6) - np.concatenate((rotate_around, rotate_around, rotate_around))
-				print(r)
-				PAx_e = r.dot(Ax[6*i:6*i+6])
+			PAx_e = self.PAx[6*i:6*i+6]
+			# if(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) == 0):
+			# 	PAx_e = self.PAx[6*i:6*i+6]
+			# elif(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) == 2):
+			# 	print("One rotation")
+			# 	rotate_around = np.concatenate(
+			# 		(np.diag(self.mesh.fixedOnElement[6*i:6*i+2]),
+			# 			np.diag(self.mesh.fixedOnElement[6*i+2:6*i+4]),
+			# 			np.diag(self.mesh.fixedOnElement[6*i+4:6*i+6])), axis =1)
+			# 	r = np.eye(6) - np.concatenate((rotate_around, rotate_around, rotate_around))
+			# 	# print(r)
+			# 	PAx_e = r.dot(Ax[6*i:6*i+6])
 
-			elif(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) >= 3):
-				print("No rotation")
-				continue
-				print("shit, fix this")
+			# elif(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) >= 3):
+			# 	print("No rotation")
+			# 	continue
 
 			PAg_e = PAg[6*i:6*i+6]
 			Ue = np.kron(np.eye(3), self.mesh.getU(i))
@@ -461,40 +458,37 @@ class ARAP:
 			vecb = np.dot(R, veca)
 			theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
 			theta_list.append(theta)
-			print(theta)
+			# print(theta)
 			self.mesh.q[3*i] = theta
 
 		return theta_list
 	
-	def itT(self, useKKT=False):
+	def itT(self):
 		F = self.mesh.getGlobalF()[0]
 		B = self.BLOCK
-		# print(B)
-		ABBtx = self.mesh.getA().dot(B.dot(B.T.dot(self.mesh.x0)))
-		AtPtFPABBtx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(F.dot(self.mesh.getP().dot(ABBtx))))
-		BtAtPtFPAx = B.T.dot(AtPtFPABBtx)
-		if useKKT:
-			ob = np.concatenate((self.BLOCK.T.dot(self.mesh.x0), BtAtPtFPAx))
-			gu = scipy.linalg.lu_solve((self.KKTCholFac, self.KKTLower), ob)
-			self.mesh.g = self.BLOCK.dot(gu[0:len(BtAtPtFPAx)]) + self.AbAbtg
-			print("Using KKT!!")
-			return 1
-		else:
-			gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), BtAtPtFPAx)
-			self.mesh.g = self.BLOCK.dot(gu) + self.AbAbtg
-			
-			# self.mesh.g = self.BLOCK.dot(self.pinvBtAtPtPAB.dot(BtAtPtFPAx)) + self.AbAbtg
-			print(self.mesh.g)
-			# print(BtAtPtFPAx)
-			# print(self.AbAbtg)
 
-			return 1
+		print("g", self.mesh.g)
+		FPAx = F.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
+		print("fpax", FPAx)
 
-	def iterate(self, its=1, useKKT = False):
+		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
+		print("AtPtFpax", AtPtFPAx)
+		BtAtPtFPAx = B.T.dot(AtPtFPAx)
+		print(BtAtPtFPAx)
+	
+		gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), BtAtPtFPAx)
+		print("b", BtAtPtFPAx)
+		print("gu", gu)
+		self.mesh.g = self.BLOCK.dot(gu) + self.AbAbtg
+		# print("antiblock", self.AbAbtg)
+
+		return 1
+
+	def iterate(self, its=1):
 		for i in range(its):
 			self.Energy()
-			r = self.itR()
-			g = self.itT(useKKT = useKKT)
+			# r = self.itR()
+			g = self.itT()
 
 class LinearElastic:
 
@@ -689,7 +683,7 @@ class TimeIntegrator:
 		for i in range(len(self.mesh.T)):
 			pass
 			self.mesh.q[3*i+1] =1+ np.sin(self.time)
-			# self.mesh.q[3*i +2] = 1+ np.sin(self.time)
+			# self.mesh.q[3*i +2] = 1-np.sin(self.time)
 
 	def set_random_strain(self):
 		for i in range(len(self.mesh.T)):
@@ -699,7 +693,7 @@ class TimeIntegrator:
 	def iterate(self):
 		# self.set_random_strain()
 		self.set_strain()
-		self.arap.iterate(its=1, useKKT = False)
+		self.arap.iterate(its=1)
 		self.time += 0.1
 
 	def solve(self):
@@ -727,13 +721,13 @@ class TimeIntegrator:
 		print(res.x)
 
 def display():
-	mesh = Mesh(rectangle_mesh(2,2))
-	arap = ARAP(imesh=mesh, ito_fix = [1,3])
+	mesh = Mesh(triangle_mesh())
+	arap = ARAP(imesh=mesh, ito_fix = [1,2])
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = None)
 	# time_integrator.solve()
 	viewer = igl.viewer.Viewer()
 
-	def key_down(viewer, c, b):
+	def key_down(viewer, a, bbbb):
 		viewer.data.clear()
 		time_integrator.iterate()
 		DV, DT = mesh.getDiscontinuousVT()
@@ -767,10 +761,12 @@ def display():
 			cag.append(CAg[6*i:6*i+2])
 
 		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
+		# zero = 
+		# viewer.data.add_points(, black)
 		return True
 
 	key_down(viewer, 'a', 1)
-	viewer.callback_key_down = key_down
+	viewer.callback_key_down= key_down
 	viewer.core.is_animating = False
 	viewer.launch()
 
