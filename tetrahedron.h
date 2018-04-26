@@ -90,7 +90,8 @@ public:
         double I1bar = powj*I1;
         Vector3d Fv = F*m_fibre_dir;
 
-        double neo_energy = m_undeformedVol*(m_mu/2.0 * (I1bar - 3) + m_lambda/2.0 * (J-1.0) * (J-1.0));
+        double neo_energy = m_undeformedVol*
+        (m_mu/2.0 * (I1bar - 3) + m_lambda/2.0 * (J-1.0) * (J-1.0));
         double muscle_energy = 0.5*m_fibre_mag*(m_fibre_dir.transpose()*F.transpose()*F*m_fibre_dir - 1);
 
         return neo_energy + muscle_energy;
@@ -140,93 +141,93 @@ public:
 
 
         //##Muscle force, do the proper math later
-        double v1 =m_fibre_dir[0];
-        double v2 =m_fibre_dir[1];
-        double v3 =m_fibre_dir[2];
-        double a = m_fibre_mag;
-        
-        double o = m_InvRefShapeMatrix(0,0);
-        double p = m_InvRefShapeMatrix(0,1);
-        double q = m_InvRefShapeMatrix(0,2);
-        double t = m_InvRefShapeMatrix(1,0);
-        double r = m_InvRefShapeMatrix(1,1);
-        double s = m_InvRefShapeMatrix(1,2);
-        double u = m_InvRefShapeMatrix(2,0);
-        double w = m_InvRefShapeMatrix(2,1);
-        double e = m_InvRefShapeMatrix(2,2);
+            double v1 =m_fibre_dir[0];
+            double v2 =m_fibre_dir[1];
+            double v3 =m_fibre_dir[2];
+            double a = m_fibre_mag;
+            
+            double o = m_InvRefShapeMatrix(0,0);
+            double p = m_InvRefShapeMatrix(0,1);
+            double q = m_InvRefShapeMatrix(0,2);
+            double t = m_InvRefShapeMatrix(1,0);
+            double r = m_InvRefShapeMatrix(1,1);
+            double s = m_InvRefShapeMatrix(1,2);
+            double u = m_InvRefShapeMatrix(2,0);
+            double w = m_InvRefShapeMatrix(2,1);
+            double e = m_InvRefShapeMatrix(2,2);
 
-        double nx1_nx4 = Ds(0,0);
-        double nx2_nx4 = Ds(0,1);
-        double nx3_nx4 = Ds(0,2);
-        double ny1_ny4 = Ds(1,0);
-        double ny2_ny4 = Ds(1,1);
-        double ny3_ny4 = Ds(1,2);
-        double nz1_nz4 = Ds(2,0);
-        double nz2_nz4 = Ds(2,1);
-        double nz3_nz4 = Ds(2,2);
+            double nx1_nx4 = Ds(0,0);
+            double nx2_nx4 = Ds(0,1);
+            double nx3_nx4 = Ds(0,2);
+            double ny1_ny4 = Ds(1,0);
+            double ny2_ny4 = Ds(1,1);
+            double ny3_ny4 = Ds(1,2);
+            double nz1_nz4 = Ds(2,0);
+            double nz2_nz4 = Ds(2,1);
+            double nz3_nz4 = Ds(2,2);
 
         //Symbolic derivative for f_muscle = dEnergy_muscle / dx, because I can't do tensor calc
-        VectorXd force_muscle(12);
-        force_muscle<<
-        (-1 *a *(o *v1 + p *v2 + q *v3) *this->m_undeformedVol*
-            (((nx1_nx4)* o + (nx2_nx4) *t + (nx3_nx4) *u)* v1 
-                + (e *(nx3_nx4) + (nx1_nx4) *q + (nx2_nx4)* s)* v3 
-                + v2* ((nx1_nx4) *p + (nx2_nx4) *r + (nx3_nx4)* w))),
-        
-        (-1* a* (o *v1 + p *v2 + q *v3) *this->m_undeformedVol*
-            (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u) *v1 
-                + (e* (ny3_ny4)* + (ny1_ny4)* q + (ny2_ny4)* s)* v3 
-                + v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
+            VectorXd force_muscle(12);
+            force_muscle<<
+            (-1 *a *(o *v1 + p *v2 + q *v3) *this->m_undeformedVol*
+                (((nx1_nx4)* o + (nx2_nx4) *t + (nx3_nx4) *u)* v1 
+                    + (e *(nx3_nx4) + (nx1_nx4) *q + (nx2_nx4)* s)* v3 
+                    + v2* ((nx1_nx4) *p + (nx2_nx4) *r + (nx3_nx4)* w))),
+            
+            (-1* a* (o *v1 + p *v2 + q *v3) *this->m_undeformedVol*
+                (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u) *v1 
+                    + (e* (ny3_ny4)* + (ny1_ny4)* q + (ny2_ny4)* s)* v3 
+                    + v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
 
-        (-1* a* (o *v1 + p *v2 + q *v3) *this->m_undeformedVol*
-            (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u) *v1 
-                + (e* (nz3_nz4)* + (nz1_nz4)* q + (nz2_nz4)* s)* v3 
-                + v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w))),
+            (-1* a* (o *v1 + p *v2 + q *v3) *this->m_undeformedVol*
+                (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u) *v1 
+                    + (e* (nz3_nz4)* + (nz1_nz4)* q + (nz2_nz4)* s)* v3 
+                    + v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w))),
 
-        (-1* a* (t* v1 + r* v2 + s* v3)*this->m_undeformedVol*
-            (((nx1_nx4)* o + (nx2_nx4) *t + (nx3_nx4) *u)* v1 
-                + (e *(nx3_nx4) + (nx1_nx4) *q + (nx2_nx4)* s)* v3 
-                + v2* ((nx1_nx4) *p + (nx2_nx4) *r + (nx3_nx4)* w))),
-        
-        (-1* a* (t* v1 + r* v2 + s* v3) *this->m_undeformedVol*
-            (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u) *v1 
-                + (e* (ny3_ny4)* + (ny1_ny4)* q + (ny2_ny4)* s)* v3 
-                + v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
+            (-1* a* (t* v1 + r* v2 + s* v3)*this->m_undeformedVol*
+                (((nx1_nx4)* o + (nx2_nx4) *t + (nx3_nx4) *u)* v1 
+                    + (e *(nx3_nx4) + (nx1_nx4) *q + (nx2_nx4)* s)* v3 
+                    + v2* ((nx1_nx4) *p + (nx2_nx4) *r + (nx3_nx4)* w))),
+            
+            (-1* a* (t* v1 + r* v2 + s* v3) *this->m_undeformedVol*
+                (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u) *v1 
+                    + (e* (ny3_ny4)* + (ny1_ny4)* q + (ny2_ny4)* s)* v3 
+                    + v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
 
-        (-1* a* (t* v1 + r* v2 + s* v3) *this->m_undeformedVol*
-            (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u) *v1 
-                + (e* (nz3_nz4)* + (nz1_nz4)* q + (nz2_nz4)* s)* v3 
-                + v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w))),
+            (-1* a* (t* v1 + r* v2 + s* v3) *this->m_undeformedVol*
+                (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u) *v1 
+                    + (e* (nz3_nz4)* + (nz1_nz4)* q + (nz2_nz4)* s)* v3 
+                    + v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w))),
 
-        (-1 *a * (u* v1 + e* v3 + v2* w) *this->m_undeformedVol*
-            (((nx1_nx4)* o + (nx2_nx4) *t + (nx3_nx4) *u)* v1 
-                + (e *(nx3_nx4) + (nx1_nx4) *q + (nx2_nx4)* s)* v3 
-                + v2* ((nx1_nx4) *p + (nx2_nx4) *r + (nx3_nx4)* w))),
-        
-        (-1 *a * (u* v1 + e* v3 + v2* w) *this->m_undeformedVol*
-            (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u) *v1 
-                + (e* (ny3_ny4)* + (ny1_ny4)* q + (ny2_ny4)* s)* v3 
-                + v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
+            (-1 *a * (u* v1 + e* v3 + v2* w) *this->m_undeformedVol*
+                (((nx1_nx4)* o + (nx2_nx4) *t + (nx3_nx4) *u)* v1 
+                    + (e *(nx3_nx4) + (nx1_nx4) *q + (nx2_nx4)* s)* v3 
+                    + v2* ((nx1_nx4) *p + (nx2_nx4) *r + (nx3_nx4)* w))),
+            
+            (-1 *a * (u* v1 + e* v3 + v2* w) *this->m_undeformedVol*
+                (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u) *v1 
+                    + (e* (ny3_ny4)* + (ny1_ny4)* q + (ny2_ny4)* s)* v3 
+                    + v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
 
-        (-1 *a * (u* v1 + e* v3 + v2* w) *this->m_undeformedVol*
-            (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u) *v1 
-                + (e* (nz3_nz4)* + (nz1_nz4)* q + (nz2_nz4)* s)* v3 
-                + v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w))),
+            (-1 *a * (u* v1 + e* v3 + v2* w) *this->m_undeformedVol*
+                (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u) *v1 
+                    + (e* (nz3_nz4)* + (nz1_nz4)* q + (nz2_nz4)* s)* v3 
+                    + v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w))),
 
-        (-1* a* this->m_undeformedVol* ((-o - t - u) *v1 + (-e - q - s) *v3 + v2* (-p - r - w)) *
-            (((nx1_nx4)* o + (nx2_nx4)* t + (nx3_nx4)* u)* v1 + 
-                (e *(nx3_nx4) + (nx1_nx4)* q + (nx2_nx4)* s)* v3 + 
-                v2 *((nx1_nx4)* p + (nx2_nx4)* r + (nx3_nx4)* w))),
+            (-1* a* this->m_undeformedVol* ((-o - t - u) *v1 + (-e - q - s) *v3 + v2* (-p - r - w)) *
+                (((nx1_nx4)* o + (nx2_nx4)* t + (nx3_nx4)* u)* v1 + 
+                    (e *(nx3_nx4) + (nx1_nx4)* q + (nx2_nx4)* s)* v3 + 
+                    v2 *((nx1_nx4)* p + (nx2_nx4)* r + (nx3_nx4)* w))),
 
-        (-1* a* this->m_undeformedVol* ((-o - t - u) *v1 + (-e - q - s) *v3 + v2* (-p - r - w)) *
-            (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u)* v1 + 
-                (e *(ny3_ny4) + (ny1_ny4)* q + (ny2_ny4)* s)* v3 + 
-                v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
+            (-1* a* this->m_undeformedVol* ((-o - t - u) *v1 + (-e - q - s) *v3 + v2* (-p - r - w)) *
+                (((ny1_ny4)* o + (ny2_ny4)* t + (ny3_ny4)* u)* v1 + 
+                    (e *(ny3_ny4) + (ny1_ny4)* q + (ny2_ny4)* s)* v3 + 
+                    v2 *((ny1_ny4)* p + (ny2_ny4)* r + (ny3_ny4)* w))),
 
-        (-1* a* this->m_undeformedVol* ((-o - t - u) *v1 + (-e - q - s) *v3 + v2* (-p - r - w)) *
-            (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u)* v1 + 
-                (e *(nz3_nz4) + (nz1_nz4)* q + (nz2_nz4)* s)* v3 + 
-                v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w)));
+            (-1* a* this->m_undeformedVol* ((-o - t - u) *v1 + (-e - q - s) *v3 + v2* (-p - r - w)) *
+                (((nz1_nz4)* o + (nz2_nz4)* t + (nz3_nz4)* u)* v1 + 
+                    (e *(nz3_nz4) + (nz1_nz4)* q + (nz2_nz4)* s)* v3 + 
+                    v2 *((nz1_nz4)* p + (nz2_nz4)* r + (nz3_nz4)* w)));
 
         //--------
 
