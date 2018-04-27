@@ -10,6 +10,8 @@ sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 
+gravity = -9.81
+
 #helpers
 def get_area(p1, p2, p3):
 	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))*0.5
@@ -203,8 +205,7 @@ class Mesh:
 
 			for i in range(len(self.T)):
 				e = self.T[i]
-				print(e)
-				undef_area = get_area(self.V[self.T[i][0]], self.V[self.T[i][1]], self.V[self.T[i][2]])
+				undef_area = 10*get_area(self.V[self.T[i][0]], self.V[self.T[i][1]], self.V[self.T[i][2]])
 
 				self.Mass[2*e[0]+0, 2*e[0]+0] += undef_area/3.0
 				self.Mass[2*e[0]+1, 2*e[0]+1] += undef_area/3.0
@@ -492,7 +493,7 @@ class NeohookeanElastic:
 		self.M = self.mesh.getMassMatrix()
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix(to_fix = ito_fix)
 
-		youngs = 1e4
+		youngs = 1e2
 		poissons = 0.3
 		self.mu = youngs/(2+ 2*poissons)
 		self.lambd = youngs*poissons/((1+poissons)*(1-2*poissons))
@@ -509,20 +510,23 @@ class NeohookeanElastic:
 		d1 = np.array(self.mesh.V[e[0]]) - np.array(self.mesh.V[e[2]])
 		d2 = np.array(self.mesh.V[e[1]]) - np.array(self.mesh.V[e[2]])
 		Dm = np.column_stack(( d1, d2))
-
 		Dm = np.linalg.inv(Dm)
-		F = np.matmul(Ds, Dm)
 
+		F = np.matmul(Ds, Dm)
 		#Neo
 		J = np.linalg.det(F)
+		if(J<=0):
+			print("F",F)
+			print("Ds",Ds)
+			print("Dm",Dm)
+			print(xt, t)
+			print("det(F) is 0 in ENERGY")
+			return 1e40		
 		I1 = np.trace(F.T.dot(F))
 		powj = math.pow(J, -2.0/3)
 		I1bar = powj*I1 
 
 		#neo_e = undef_area*(self.mu*(I1bar - self.dimensions)/2.0 + (J-1.0)*(J-1.0)*self.lambd/2.0)
-		if(J<0):
-			print("det(F) is 0 in ENERGY")
-			exit()		
 		neo_e = (self.mu/2.0)*(I1 - 2) - self.mu*math.log10(J) + 0.5*self.lambd*math.log10(J)*math.log10(J)
 		return neo_e
 
@@ -543,13 +547,15 @@ class NeohookeanElastic:
 		
 		#Neo
 		J = np.linalg.det(F)
+		if(J<=0):
+			print(F, xt, t)
+			print("det(F) is 0, instantaneous force too high")
+			exit()
+
 		I1 = np.trace(F.T.dot(F))
 		powj = math.pow(J, -2.0/3)
 		I1bar = powj*I1
 
-		if(J<0):
-			print("det(F) is 0, instantaneous force too high")
-			exit()
 		#P = self.mu*(powj*F)+((-1*self.mu*I1*powj/self.dimensions) + self.lambd*(J-1)*J)*np.linalg.inv(F).T
 	
 		P = self.mu*(F - np.transpose(np.linalg.inv(F))) + self.lambd*math.log10(J)
@@ -563,23 +569,21 @@ class NeohookeanElastic:
 		f[2*e[1]:2*e[1]+2] += f1
 		f[2*e[2]:2*e[2]+2] += f2
 
-	def energy(self, _x):
-		en = 0
-		for t in range(len(self.mesh.T)):
-			en += self.ElementEnergy(_x, t)
-		return en
-
-	def Energy(self):
+	def Energy(self, _x):
 		En = 0.0
 		for t in range(len(self.mesh.T)):
-			En += self.ElementEnergy(self.mesh.g, t)
+			En += self.ElementEnergy(_x, t)
 
 		return En
 
-	def Forces(self):
+	def Forces(self, _x):
+		
 		for t in range(len(self.mesh.T)):
-			self.ElementForce(self.f, self.mesh.g, t)
+			self.ElementForce(self.f, _x, t)
 
+		#gravity
+		# for i in range(len(self.f)/2):
+		# 	self.f[2*i+1] += self.M[2*i+1, 2*i+1]*gravity 
 
 def FiniteDifferencesARAP():
 	eps = 1e-5
@@ -741,21 +745,20 @@ def FiniteDifferencesARAP():
 # FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-5
+	eps = 1e-4
 	mesh = Mesh(triangle_mesh())
 	ne = NeohookeanElastic(imesh = mesh)
 
-	E0 = ne.Energy()
-	print("e0", E0)
+	E0 = ne.Energy(_x=mesh.g)
+
 	def check_dEdx():
-		ne.Forces()
+		ne.Forces(_x=mesh.g)
 		real = -1*ne.f
 		fake = []
 		dg = np.zeros(len(mesh.g)) + mesh.g
-		print(dg)
 		for i in range(len(mesh.g)):
 			dg[i] += eps 
-			En = ne.energy(_x=dg)
+			En = ne.Energy(_x=dg)
 			print(En)
 			fake.append((En - E0)/eps)
 			dg[i] -= eps
@@ -764,18 +767,18 @@ def FiniteDifferencesElasticity():
 		print(real)
 
 	check_dEdx()
-
 # FiniteDifferencesElasticity()
 
 class TimeIntegrator:
 
 	def __init__(self, imesh, iarap, ielastic = None):
 		self.time = 0
+		self.timestep = 0.001
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 0.1
-		self.set_random_strain()
+		self.adder = 0.001
+		# self.set_random_strain()
 
 
 	def set_strain(self):
@@ -793,11 +796,12 @@ class TimeIntegrator:
 		# self.set_strain()
 		# self.arap.iterate(its=10)
 		# print(self.mesh.g)
-		self.time += 0.1
+		self.mesh.g[2*self.mesh.fixed[1]] += 0.01
+		self.time += self.timestep
 
 	def only_solve_ARAP(self):
 		self.arap.iterate(its=10)
-		
+
 		s0 = []
 		for i in range(len(self.mesh.T)):
 			s0.append(self.mesh.q[3*i + 1])
@@ -827,14 +831,43 @@ class TimeIntegrator:
 			self.mesh.q[3*i+1] = res.x[2*i]
 			self.mesh.q[3*i+2] = res.x[2*i+1]
 
-	def only_solve_Elastic(self):
+	def only_solve_Statics(self):
+		self.iterate()
+		
+		AbAbtg = self.elastic.ANTI_BLOCK.dot(self.elastic.ANTI_BLOCK.T.dot(self.mesh.g))
+		x0 = self.elastic.BLOCK.T.dot(self.mesh.g)
+		
 
+		def energy(_x):
+			x = self.elastic.BLOCK.dot(_x) + AbAbtg
+			print("xo", x)
+
+			StrainE = self.elastic.Energy(_x=x)
+
+			E = StrainE
+			print("Energy", E)
+			return E
+
+		def jacobian(_x):
+			x = self.elastic.BLOCK.dot(_x) + AbAbtg
+			
+			self.elastic.Forces(_x=x)
+			jac = self.elastic.BLOCK.T.dot(-1*self.elastic.f)
+
+			return jac
+
+		res = scipy.optimize.minimize(energy, x0, method='BFGS', jac=jacobian,  options={'gtol': 1e-6, 'disp': True})
+		new_g = self.elastic.BLOCK.dot(res.x) + AbAbtg
+		self.elastic.v = (new_g - self.mesh.g)/self.timestep
+		self.mesh.g = new_g
+		print(self.mesh.g)
+		print(self.elastic.v)
 
 def display():
 	mesh = Mesh(rectangle_mesh(2,2))
-	neoh =NeohookeanElastic(imesh=mesh, ito_fix=[1,3])
-	arap = ARAP(imesh=mesh, ito_fix = [1, 3])
-	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = None)
+	neoh =NeohookeanElastic(imesh=mesh, ito_fix=[1,2])
+	# arap = ARAP(imesh=mesh, ito_fix = [1, 3])
+	time_integrator = TimeIntegrator(imesh = mesh, iarap = None, ielastic = neoh)
 	viewer = igl.viewer.Viewer()
 
 	def key_down(viewer, a, bbbb):
@@ -872,7 +905,7 @@ def display():
 		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
 		# zero = 
 		# viewer.data.add_points(, black)
-		time_integrator.solve()
+		time_integrator.only_solve_Statics()
 		return True
 
 	key_down(viewer, 'a', 1)
@@ -880,4 +913,4 @@ def display():
 	viewer.core.is_animating = False
 	viewer.launch()
 
-# display()
+display()
