@@ -269,7 +269,7 @@ class ARAP:
 		dEds = np.matmul(self.dEdg(),dgds) + np.matmul(self.dEdr()[1], drds) + self.dEds()[1]
 
 		print("Jac", dEds)
-		return dEds
+		return dEds, dgds, drds
 		# KKTinv_Jac_s
 
 	def dEdr(self):
@@ -778,7 +778,7 @@ class TimeIntegrator:
 		self.arap = iarap 
 		self.elastic = ielastic 
 		self.adder = 0.001
-		# self.set_random_strain()
+		self.set_random_strain()
 
 
 	def set_strain(self):
@@ -823,7 +823,7 @@ class TimeIntegrator:
 				self.mesh.q[3*i + 2] = s[2*i +1]
 
 			# print(s)
-			return self.arap.Jacobian()
+			return self.arap.Jacobian()[0]
 
 		res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True})
 		
@@ -840,13 +840,13 @@ class TimeIntegrator:
 
 		def energy(_x):
 			x = self.elastic.BLOCK.dot(_x) + AbAbtg
-			print("xo", x)
+			# print("xo", x)
 
 			StrainE = self.elastic.Energy(_x=x)
 
 			E = StrainE
 			print("Energy", E)
-			return E
+			return abs(E)
 
 		def jacobian(_x):
 			x = self.elastic.BLOCK.dot(_x) + AbAbtg
@@ -856,18 +856,58 @@ class TimeIntegrator:
 
 			return jac
 
-		res = scipy.optimize.minimize(energy, x0, method='BFGS', jac=jacobian,  options={'gtol': 1e-6, 'disp': True})
+		res = scipy.optimize.minimize(energy, x0, method='Nelder-Mead',  options={'gtol': 1e-6, 'disp': True})
+		# res = scipy.optimize.minimize(energy, x0, method='BFGS', jac=jacobian,  options={'gtol': 1e-6, 'disp': True})
 		new_g = self.elastic.BLOCK.dot(res.x) + AbAbtg
 		self.elastic.v = (new_g - self.mesh.g)/self.timestep
 		self.mesh.g = new_g
 		print(self.mesh.g)
 		print(self.elastic.v)
 
+	def solve(self):
+		self.arap.iterate(its=4)
+
+		s0 = []
+		for i in range(len(self.mesh.T)):
+			s0.append(self.mesh.q[3*i +1])
+			s0.append(self.mesh.q[3*i +2])
+
+		print(s0, self.arap.Energy())
+
+		def energy(s):
+			for i in range(len(s)/2):
+				self.mesh.q[3*i + 1] = s[2*i]
+				self.mesh.q[3*i + 2] = s[2*i +1]
+
+			E_arap = self.arap.Energy()
+			E_elastic = self.elastic.Energy(_x=self.mesh.g)
+			print("E", E_arap, E_elastic)
+			return E_arap+E_elastic
+
+		def jacobian(s):
+			for i in range(len(s)/2):
+				self.mesh.q[3*i + 1] = s[2*i]
+				self.mesh.q[3*i + 2] = s[2*i +1]
+
+			J_arap, dgds, drds = self.arap.Jacobian()
+			self.elastic.Forces(_x=self.mesh.g)
+			J_elastic = -1*self.elastic.f.dot(dgds)
+
+			return J_arap + J_elastic
+		
+		# res = scipy.optimize.minimize(energy, s0, method='Nelder-Mead',  options={'gtol': 1e-6, 'disp': True})
+		res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True})
+		print("g", self.mesh.g)
+
+		for i in range(len(res.x)/2):
+			self.mesh.q[3*i+1] = res.x[2*i]
+			self.mesh.q[3*i+2] = res.x[2*i+1]
+
 def display():
 	mesh = Mesh(rectangle_mesh(2,2))
 	neoh =NeohookeanElastic(imesh=mesh, ito_fix=[1,2])
-	# arap = ARAP(imesh=mesh, ito_fix = [1, 3])
-	time_integrator = TimeIntegrator(imesh = mesh, iarap = None, ielastic = neoh)
+	arap = ARAP(imesh=mesh, ito_fix = [1, 3])
+	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
 	viewer = igl.viewer.Viewer()
 
 	def key_down(viewer, a, bbbb):
@@ -893,9 +933,9 @@ def display():
 
 		C = []
 		for i in range(len(mesh.fixed)):
-			C.append(mesh.V[mesh.fixed[i]])
-		# print(C)
-		viewer.data.add_points(igl.eigen.MatrixXd(C), red)
+			C.append(mesh.g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
+
+		viewer.data.add_points(igl.eigen.MatrixXd(np.array(C)), red)
 
 		CAg = mesh.getC().dot(mesh.getA().dot(mesh.g))
 		cag = []
@@ -905,7 +945,7 @@ def display():
 		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
 		# zero = 
 		# viewer.data.add_points(, black)
-		time_integrator.only_solve_Statics()
+		time_integrator.solve()
 		return True
 
 	key_down(viewer, 'a', 1)
