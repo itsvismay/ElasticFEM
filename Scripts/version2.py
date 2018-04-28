@@ -762,10 +762,10 @@ def FiniteDifferencesARAP():
 # FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-7
-	mesh = Mesh(triangle_mesh())
-	ne = NeohookeanElastic(imesh = mesh)
-	arap = ARAP(imesh=mesh)
+	eps = 1e-8
+	mesh = Mesh(triangle_mesh() )
+	ne = NeohookeanElastic(imesh = mesh,ito_fix=[1])
+	arap = ARAP(imesh=mesh, ito_fix=[1])
 	E0 = ne.Energy(_x=mesh.g)
 
 	def check_dEdx():
@@ -794,8 +794,20 @@ def FiniteDifferencesElasticity():
 		print((e1-e0)/eps)
 
 	def check_dEds():
-
-	check_dEdx()
+		arap.iterate(its=4)
+		ne.Forces(_x=mesh.g)
+		J_arap, dgds, drds = arap.Jacobian()
+		real = -1*ne.f.dot(dgds)
+		dEds = []
+		for i in range(len(mesh.T)):
+			for j in range(1,3):
+				mesh.q[3*i+j] += eps
+				arap.iterate(its=4)
+				dEds.append((ne.Energy(_x=mesh.g) -E0)/eps)
+				mesh.q[3*i+j] -= eps
+		print(dEds)
+	check_dEds()
+	# check_dEdx()
 	# check_dEdF()
 
 FiniteDifferencesElasticity()
