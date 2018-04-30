@@ -14,7 +14,7 @@ T = []
 E = [] #each dg edge element is (nf, T_ind1, T_ind2, V_ind1, V_ind2)
 
 def get_area(p1, p2, p3):
-	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))*0.5
+	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))
 
 def get_centroid(p1, p2, p3):
 	return (np.array(p1)+np.array(p2)+np.array(p3))/3.0
