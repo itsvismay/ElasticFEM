@@ -497,14 +497,12 @@ class NeohookeanElastic:
 		self.dimensions = 2
 
 	def ElementEnergy(self, xt, t):
-		
 		e = self.mesh.T[t]
 		undef_area = get_area(self.mesh.V[e[0]], self.mesh.V[e[1]], self.mesh.	V[e[2]])
 
-		c1 = xt[2*e[0]:2*e[0]+2] - xt[2*e[2]:2*e[2]+2]
-		c2 = xt[2*e[1]:2*e[1]+2] - xt[2*e[2]:2*e[2]+2]
+		c1 = xt[0:2] - xt[4:6]
+		c2 = xt[2:4] - xt[4:6]
 		Ds = np.column_stack((c1, c2))
-
 		d1 = np.array(self.mesh.V[e[0]]) - np.array(self.mesh.V[e[2]])
 		d2 = np.array(self.mesh.V[e[1]]) - np.array(self.mesh.V[e[2]])
 		Dm = np.column_stack(( d1, d2))
@@ -556,8 +554,8 @@ class NeohookeanElastic:
 		e = self.mesh.T[t]
 		undef_area = get_area(self.mesh.V[e[0]], self.mesh.V[e[1]], self.mesh.	V[e[2]])
 
-		c1 = xt[2*e[0]:2*e[0]+2] - xt[2*e[2]:2*e[2]+2]
-		c2 = xt[2*e[1]:2*e[1]+2] - xt[2*e[2]:2*e[2]+2]
+		c1 = xt[0:2] - xt[4:6]
+		c2 = xt[2:4] - xt[4:6]
 		Ds = np.column_stack((c1, c2))
 
 		d1 = np.array(self.mesh.V[e[0]]) - np.array(self.mesh.V[e[2]])
@@ -590,26 +588,30 @@ class NeohookeanElastic:
 		f[2*e[2]:2*e[2]+2] += f2
 		return P
 
-	def Energy(self, _x):
+	def Energy(self, _q):
 		En = 0.0
+		GF = self.mesh.getGlobalF()[0]
+		xt = GF.dot(self.mesh.getA().dot(self.mesh.x0))
 		for t in range(len(self.mesh.T)):
-			En += self.ElementEnergy(_x, t)
+			En += self.ElementEnergy(xt[6*t:6*t+6], t)
 
 		return En
 
-	def Forces(self, _x):
+	def Forces(self, _q):
 		self.f.fill(0)
+		GF = self.mesh.getGlobalF()[0]
+		xt = GF.dot(self.mesh.getA().dot(self.mesh.x0))
 		for t in range(len(self.mesh.T)):
-			self.ElementForce(self.f, _x, t)
+			self.ElementForce(self.f, xt[6*t:6*t+6], t)
 
 		#gravity
 		# for i in range(len(self.f)/2):
 		# 	self.f[2*i+1] += self.M[2*i+1, 2*i+1]*gravity 
 
 def FiniteDifferencesARAP():
-	eps = 1e-5
+	eps = 1e-6
 	mesh = Mesh(rectangle_mesh(2,2))
-	arap = ARAP(mesh)
+	arap = ARAP(mesh, ito_fix=[1,3])
 	
 	F0,R0,S0,U0 = mesh.getGlobalF()
 	E0 = arap.energy(_g=mesh.g, _R =R0, _S=S0, _U=U0)
@@ -757,12 +759,38 @@ def FiniteDifferencesARAP():
 		# print(np.sum(np.multiply(dEgdS[:,:,0], _dSds[:,:,0])))
 		# print(np.sum(np.multiply(real[0,:,:], _dSds[:,:,0])))
 	
-	check_dEdg()
-	check_dEds()
-	check_dEdr()
-	left = check_d_gradEgrdg()
-	right = check_d_gradEgrdr()
-	check_d_gradEgrds()
+	def check_dgds():
+		arap.iterate(its =4)
+		Jac, real, drds = arap.Jacobian()
+
+		dgds = []
+		g0 = np.zeros(len(mesh.g)) + mesh.g 
+		for i in range(len(mesh.T)):
+			for j in range(1,3):
+				mesh.q[3*i + j] += eps 
+				arap.itT()
+				dgds.append((mesh.g - g0)/eps)
+				mesh.q[3*i + j] -= eps
+				arap.itT()
+			
+		print(np.array(dgds).T)
+		print("")
+		print(real)
+
+	def check_jac_s():
+		arap.iterate(its=4)
+		Jac, dgds,drds = arap.Jacobian()
+
+	# check_dEdg()
+	# check_dEds()
+	# check_dEdr()
+	# left = check_d_gradEgrdg()
+	# right = check_d_gradEgrdr()
+	# check_d_gradEgrds()
+
+	# check_dgds()
+	check_jac_s()
+
 # FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
@@ -771,61 +799,27 @@ def FiniteDifferencesElasticity():
 	ne = NeohookeanElastic(imesh = mesh,ito_fix=[1,3])
 	arap = ARAP(imesh=mesh, ito_fix=[1,3])
 
-	def check_dEdx():
-		e0 = ne.Energy(_x=mesh.g)
-
-		ne.Forces(_x=mesh.g)
-		real = -1*ne.f
-		fake = []
-		dg = np.zeros(len(mesh.g)) + mesh.g
-
-		for i in range(len(mesh.g)):
-			dg[i] += eps 
-			En = ne.Energy(_x=dg)
-			fake.append((En - e0)/eps)
-			dg[i] -= eps
-		
-		print("fake", fake)
-		print("real", real)
-		print("diff", fake - real)
-
-	def check_dEdF():
-		# mesh.g = np.array([0.0, 0.0, 0.00000, 1.00000, 1.0, 0, 1.00000, 1.00000])
-		realP = ne.ElementForce(f=ne.f, xt = mesh.g, t=0)
-		print(realP)
-		F = np.eye(2)#np.array([[1.0,0.9],[1, 0]])
-		dEdF = np.zeros(realP.shape)
-		e0 = ne.element_energy_GivenF(F=F,t=0)
-		for i in range(2):
-			for j in range(2):
-				F[i,j] += eps
-				e1 = ne.element_energy_GivenF(F=F, t=0)
-				dEdF[i, j] =((e1-e0)/eps)
-		print(dEdF)
-
 	def check_dEds():
-		mesh.g = np.array([0.47739, -0.32399, 0.00000, 1.00000, 1.73026, -0.09980, 1.00000, 1.00000])
-		mesh.q = np.array([0.22798, 1.03401, 2.03257, 0.36961, 1.03692, 1.53289])
-		e0 = ne.Energy(_x=mesh.g)
-		# arap.iterate(its=4)
-		ne.Forces(_x=mesh.g)
+		mesh.q[1] = 2
+		e0 = ne.Energy(_q = mesh.q)
+
+		ne.Forces(_q=mesh.q)
 		J_arap, dgds, drds = arap.Jacobian()
-		print(ne.f)
+
 		real = -1*ne.f.dot(dgds)
 		dEds = []
 
 		for i in range(len(mesh.T)):
 			for j in range(1,3):
 				mesh.q[3*i+j] += eps
-				# arap.iterate(its=4)
-
-				dEds.append((ne.Energy(_x=mesh.g) -e0)/eps)
+				dEds.append((ne.Energy(_q=mesh.q) -e0)/eps)
 				mesh.q[3*i+j] -= eps
-		print(real)
-		print(dEds)
+				arap.itT()
+		print("real",real)
+		print("fake", dEds)
 	
-	# check_dEds()
-	check_dEdx()
+	check_dEds()
+	# check_dEdx()
 	# check_dEdF()
 
 FiniteDifferencesElasticity()
@@ -953,8 +947,8 @@ class TimeIntegrator:
 			print("Jac", J_elastic)
 			return J_arap + J_elastic
 		
-		# res = scipy.optimize.minimize(energy, s0, method='Nelder-Mead',  options={'gtol': 1e-6, 'disp': True})
-		res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True, 'eps':1e-08})
+		res = scipy.optimize.minimize(energy, s0, method='Nelder-Mead',  options={'gtol': 1e-6, 'disp': True})
+		# res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True, 'eps':1e-08})
 		print("s", res.x)
 
 		for i in range(len(res.x)/2):
