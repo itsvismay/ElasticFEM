@@ -485,7 +485,7 @@ class NeohookeanElastic:
 
 	def __init__(self, imesh, ito_fix = []):
 		self.mesh = imesh
-		self.f = np.zeros(2*len(self.mesh.V))
+		self.f = np.zeros(2*len(self.mesh.T))
 		self.v = np.zeros(2*len(self.mesh.V))
 		self.M = self.mesh.getMassMatrix()
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix(to_fix = ito_fix)
@@ -495,6 +495,29 @@ class NeohookeanElastic:
 		self.mu = youngs/(2+ 2*poissons)
 		self.lambd = youngs*poissons/((1+poissons)*(1-2*poissons))
 		self.dimensions = 2
+
+	def dSds(self):
+		#2x2x2 version of dSds (for each element)
+		dSdsx = np.array([[1,0],[0,0]])
+		dSdsy = np.array([[0,0],[0,1]])
+		
+		return np.dstack((dSdsx, dSdsy))
+
+	def PrinStretchElementEnergy(self, sx, sy):
+		#from jernej's paper
+		#neohookean energy
+		def f(x):
+			return 0.5*self.mu*(x*x -1)
+		def h(xy):
+			return -1*self.mu*math.log(xy) + 0.5*self.lambd*math.log(xy)*math.log(xy)
+
+		return f(sx) + f(sy) + h(sx*sy)
+
+	def PrinStretchEnergy(self, _q):
+		En = 0
+		for t in range(len(self.mesh.T)):
+			En += self.PrinStretchElementEnergy(_q[3*t + 1], _q[3*t + 2])
+		return En
 
 	def ElementEnergy(self, xt, t):
 		e = self.mesh.T[t]
@@ -579,19 +602,28 @@ class NeohookeanElastic:
 		# P = self.mu*(powj*F)+((-1*self.mu*I1*powj/self.dimensions) + self.lambd*(J-1)*J)*np.linalg.inv(F).T
 		P = self.mu*(F)  + (self.lambd*math.log(J) - self.mu)*np.transpose(np.linalg.inv(F))
 		
-		H = -1*undef_area*P.dot(Dm.T)
-		f0 = H[:,0]
-		f1 = H[:,1]
-		f2 = -1*H[:,0] - H[:,1]
-		f[2*e[0]:2*e[0]+2] += f0 
-		f[2*e[1]:2*e[1]+2] += f1
-		f[2*e[2]:2*e[2]+2] += f2
+		R = self.mesh.getR(t)
+		U = self.mesh.getU(t)
+		dFdS = np.multiply.outer(U.T.dot(R.T), U) #UtRt x U
+		
+		dSds = self.dSds()
+		dElastic_ds = np.tensordot(P, np.tensordot(dFdS, dSds, axes=([1,2],[1,2])), axes=([0,1],[0,1]))
+		print(dElastic_ds)
+		f[2*t:2*t+2] = dElastic_ds
+		# H = -1*undef_area*P.dot(Dm.T)
+		# f0 = H[:,0]
+		# f1 = H[:,1]
+		# f2 = -1*H[:,0] - H[:,1]
+		# f[2*e[0]:2*e[0]+2] += f0 
+		# f[2*e[1]:2*e[1]+2] += f1
+		# f[2*e[2]:2*e[2]+2] += f2
 		return P
 
 	def Energy(self, _q):
 		En = 0.0
 		GF = self.mesh.getGlobalF()[0]
 		xt = GF.dot(self.mesh.getA().dot(self.mesh.x0))
+		# print(xt)
 		for t in range(len(self.mesh.T)):
 			En += self.ElementEnergy(xt[6*t:6*t+6], t)
 
@@ -800,13 +832,13 @@ def FiniteDifferencesElasticity():
 	arap = ARAP(imesh=mesh, ito_fix=[1,3])
 
 	def check_dEds():
-		mesh.q[1] = 2
+		mesh.q[2] = 0.5
 		e0 = ne.Energy(_q = mesh.q)
 
 		ne.Forces(_q=mesh.q)
 		J_arap, dgds, drds = arap.Jacobian()
 
-		real = -1*ne.f.dot(dgds)
+		real = ne.f
 		dEds = []
 
 		for i in range(len(mesh.T)):
@@ -815,10 +847,24 @@ def FiniteDifferencesElasticity():
 				dEds.append((ne.Energy(_q=mesh.q) -e0)/eps)
 				mesh.q[3*i+j] -= eps
 				arap.itT()
+		
 		print("real",real)
 		print("fake", dEds)
 	
-	check_dEds()
+	def check_PrinStretchEnergy():
+		mesh.q[2] = 0.5
+		mesh.q[1] = 0.25
+		mesh.q[4] = 1.2
+
+		e0 = ne.Energy(_q = mesh.q)
+
+		e1 = ne.PrinStretchEnergy(_q = mesh.q)
+
+		print(e0, e1)
+
+	check_PrinStretchEnergy()
+
+	# check_dEds()
 	# check_dEdx()
 	# check_dEdF()
 
