@@ -11,11 +11,9 @@ sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 
-gravity = -9.81
-
 #helpers
 def get_area(p1, p2, p3):
-	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))
+	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))*0.5
 
 def get_centroid(p1, p2, p3):
 	return (np.array(p1)+np.array(p2)+np.array(p3))/3.0
@@ -211,11 +209,10 @@ class Mesh:
 	def getMassMatrix(self):
 		if(self.Mass is None):
 			self.Mass = np.zeros((2*len(self.V), 2*len(self.V)))
-
+			density = 1.0
 			for i in range(len(self.T)):
 				e = self.T[i]
-				undef_area = 10*get_area(self.V[self.T[i][0]], self.V[self.T[i][1]], self.V[self.T[i][2]])
-
+				undef_area = density*get_area(self.V[e[0]], self.V[e[1]], self.V[e[2]])
 				self.Mass[2*e[0]+0, 2*e[0]+0] += undef_area/3.0
 				self.Mass[2*e[0]+1, 2*e[0]+1] += undef_area/3.0
 				
@@ -489,14 +486,13 @@ class ARAP:
 	def iterate(self, its=1):
 		eps = 1e-4
 		E0 = self.Energy()
-		for i in range(4):
-			# r = self.itR()
+		for i in range(its):
+			r = self.itR()
 			g = self.itT()
 			E1 = self.Energy()
 			if(abs(E0 - E1)< eps):
 				return
 			E0 = E1
-
 
 class NeohookeanElastic:
 
@@ -519,6 +515,58 @@ class NeohookeanElastic:
 		dSdsy = np.array([[0,0],[0,1]])
 		
 		return np.dstack((dSdsx, dSdsy))
+
+
+	def GravityElementEnergy(self, rho, grav, cag, area, t):
+		e = rho*area*grav.dot(cag)
+		return e 
+
+	def GravityEnergy(self, iarap = None):
+		if(iarap is None):
+			print("Why is arap null?")
+			exit()
+		
+		iarap.iterate(its=4)
+		Eg = 0
+		rho = 1
+		grav = np.array([0, 9.81])
+		
+		Ax = self.mesh.getA().dot(self.mesh.x0)
+		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.g))
+
+		for t in range(len(self.mesh.T)):
+			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
+			Eg += self.GravityElementEnergy(rho, grav, CAg[6*t:6*t+2], area, t)
+
+		return Eg
+
+	def GravityElementForce(self, rho, area, grav, cadgds, t):
+		gt = rho*area*np.dot(grav, cadgds)
+		print(gt)
+		return gt
+
+	def GravityForce(self, iarap = None):
+		if(iarap is None):
+			print("Why is arap null?")
+			exit()
+
+		iarap.iterate(its=4)
+		print("Ea", iarap.Energy())
+		dgds = iarap.Jacobian()[1]
+
+		fg = np.zeros(2*len(self.mesh.T))
+		rho = 1
+		Ax = self.mesh.getA().dot(self.mesh.x0)
+		
+		grav = np.array([0,9.81])
+
+		CAdgds = self.mesh.getC().dot(self.mesh.getA().dot(dgds))
+		for t in range(len(self.mesh.T)):
+			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
+			fg -= self.GravityElementForce(rho, area, grav, CAdgds[6*t:6*t+2, :], t)
+
+		print("")
+		return fg
 
 	def PrinStretchElementEnergy(self, sx, sy):
 		#from jernej's paper
@@ -560,106 +608,6 @@ class NeohookeanElastic:
 			force[2*t:2*t +2] = self.PrinStretchElementForce(_q[3*t + 1], _q[3*t + 2])
 		return force
 
-	def ElementEnergy(self, xt, t):
-		e = self.mesh.T[t]
-		undef_area = get_area(self.mesh.V[e[0]], self.mesh.V[e[1]], self.mesh.	V[e[2]])
-
-		c1 = xt[0:2] - xt[4:6]
-		c2 = xt[2:4] - xt[4:6]
-		Ds = np.column_stack((c1, c2))
-		d1 = np.array(self.mesh.V[e[0]]) - np.array(self.mesh.V[e[2]])
-		d2 = np.array(self.mesh.V[e[1]]) - np.array(self.mesh.V[e[2]])
-		Dm = np.column_stack(( d1, d2))
-		Dm = np.linalg.inv(Dm)
-
-		F = np.matmul(Ds, Dm)
-		# print(F)
-		#Neo
-		J = np.linalg.det(F)
-		if(J<=0):
-			print("F",F)
-			print("J", J)
-			print("Ds",Ds)
-			print("Dm",Dm)
-			print("xt, t",xt, t)
-			print("det(F) is 0 in ENERGY")
-			return 1e40		
-		I1 = np.trace(F.T.dot(F))
-		powj = math.pow(J, -2.0/3)
-		I1bar = powj*I1 
-
-		# neo_e = undef_area*(self.mu*(I1bar - self.dimensions)/3.0 + (J-1.0)*(J-1.0)*self.lambd/3.0)
-		neo_e = (self.mu/2.0)*(I1 - 2) - self.mu*math.log(J) + 0.5*self.lambd*math.log(J)*math.log(J)
-		return neo_e
-
-	def element_energy_GivenF(self, F, t):
-		e = self.mesh.T[t]
-		undef_area = get_area(self.mesh.V[e[0]], self.mesh.V[e[1]], self.mesh.	V[e[2]])
-
-		#Neo
-		J = np.linalg.det(F)
-		if(J<=0):
-			print("F",F)
-			print("J", J)
-			print("Ds",Ds)
-			print("Dm",Dm)
-			print("xt, t",xt, t)
-			print("det(F) is 0 in ENERGY")
-			return 1e40		
-		I1 = np.trace(F.T.dot(F))
-		powj = math.pow(J, -2.0/3)
-		I1bar = powj*I1 
-
-		# neo_e = undef_area*(self.mu*(I1bar - self.dimensions)/2.0 + (J-0.0)*(J-0.0)*self.lambd/2.0)
-		neo_e = (self.mu/2.0)*(I1 - 2) - self.mu*math.log(J) + 0.5*self.lambd*math.log(J)*math.log(J)
-		return neo_e
-
-	def ElementForce(self, f, xt, t):
-		e = self.mesh.T[t]
-		undef_area = get_area(self.mesh.V[e[0]], self.mesh.V[e[1]], self.mesh.	V[e[2]])
-
-		c1 = xt[0:2] - xt[4:6]
-		c2 = xt[2:4] - xt[4:6]
-		Ds = np.column_stack((c1, c2))
-
-		d1 = np.array(self.mesh.V[e[0]]) - np.array(self.mesh.V[e[2]])
-		d2 = np.array(self.mesh.V[e[1]]) - np.array(self.mesh.V[e[2]])
-		Dm = np.column_stack(( d1, d2))
-		Dm = np.linalg.inv(Dm)
-
-		F = np.matmul(Ds, Dm)
-		# print(F)
-		#Neo
-		J = np.linalg.det(F)
-		if(J<=0):
-			print(F, xt, t)
-			print("det(F) is 0, instantaneous force too high")
-			exit()
-
-		I1 = np.trace(F.T.dot(F))
-		powj = math.pow(J, -2.0/3)
-		I1bar = powj*I1
-
-		# P = self.mu*(powj*F)+((-1*self.mu*I1*powj/self.dimensions) + self.lambd*(J-1)*J)*np.linalg.inv(F).T
-		P = self.mu*(F)  + (self.lambd*math.log(J) - self.mu)*np.transpose(np.linalg.inv(F))
-		
-		R = self.mesh.getR(t)
-		U = self.mesh.getU(t)
-		dFdS = np.multiply.outer(U.T.dot(R.T), U) #UtRt x U
-		
-		dSds = self.dSds()
-		dElastic_ds = np.tensordot(P, np.tensordot(dFdS, dSds, axes=([1,2],[1,2])), axes=([0,1],[0,1]))
-		print(dElastic_ds)
-		f[2*t:2*t+2] = dElastic_ds
-		# H = -1*undef_area*P.dot(Dm.T)
-		# f0 = H[:,0]
-		# f1 = H[:,1]
-		# f2 = -1*H[:,0] - H[:,1]
-		# f[2*e[0]:2*e[0]+2] += f0 
-		# f[2*e[1]:2*e[1]+2] += f1
-		# f[2*e[2]:2*e[2]+2] += f2
-		return P
-
 	def Energy(self, _q):
 		En = 0.0
 		GF = self.mesh.getGlobalF()[0]
@@ -676,10 +624,6 @@ class NeohookeanElastic:
 		xt = GF.dot(self.mesh.getA().dot(self.mesh.x0))
 		for t in range(len(self.mesh.T)):
 			self.ElementForce(self.f, xt[6*t:6*t+6], t)
-
-		#gravity
-		# for i in range(len(self.f)/2):
-		# 	self.f[2*i+1] += self.M[2*i+1, 2*i+1]*gravity 
 
 def FiniteDifferencesARAP():
 	eps = 1e-6
@@ -850,46 +794,23 @@ def FiniteDifferencesARAP():
 		print("")
 		print(real)
 
-	def check_jac_s():
-		arap.iterate(its=4)
-		Jac, dgds,drds = arap.Jacobian()
-
 	# check_dEdg()
-	# check_dEds()
+	check_dEds()
 	# check_dEdr()
 	# left = check_d_gradEgrdg()
 	# right = check_d_gradEgrdr()
 	# check_d_gradEgrds()
 
-	# check_dgds()
-	check_jac_s()
+	check_dgds()
+	# check_jac_s()
 
 # FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-6
+	eps = 1e-5
 	mesh = Mesh(rectangle_mesh(2,2) )
 	ne = NeohookeanElastic(imesh = mesh,ito_fix=[1,3])
 	arap = ARAP(imesh=mesh, ito_fix=[1,3])
-
-	def check_dEds():
-		mesh.q[2] = 0.5
-		e0 = ne.Energy(_q = mesh.q)
-
-		ne.Forces(_q=mesh.q)
-		J_arap, dgds, drds = arap.Jacobian()
-
-		real = ne.f
-		dEds = []
-
-		for i in range(len(mesh.T)):
-			for j in range(1,3):
-				mesh.q[3*i+j] += eps
-				dEds.append((ne.Energy(_q=mesh.q) -e0)/eps)
-				mesh.q[3*i+j] -= eps
-		
-		print("real",real)
-		print("fake", dEds)
 	
 	def check_PrinStretchEnergy():
 
@@ -914,13 +835,31 @@ def FiniteDifferencesElasticity():
 		print("real", real)
 		print("fake", dEds)
 
+	def check_gravityForce():
+		e0 = ne.GravityEnergy(iarap=arap)
+		print("E0", e0)
+
+		print("g", mesh.g)
+		real = ne.GravityForce(iarap = arap)
+
+		dEgds = []
+		for i in range(len(mesh.T)):
+			for j in range(1,3):
+				mesh.g = np.zeros(len(mesh.g)) + mesh.x0
+				mesh.q[3*i+j] += eps
+				e1 = ne.GravityEnergy(iarap=arap)
+				dEgds.append((e1 - e0)/eps)
+				print("g", mesh.g)
+				mesh.q[3*i+j] -= eps
+
+		print("real", real)
+		print("fake", dEgds)
+
 	# check_PrinStretchEnergy()
 	# check_PrinStretchForce()
-	check_dEds()
-	# check_dEdx()
-	# check_dEdF()
+	check_gravityForce()
 
-# FiniteDifferencesElasticity()
+FiniteDifferencesElasticity()
 
 class TimeIntegrator:
 
@@ -930,7 +869,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 0.25
+		self.adder = 0.1
 		# self.set_random_strain()
 
 
@@ -951,11 +890,17 @@ class TimeIntegrator:
 		# print(self.mesh.g)
 		if(self.time%5==0):
 			self.adder *=-1
-		self.mesh.g[2*self.mesh.fixed[0]] += self.adder
-		self.mesh.g[2*self.mesh.fixed[1]] += self.adder
+		self.mesh.g[2*self.mesh.fixed[0]] += 3*self.adder
+		self.mesh.g[2*self.mesh.fixed[1]] += 2*self.adder
 		self.mesh.g[2*self.mesh.fixed[2]] += self.adder
-		self.mesh.g[2*self.mesh.fixed[3]] += self.adder
-		self.mesh.g[2*self.mesh.fixed[4]] += self.adder
+		# self.mesh.g[2*self.mesh.fixed[3]] += self.adder
+		# self.mesh.g[2*self.mesh.fixed[4]] += self.adder
+
+		self.mesh.g[2*self.mesh.fixed[0]+1] += 3*self.adder
+		self.mesh.g[2*self.mesh.fixed[1]+1] += 2*self.adder
+		self.mesh.g[2*self.mesh.fixed[2]+1] += self.adder
+		# self.mesh.g[2*self.mesh.fixed[3]+1] += self.adder
+		# self.mesh.g[2*self.mesh.fixed[4]+1] += self.adder
 		self.time += 1
 
 	def only_solve_ARAP(self):
@@ -1034,12 +979,10 @@ class TimeIntegrator:
 		print("s", res.x)
 		print("g", self.mesh.g)
 
-
-
-
 def display():
-	mesh = Mesh(rectangle_mesh(5,5))
-	to_fix = [0,1,2,3,4,20,21,22,23,24]
+	mesh = Mesh(rectangle_mesh(3,3))
+	# to_fix = [0,1,2,3,4,20,21,22,23,24]
+	to_fix = [0,1,2,6,7,8]
 	neoh =NeohookeanElastic(imesh=mesh, ito_fix=to_fix)
 	arap = ARAP(imesh=mesh, ito_fix = to_fix)
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
@@ -1052,7 +995,7 @@ def display():
 		V2 = igl.eigen.MatrixXd(RV)
 		T2 = igl.eigen.MatrixXi(RT)
 		viewer.data.set_mesh(V2, T2)
-
+		print(DV)
 		red = igl.eigen.MatrixXd([[1,0,0]])
 		purple = igl.eigen.MatrixXd([[1,0,1]])
 		green = igl.eigen.MatrixXd([[0,1,0]])
@@ -1079,7 +1022,7 @@ def display():
 
 		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
 		
-		time_integrator.solve()
+		# time_integrator.solve()
 		return True
 
 	key_down(viewer, 'a', 1)
@@ -1087,4 +1030,4 @@ def display():
 	viewer.core.is_animating = False
 	viewer.launch()
 
-display()
+# display()
