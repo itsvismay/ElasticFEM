@@ -264,32 +264,32 @@ class ARAP:
 
 		lhs = np.concatenate((lhs_left, lhs_right), axis =1)
 		rhs = -1*self.d_gradEgrds()
-		print("Lhs")
-		print(lhs)
-		print("rhs")
-		print(rhs)
+		# print("Lhs")
+		# print(lhs)
+		# print("rhs")
+		# print(rhs)
 		invLHS = np.linalg.pinv(lhs)
 		SVDinv_Jac_s = np.matmul(invLHS, rhs)
 
 		dgds = SVDinv_Jac_s[0:lhs_left.shape[1],:]
 		drds = SVDinv_Jac_s[lhs_left.shape[1]:,:]
-		dgds = self.BLOCK.dot(dgds)
+		# dgds = self.BLOCK.dot(dgds)
 
 		
 		##KKT SOLVE
-		col1 = np.concatenate(( np.eye(lhs.shape[0]), lhs), axis =0)
-		col2 = np.concatenate((lhs.T, np.zeros(lhs.shape)), axis =0)
-		jacKKT = np.concatenate((col1, col2), axis =1)
-		jacChol, jacLower = scipy.linalg.lu_factor(jacKKT)
+		# col1 = np.concatenate(( np.eye(lhs.shape[0]), lhs), axis =0)
+		# col2 = np.concatenate((lhs.T, np.zeros(lhs.shape)), axis =0)
+		# jacKKT = np.concatenate((col1, col2), axis =1)
+		# jacChol, jacLower = scipy.linalg.lu_factor(jacKKT)
 
-		KKT_constrains = np.concatenate((rhs, np.zeros(rhs.shape)))	
-		inv_Jac_s = scipy.linalg.lu_solve((self.CholFac, self.Lower), KKT_constrains)
-		print("KKT")
-		print(inv_Jac_s)
+		# KKT_constrains = np.concatenate((rhs, np.zeros(rhs.shape)))	
+		# inv_Jac_s = scipy.linalg.lu_solve((self.CholFac, self.Lower), KKT_constrains)
+		# print("KKT")
+		# print(inv_Jac_s)
 
-		print("RESULTS")
-		print(dgds)
-		print(drds)
+		# print("RESULTS")
+		# print(dgds)
+		# print(drds)
 		dEds = np.matmul(self.dEdg(),dgds) + np.matmul(self.dEdr()[1], drds) + self.dEds()[1]
 
 		return dEds, dgds, drds
@@ -399,13 +399,13 @@ class ARAP:
 		USUtPAx = USUt.dot(self.PAx)
 
 		d_gEgdg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
-		d_gEgdg = self.BLOCK.T.dot(d_gEgdg.dot(self.BLOCK))
+		# d_gEgdg = self.BLOCK.T.dot(d_gEgdg.dot(self.BLOCK))
 		# print("dE,g/dg")
 		# print(d_gEgdg)
 
 		_dRdr = self.dRdr()
 		d_gErdg = np.tensordot(np.multiply.outer(-1*PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
-		d_gErdg = self.BLOCK.T.dot(d_gErdg)
+		# d_gErdg = self.BLOCK.T.dot(d_gErdg)
 		# print("dE,r/dg")
 		# print(d_gErdg)
 
@@ -420,7 +420,7 @@ class ARAP:
 		_dRdr = self.dRdr()
 		d_gEgdR = np.multiply.outer(-1*PA.T, USUtPAx.T)
 		d_gEgdr = np.tensordot(d_gEgdR, _dRdr, axes =([1,2],[0,1]))
-		d_gEgdr = self.BLOCK.T.dot(d_gEgdr)
+		# d_gEgdr = self.BLOCK.T.dot(d_gEgdr)
 		# print("dE,g/dr")
 		# print(d_gEgdr)		
 
@@ -442,7 +442,7 @@ class ARAP:
 
 		d_gEgdS = np.multiply.outer(-1*PAtRU, UtPAx.T)
 		d_gEgds = np.tensordot(d_gEgdS, _dSds, axes =([1,2],[0,1]))
-		d_gEgds = self.BLOCK.T.dot(d_gEgds)
+		# d_gEgds = self.BLOCK.T.dot(d_gEgds)
 		# print("dE,g/ds")
 		# print(d_gEgds)
 
@@ -893,7 +893,7 @@ def FiniteDifferencesARAP():
 	# check_drds()
 	# check_jac_s()
 
-FiniteDifferencesARAP()
+# FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-8
@@ -956,7 +956,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 0.1
+		self.adder = 0.05
 		# self.set_random_strain()
 
 
@@ -977,15 +977,15 @@ class TimeIntegrator:
 		# print(self.mesh.g)
 		if(self.time%5==0):
 			self.adder *=-1
-		self.mesh.g[2*self.mesh.fixed[0]] += 3*self.adder
-		self.mesh.g[2*self.mesh.fixed[1]] += 2*self.adder
+		self.mesh.g[2*self.mesh.fixed[0]] += self.adder
+		self.mesh.g[2*self.mesh.fixed[1]] += self.adder
 		self.mesh.g[2*self.mesh.fixed[2]] += self.adder
 		# self.mesh.g[2*self.mesh.fixed[3]] += self.adder
 		# self.mesh.g[2*self.mesh.fixed[4]] += self.adder
 
-		self.mesh.g[2*self.mesh.fixed[0]+1] += 3*self.adder
-		self.mesh.g[2*self.mesh.fixed[1]+1] += 2*self.adder
-		self.mesh.g[2*self.mesh.fixed[2]+1] += self.adder
+		# self.mesh.g[2*self.mesh.fixed[0]+1] += 3*self.adder
+		# self.mesh.g[2*self.mesh.fixed[1]+1] += 2*self.adder
+		# self.mesh.g[2*self.mesh.fixed[2]+1] += self.adder
 		# self.mesh.g[2*self.mesh.fixed[3]+1] += self.adder
 		# self.mesh.g[2*self.mesh.fixed[4]+1] += self.adder
 		self.time += 1
@@ -1067,10 +1067,10 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	mesh = Mesh(rectangle_mesh(2,2))
+	mesh = Mesh(rectangle_mesh(3,3))
 	# to_fix = [0,1,2,3,4,20,21,22,23,24]
-	# to_fix = [0,1,2,6,7,8]
-	to_fix = [1,3]
+	to_fix = [0,1,2,6,7,8]
+	# to_fix = [1,3]
 	neoh =NeohookeanElastic(imesh=mesh, ito_fix=to_fix)
 	arap = ARAP(imesh=mesh, ito_fix = to_fix)
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
@@ -1078,16 +1078,15 @@ def display():
 
 	def key_down(viewer, a, bbbb):
 		viewer.data.clear()
-		mesh.q[5] += 1e-3
-		arap.iterate(its =4)
-		print(mesh.q)
+		# mesh.q[5] += 1e-3
+		# arap.iterate(its =4)
+		# print(mesh.q)
 		DV, DT = mesh.getDiscontinuousVT()
 		RV, RT = mesh.getContinuousVT()
 		V2 = igl.eigen.MatrixXd(RV)
 		T2 = igl.eigen.MatrixXi(RT)
 		viewer.data.set_mesh(V2, T2)
-		print(mesh.g)
-		exit()
+		# print(mesh.g)
 		red = igl.eigen.MatrixXd([[1,0,0]])
 		purple = igl.eigen.MatrixXd([[1,0,1]])
 		green = igl.eigen.MatrixXd([[0,1,0]])
@@ -1115,7 +1114,7 @@ def display():
 		# print(cag)
 		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
 		
-		# time_integrator.solve()
+		time_integrator.solve()
 		return True
 
 	key_down(viewer, 'a', 1)
