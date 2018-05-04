@@ -226,6 +226,7 @@ class Mesh:
 		return self.Mass
 
 class ARAP:
+	#class vars
 
 	def __init__(self, imesh, ito_fix = []):
 		self.mesh = imesh
@@ -274,10 +275,21 @@ class ARAP:
 		drds = SVDinv_Jac_s[lhs_left.shape[1]:,:]
 		dgds = self.BLOCK.dot(dgds)
 
-		# print("RESULTS")
-		# print(dgds)
-		# print(drds)
 		
+		##KKT SOLVE
+		col1 = np.concatenate(( np.eye(lhs.shape[0]), lhs), axis =0)
+		col2 = np.concatenate((lhs.T, np.zeros(lhs.shape)), axis =0)
+		jacKKT = np.concatenate((col1, col2), axis =1)
+		jacChol, jacLower = scipy.linalg.lu_factor(jacKKT)
+
+		KKT_constrains = np.concatenate((rhs, np.zeros(rhs.shape)))	
+		inv_Jac_s = scipy.linalg.lu_solve((self.CholFac, self.Lower), KKT_constrains)
+		print("KKT")
+		print(inv_Jac_s)
+
+		print("RESULTS")
+		print(dgds)
+		print(drds)
 		dEds = np.matmul(self.dEdg(),dgds) + np.matmul(self.dEdr()[1], drds) + self.dEds()[1]
 
 		return dEds, dgds, drds
@@ -877,8 +889,8 @@ def FiniteDifferencesARAP():
 	# right = check_d_gradEgrdr()
 	# rhs = -1*check_d_gradEgrds()
 
-	# check_dgds()
-	check_drds()
+	check_dgds()
+	# check_drds()
 	# check_jac_s()
 
 FiniteDifferencesARAP()
