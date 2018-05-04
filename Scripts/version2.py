@@ -200,10 +200,11 @@ class Mesh:
 		return RecV, RecT
 
 	def getContinuousVT(self):
-		RecV = np.zeros((2*len(self.V), 2))
+		RecV = np.zeros((len(self.V), 2))
 		for i in range(len(self.g)/2):
 			RecV[i, 0] = self.g[2*i]
 			RecV[i, 1] = self.g[2*i+1]
+		
 		return RecV, self.T
 
 	def getMassMatrix(self):
@@ -261,14 +262,21 @@ class ARAP:
 		lhs_right = self.d_gradEgrdr()
 
 		lhs = np.concatenate((lhs_left, lhs_right), axis =1)
-		rhs = self.d_gradEgrds()
-
-		SVDinv_Jac_s = np.matmul(np.linalg.pinv(lhs), rhs)
+		rhs = -1*self.d_gradEgrds()
+		print("Lhs")
+		print(lhs)
+		print("rhs")
+		print(rhs)
+		invLHS = np.linalg.pinv(lhs)
+		SVDinv_Jac_s = np.matmul(invLHS, rhs)
 
 		dgds = SVDinv_Jac_s[0:lhs_left.shape[1],:]
-
-		dgds = self.BLOCK.dot(self.BLOCK.T.dot(dgds))
 		drds = SVDinv_Jac_s[lhs_left.shape[1]:,:]
+		dgds = self.BLOCK.dot(dgds)
+
+		# print("RESULTS")
+		# print(dgds)
+		# print(drds)
 		
 		dEds = np.matmul(self.dEdg(),dgds) + np.matmul(self.dEdr()[1], drds) + self.dEds()[1]
 
@@ -379,8 +387,15 @@ class ARAP:
 		USUtPAx = USUt.dot(self.PAx)
 
 		d_gEgdg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
+		d_gEgdg = self.BLOCK.T.dot(d_gEgdg.dot(self.BLOCK))
+		# print("dE,g/dg")
+		# print(d_gEgdg)
+
 		_dRdr = self.dRdr()
 		d_gErdg = np.tensordot(np.multiply.outer(-1*PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
+		d_gErdg = self.BLOCK.T.dot(d_gErdg)
+		# print("dE,r/dg")
+		# print(d_gErdg)
 
 		return np.concatenate((d_gEgdg, d_gErdg.T))
 
@@ -393,7 +408,11 @@ class ARAP:
 		_dRdr = self.dRdr()
 		d_gEgdR = np.multiply.outer(-1*PA.T, USUtPAx.T)
 		d_gEgdr = np.tensordot(d_gEgdR, _dRdr, axes =([1,2],[0,1]))
-		
+		d_gEgdr = self.BLOCK.T.dot(d_gEgdr)
+		# print("dE,g/dr")
+		# print(d_gEgdr)		
+
+
 		_ddRdrdr = self.d2Rdr2()
 		negPAg_USUtPAx = np.multiply.outer( -1*PA.dot(self.mesh.g), USUtPAx)
 		d_gErdr = np.tensordot(negPAg_USUtPAx, _ddRdrdr, axes = ([0,1],[1,2]))
@@ -410,8 +429,11 @@ class ARAP:
 		PAtRU = PA.T.dot(gR.dot(gU))
 
 		d_gEgdS = np.multiply.outer(-1*PAtRU, UtPAx.T)
-
 		d_gEgds = np.tensordot(d_gEgdS, _dSds, axes =([1,2],[0,1]))
+		d_gEgds = self.BLOCK.T.dot(d_gEgds)
+		# print("dE,g/ds")
+		# print(d_gEgds)
+
 
 		negPAg_U_UtPAx = np.multiply.outer(-1*PAg, np.multiply.outer(gU, UtPAx))
 		negPAg_U_UtPAx_dRdr = np.tensordot(negPAg_U_UtPAx, _dRdr, axes=([0,1],[0,1]))
@@ -519,14 +541,16 @@ class NeohookeanElastic:
 
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)
+		print(cag)
 		return e 
 
 	def GravityEnergy(self, iarap = None):
 		if(iarap is None):
 			print("Why is arap null?")
 			exit()
-		
+		# print("g0", self.mesh.g)
 		iarap.iterate(its=4)
+		print("g", self.mesh.g, iarap.Energy())
 		Eg = 0
 		rho = 1
 		grav = np.array([0, 9.81])
@@ -538,11 +562,11 @@ class NeohookeanElastic:
 			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
 			Eg += self.GravityElementEnergy(rho, grav, CAg[6*t:6*t+2], area, t)
 
+		print("	")
 		return Eg
 
 	def GravityElementForce(self, rho, area, grav, cadgds, t):
 		gt = rho*area*np.dot(grav, cadgds)
-		print(gt)
 		return gt
 
 	def GravityForce(self, iarap = None):
@@ -550,16 +574,30 @@ class NeohookeanElastic:
 			print("Why is arap null?")
 			exit()
 
+		# print("g0", self.mesh.g)
 		iarap.iterate(its=4)
-		print("Ea", iarap.Energy())
+		# print("g", self.mesh.g)
+		# print("Ea", iarap.Energy())
 		dgds = iarap.Jacobian()[1]
+		dgds = np.array([[-0.14292, 0.14294 ,-0.32147 ,0.10721],
+				 		[-0.07145, -0.64280, -0.10718, -0.53565],
+				 		[0.00000, 0.00000, 0.00000, 0.00000],
+				 		[0.00000, 0.00000, 0.00000, 0.00000],
+				 		[-0.07146, 0.07147 ,0.46419 ,0.17865],
+				 		[-0.03572, -0.32140, 0.07149, -0.64287],
+				 		[0.00000, 0.00000, 0.00000, 0.00000],
+				 		[0.00000, 0.00000, 0.00000, 0.00000]])
+
 
 		fg = np.zeros(2*len(self.mesh.T))
 		rho = 1
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 		
 		grav = np.array([0,9.81])
-
+		ggg = np.kron(np.ones(6), grav)
+		CA = self.mesh.getC().dot(self.mesh.getA())
+		# print(ggg)
+		# print(0.5*np.dot(ggg,CA).dot(dgds)/3.0)
 		CAdgds = self.mesh.getC().dot(self.mesh.getA().dot(dgds))
 		for t in range(len(self.mesh.T)):
 			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
@@ -626,7 +664,7 @@ class NeohookeanElastic:
 			self.ElementForce(self.f, xt[6*t:6*t+6], t)
 
 def FiniteDifferencesARAP():
-	eps = 1e-6
+	eps = 1e-3
 	mesh = Mesh(rectangle_mesh(2,2))
 	arap = ARAP(mesh, ito_fix=[1,3])
 	
@@ -741,6 +779,7 @@ def FiniteDifferencesARAP():
 				mesh.q[3*i+j] -= eps
 
 		print(np.linalg.norm(fake - real))
+		return real
 
 	def check_d_gradEgdS():
 		real = arap.d_gradEgrds()[0]
@@ -773,41 +812,79 @@ def FiniteDifferencesARAP():
 		print(dEgdS[:,:,0])
 		print(real[0])
 
+
 		# print(np.sum(np.multiply(dEgdS[:,:,0], _dSds[:,:,0])))
 		# print(np.sum(np.multiply(real[0,:,:], _dSds[:,:,0])))
 	
 	def check_dgds():
-		arap.iterate(its =4)
+		# arap.iterate(its =4)
 		Jac, real, drds = arap.Jacobian()
 
 		dgds = []
 		g0 = np.zeros(len(mesh.g)) + mesh.g 
+		q0 = np.zeros(len(mesh.q)) + mesh.q
 		for i in range(len(mesh.T)):
 			for j in range(1,3):
+				mesh.g = np.zeros(len(mesh.g)) + g0
+				# mesh.q = np.zeros(len(mesh.q)) + q0
 				mesh.q[3*i + j] += eps 
-				arap.itT()
+				arap.iterate(its=4)
 				dgds.append((mesh.g - g0)/eps)
 				mesh.q[3*i + j] -= eps
-				arap.itT()
-			
+		
+
+		print("fake")
 		print(np.array(dgds).T)
 		print("")
+		print("real")
+		print(real)
+
+	def check_drds():
+		# arap.iterate(its =4)
+		Jac, dgds, real = arap.Jacobian()
+
+		drds = []
+		g0 = np.zeros(len(mesh.g)) + mesh.g
+		q0 = np.zeros(len(mesh.q)) + mesh.q
+		
+		r0 = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
+		print("start")
+		print(r0)
+		for i in range(len(mesh.T)):
+			for j in range(1,3):
+				mesh.g = np.zeros(len(mesh.g)) + g0
+				mesh.q = np.zeros(len(mesh.q)) + q0
+				mesh.q[3*i + j] += eps 
+				arap.iterate(its=4)
+				r1 = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
+				print(r1)
+				print(mesh.g)
+				print(mesh.q)
+				drds.append((r1 - r0)/eps)
+				mesh.q[3*i + j] -= eps
+		
+
+		print("fake")
+		print(np.array(drds).T)
+		print("")
+		print("real")
 		print(real)
 
 	# check_dEdg()
-	check_dEds()
+	# check_dEds()
 	# check_dEdr()
 	# left = check_d_gradEgrdg()
 	# right = check_d_gradEgrdr()
-	# check_d_gradEgrds()
+	# rhs = -1*check_d_gradEgrds()
 
-	check_dgds()
+	# check_dgds()
+	check_drds()
 	# check_jac_s()
 
-# FiniteDifferencesARAP()
+FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-5
+	eps = 1e-8
 	mesh = Mesh(rectangle_mesh(2,2) )
 	ne = NeohookeanElastic(imesh = mesh,ito_fix=[1,3])
 	arap = ARAP(imesh=mesh, ito_fix=[1,3])
@@ -839,7 +916,6 @@ def FiniteDifferencesElasticity():
 		e0 = ne.GravityEnergy(iarap=arap)
 		print("E0", e0)
 
-		print("g", mesh.g)
 		real = ne.GravityForce(iarap = arap)
 
 		dEgds = []
@@ -849,7 +925,6 @@ def FiniteDifferencesElasticity():
 				mesh.q[3*i+j] += eps
 				e1 = ne.GravityEnergy(iarap=arap)
 				dEgds.append((e1 - e0)/eps)
-				print("g", mesh.g)
 				mesh.q[3*i+j] -= eps
 
 		print("real", real)
@@ -859,7 +934,7 @@ def FiniteDifferencesElasticity():
 	# check_PrinStretchForce()
 	check_gravityForce()
 
-FiniteDifferencesElasticity()
+# FiniteDifferencesElasticity()
 
 class TimeIntegrator:
 
@@ -980,9 +1055,10 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	mesh = Mesh(rectangle_mesh(3,3))
+	mesh = Mesh(rectangle_mesh(2,2))
 	# to_fix = [0,1,2,3,4,20,21,22,23,24]
-	to_fix = [0,1,2,6,7,8]
+	# to_fix = [0,1,2,6,7,8]
+	to_fix = [1,3]
 	neoh =NeohookeanElastic(imesh=mesh, ito_fix=to_fix)
 	arap = ARAP(imesh=mesh, ito_fix = to_fix)
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
@@ -990,12 +1066,16 @@ def display():
 
 	def key_down(viewer, a, bbbb):
 		viewer.data.clear()
+		mesh.q[5] += 1e-3
+		arap.iterate(its =4)
+		print(mesh.q)
 		DV, DT = mesh.getDiscontinuousVT()
 		RV, RT = mesh.getContinuousVT()
 		V2 = igl.eigen.MatrixXd(RV)
 		T2 = igl.eigen.MatrixXi(RT)
 		viewer.data.set_mesh(V2, T2)
-		print(DV)
+		print(mesh.g)
+		exit()
 		red = igl.eigen.MatrixXd([[1,0,0]])
 		purple = igl.eigen.MatrixXd([[1,0,1]])
 		green = igl.eigen.MatrixXd([[0,1,0]])
@@ -1020,6 +1100,7 @@ def display():
 		for i in range(len(mesh.T)):
 			cag.append(CAg[6*i:6*i+2])
 
+		# print(cag)
 		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
 		
 		# time_integrator.solve()
@@ -1030,4 +1111,4 @@ def display():
 	viewer.core.is_animating = False
 	viewer.launch()
 
-# display()
+display()
