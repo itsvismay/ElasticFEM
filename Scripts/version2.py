@@ -9,7 +9,7 @@ import sys, os
 import cProfile
 sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
-np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.8f}'.format(x)})
 
 #helpers
 def get_area(p1, p2, p3):
@@ -22,7 +22,7 @@ def rectangle_mesh(x, y):
 	V = []
 	for i in range(0,x):
 		for j in range(0,y):
-			V.append([i, j])
+			V.append([0.1*i, 0.1*j])
 	return V, Delaunay(V).simplices
 
 def torus_mesh(r1, r2):
@@ -79,7 +79,8 @@ class Mesh:
 		onVerts = np.zeros(len(self.V))
 		onVerts[to_fix] = 1
 		self.fixedOnElement = self.getA().dot(np.kron(onVerts, np.ones(2)))
-		
+		if(len(to_fix) == len(self.V)):
+			return np.array([[]]), np.eye(2*len(self.V))
 		b = np.kron(np.delete(np.eye(len(self.V)), to_fix, axis =1), np.eye(2))
 
 		ab = np.zeros(len(self.V))
@@ -93,7 +94,6 @@ class Mesh:
 		
 
 		return b, anti_b
-
 
 	def getP(self):
 		if(self.P is None):
@@ -178,6 +178,7 @@ class Mesh:
 		C = self.getC()
 		CAg = C.dot(self.getA().dot(self.g))
 		Ax = self.getA().dot(self.x0)
+		# print("CFPAx",)
 		new = F.dot(self.getP().dot(Ax)) + CAg
 
 		
@@ -259,44 +260,20 @@ class ARAP:
 		return en
 
 	def Jacobian(self, block = False, kkt= True):
-		lhs_left = self.d_gradEgrdg(block = block)
-		lhs_right = self.d_gradEgrdr(block = block)
+		lhs_left = np.concatenate((self.Hess_Egg(block = block), self.Hess_Erg(block=block).T))
+		lhs_right = np.concatenate((self.Hess_Erg(block = block),self.Hess_Err(block=block)))
 
 		lhs = np.concatenate((lhs_left, lhs_right), axis =1)
-		rhs = -1*self.d_gradEgrds(block = block)
+		rhs = -1*np.concatenate((self.Hess_Egs(block=block), self.Hess_Ers(block=block)))
+
 		#Constraining Rotation
-		R = np.eye(len(self.mesh.T))
-		# R = np.array([[],[]]).T
-		# print("R=")
-		# print(R)
-		# print("C=")
-		# print(self.ANTI_BLOCK)
-		print("lhs =")
-		print(lhs)
-		print("rhs =")
-		print(rhs)
+		# R = np.eye(len(self.mesh.T))
+		R = np.array([[] for i in self.mesh.T]).T
+		# R = np.array([[0,1]])
 
-		##SVD Solve
-		# if True:
-		# 	invLHS = np.linalg.pinv(lhs)
-		# 	Jac_s = np.matmul(invLHS, rhs)
-		# 	print("SVD")
-		# 	print(Jac_s)
-
-		##KKT SOLVE
-		# if kkt:
-		# 	col1 = np.concatenate(( np.eye(lhs.shape[0]), lhs), axis =0)
-		# 	col2 = np.concatenate((lhs.T, np.zeros(lhs.shape)), axis =0)
-		# 	jacKKT = np.concatenate((col1, col2), axis =1)
-		# 	jacChol, jacLower = scipy.linalg.lu_factor(jacKKT)
-
-		# 	KKT_constrains = np.concatenate((np.zeros(rhs.shape), rhs))	
-			
-		# 	Jac_s = scipy.linalg.lu_solve((jacChol, jacLower), KKT_constrains)[0:rhs.shape[0], :]
 
 		#NEW KKT SOLVE
 		if kkt:
-			print("NEW KKT")
 			C = self.ANTI_BLOCK.T
 			g_size = C.shape[1]
 			gb_size = C.shape[0]
@@ -305,38 +282,31 @@ class ARAP:
 		
 			
 			col1 = np.concatenate((lhs_left, np.concatenate((C, np.zeros((rb_size, g_size))))))
-			print("col", col1.shape)
+			# print("col", col1.shape)
 
 			col2 = np.concatenate((lhs_right, np.concatenate((np.zeros((gb_size, r_size)), R))))
-			print("col", col2.shape)
+			# print("col", col2.shape)
 
 			col3 = np.concatenate((C.T, np.concatenate((np.zeros((r_size, gb_size)), np.concatenate((np.zeros((gb_size, gb_size)), np.zeros((rb_size, gb_size))))))) )
-			print("col", col3.shape)
+			# print("col", col3.shape)
 
 			col4 = np.concatenate(( np.concatenate((np.zeros((g_size, rb_size)), R.T)), 
 				np.concatenate((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
-			print("col", col4.shape)
+			# print("col", col4.shape)
 
 			jacKKT = np.hstack((col1, col2, col3, col4))
 			jacChol, jacLower = scipy.linalg.lu_factor(jacKKT)
-
 			KKT_constrains = np.concatenate((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
-			# print(KKT_constrains.shape, rhs.shape)
-			Jac_s = scipy.linalg.lu_solve((jacChol, jacLower), KKT_constrains)
-			# print(Jac_s)
-			Jac_s = Jac_s[0:rhs.shape[0], :]
 
-		
-		dgds = Jac_s[0:lhs_left.shape[1],:]
-		drds = Jac_s[lhs_left.shape[1]:,:]
+			Jac_s = scipy.linalg.lu_solve((jacChol, jacLower), KKT_constrains)
+			results = Jac_s[0:rhs.shape[0], :]
+
+
+		dgds = results[0:lhs_left.shape[1],:]
+		drds = results[lhs_left.shape[1]:,:]
 		
 		if block:
 			dgds = self.BLOCK.dot(dgds)
-		
-
-		# print("RESULTS")
-		# print("altres =")
-		# print(Jac_s)
 
 		dEds = np.matmul(self.dEdg(),dgds) + np.matmul(self.dEdr()[1], drds) + self.dEds()[1]
 
@@ -441,72 +411,74 @@ class ARAP:
 				_dSds = np.dstack([_dSds, gdSdsx, gdSdsy])
 		return _dSds
 
-	def d_gradEgrdg(self, block = False):
+	def Hess_Egg(self, block =False):
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		gF, gR, gS, gU = self.mesh.getGlobalF()
 		USUt = gU.dot(gS.dot(gU.T))
 		USUtPAx = USUt.dot(self.PAx)
 
-		d_gEgdg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
+		Egg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
 		if block:
-			d_gEgdg = self.BLOCK.T.dot(d_gEgdg.dot(self.BLOCK))
-		# print("dE,g/dg")
-		# print(d_gEgdg)
+			Egg = self.BLOCK.T.dot(Egg.dot(self.BLOCK))
 
-		_dRdr = self.dRdr()
-		d_gErdg = np.tensordot(np.multiply.outer(-1*PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
-		if block:
-			d_gErdg = self.BLOCK.T.dot(d_gErdg)
-		# print("dE,r/dg")
-		# print(d_gErdg)
+		return Egg
 
-		return np.concatenate((d_gEgdg, d_gErdg.T))
-
-	def d_gradEgrdr(self, block = False):
+	def Hess_Erg(self, block=False):
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		gF, gR, gS, gU = self.mesh.getGlobalF()
 		USUt = gU.dot(gS.dot(gU.T))
 		USUtPAx = USUt.dot(self.PAx)
 
 		_dRdr = self.dRdr()
-		d_gEgdR = np.multiply.outer(-1*PA.T, USUtPAx.T)
-		d_gEgdr = np.tensordot(d_gEgdR, _dRdr, axes =([1,2],[0,1]))
+		Erg = np.tensordot(np.multiply.outer(-1*PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
 		if block:
-			d_gEgdr = self.BLOCK.T.dot(d_gEgdr)
-		# print("dE,g/dr")
-		# print(d_gEgdr)		
+			Erg = self.BLOCK.T.dot(Erg)
 
+		return Erg
+
+	def Hess_Err(self, block=False):
+		PA = self.mesh.getP().dot(self.mesh.getA())
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		USUt = gU.dot(gS.dot(gU.T))
+		USUtPAx = USUt.dot(self.PAx)
 
 		_ddRdrdr = self.d2Rdr2()
 		negPAg_USUtPAx = np.multiply.outer( -1*PA.dot(self.mesh.g), USUtPAx)
-		d_gErdr = np.tensordot(negPAg_USUtPAx, _ddRdrdr, axes = ([0,1],[1,2]))
-		
-		return np.concatenate((d_gEgdr, d_gErdr))
+		Err = np.tensordot(negPAg_USUtPAx, _ddRdrdr, axes = ([0,1],[1,2]))
+		return Err
 
-	def d_gradEgrds(self, block = False):
+	def Hess_Egs(self, block=False):
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		gF, gR, gS, gU = self.mesh.getGlobalF()
 		UtPAx = gU.T.dot(PA.dot(self.mesh.x0))
 		PAg = PA.dot(self.mesh.g)
 		_dSds = self.dSds()
-		_dRdr = self.dRdr()
+		
 		PAtRU = PA.T.dot(gR.dot(gU))
 
 		d_gEgdS = np.multiply.outer(-1*PAtRU, UtPAx.T)
 		d_gEgds = np.tensordot(d_gEgdS, _dSds, axes =([1,2],[0,1]))
 		if block:
 			d_gEgds = self.BLOCK.T.dot(d_gEgds)
-		# print("dE,g/ds")
-		# print(d_gEgds)
 
+		return d_gEgds
+
+	def Hess_Ers(self, block=False):
+		PA = self.mesh.getP().dot(self.mesh.getA())
+		gF, gR, gS, gU = self.mesh.getGlobalF()
+		UtPAx = gU.T.dot(PA.dot(self.mesh.x0))
+		PAg = PA.dot(self.mesh.g)
+		_dSds = self.dSds()
+		_dRdr = self.dRdr()
 
 		negPAg_U_UtPAx = np.multiply.outer(-1*PAg, np.multiply.outer(gU, UtPAx))
 		negPAg_U_UtPAx_dRdr = np.tensordot(negPAg_U_UtPAx, _dRdr, axes=([0,1],[0,1]))
 		d_gErds = np.tensordot(negPAg_U_UtPAx_dRdr, _dSds, axes=([0,1],[0,1]))
 
-		return np.concatenate((d_gEgds, d_gErds))
+		return d_gErds
 
 	def itR(self):
+
 		theta_list = []
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		Ax = self.mesh.getA().dot(self.mesh.x0)
@@ -516,13 +488,14 @@ class ARAP:
 			# 	PAx_e = self.PAx[6*i:6*i+6]
 			# elif(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) == 2):
 			# 	print("One rotation")
-			# 	rotate_around = np.concatenate(
-			# 		(np.diag(self.mesh.fixedOnElement[6*i:6*i+2]),
-			# 			np.diag(self.mesh.fixedOnElement[6*i+2:6*i+4]),
-			# 			np.diag(self.mesh.fixedOnElement[6*i+4:6*i+6])), axis =1)
-			# 	r = np.eye(6) - np.concatenate((rotate_around, rotate_around, rotate_around))
-			# 	# print(r)
-			# 	PAx_e = r.dot(Ax[6*i:6*i+6])
+			# 	PAx_e = self.PAx[6*i:6*i+6]
+			# 	# rotate_around = np.concatenate(
+			# 	# 	(np.diag(self.mesh.fixedOnElement[6*i:6*i+2]),
+			# 	# 		np.diag(self.mesh.fixedOnElement[6*i+2:6*i+4]),
+			# 	# 		np.diag(self.mesh.fixedOnElement[6*i+4:6*i+6])), axis =1)
+			# 	# r = np.eye(6) - np.concatenate((rotate_around, rotate_around, rotate_around))
+			# 	# # print(r)
+			# 	# PAx_e = r.dot(Ax[6*i:6*i+6])
 
 			# elif(np.sum(self.mesh.fixedOnElement[6*i:6*i+6]) >= 3):
 			# 	print("No rotation")
@@ -546,11 +519,20 @@ class ARAP:
 
 			u, s, vt = np.linalg.svd(F, full_matrices=True)
 			R = np.matmul(vt.T, u.T)
+			# print(R)
 			veca = np.array([1,0])
 			vecb = np.dot(R, veca)
+
 			theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
+			# print("theta", theta)
+			#check angle sign
+			c, s = np.cos(theta), np.sin(theta)
+			R_check = np.array(((c,-s), (s, c)))
+
+			if(np.linalg.norm(R-R_check)<1e-8):
+				theta *=-1
+
 			theta_list.append(theta)
-			# print(theta)
 			self.mesh.q[3*i] = theta
 
 		return theta_list
@@ -571,15 +553,12 @@ class ARAP:
 		return 1
 
 	def iterate(self, its=1):
-		eps = 1e-4
+		eps = 1e-5
 		E0 = self.Energy()
-		for i in range(its):
-			r = self.itR()
+		for i in range(100):
 			g = self.itT()
-			E1 = self.Energy()
-			if(abs(E0 - E1)< eps):
-				return
-			E0 = E1
+			r = self.itR()
+		# print("ARAP grad", np.linalg.norm(self.dEdg()) + np.linalg.norm(self.dEdr()[0]))		
 
 class NeohookeanElastic:
 
@@ -596,6 +575,9 @@ class NeohookeanElastic:
 		self.lambd = youngs*poissons/((1+poissons)*(1-2*poissons))
 		self.dimensions = 2
 
+		self.grav = np.array([0,-9.81])*10
+		self.rho = 1
+
 	def dSds(self):
 		#2x2x2 version of dSds (for each element)
 		dSdsx = np.array([[1,0],[0,0]])
@@ -606,28 +588,22 @@ class NeohookeanElastic:
 
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)
-		print(cag)
 		return e 
 
 	def GravityEnergy(self, iarap = None):
 		if(iarap is None):
 			print("Why is arap null?")
 			exit()
-		# print("g0", self.mesh.g)
-		iarap.iterate(its=4)
-		print("g", self.mesh.g, iarap.Energy())
+
 		Eg = 0
-		rho = 1
-		grav = np.array([0, 9.81])
 		
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.g))
 
 		for t in range(len(self.mesh.T)):
 			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
-			Eg += self.GravityElementEnergy(rho, grav, CAg[6*t:6*t+2], area, t)
+			Eg += self.GravityElementEnergy(self.rho, self.grav, CAg[6*t:6*t+2], area, t)
 
-		print("	")
 		return Eg
 
 	def GravityElementForce(self, rho, area, grav, cadgds, t):
@@ -639,36 +615,17 @@ class NeohookeanElastic:
 			print("Why is arap null?")
 			exit()
 
-		# print("g0", self.mesh.g)
-		iarap.iterate(its=4)
-		# print("g", self.mesh.g)
-		# print("Ea", iarap.Energy())
 		dgds = iarap.Jacobian()[1]
-		dgds = np.array([[-0.14292, 0.14294 ,-0.32147 ,0.10721],
-				 		[-0.07145, -0.64280, -0.10718, -0.53565],
-				 		[0.00000, 0.00000, 0.00000, 0.00000],
-				 		[0.00000, 0.00000, 0.00000, 0.00000],
-				 		[-0.07146, 0.07147 ,0.46419 ,0.17865],
-				 		[-0.03572, -0.32140, 0.07149, -0.64287],
-				 		[0.00000, 0.00000, 0.00000, 0.00000],
-				 		[0.00000, 0.00000, 0.00000, 0.00000]])
-
 
 		fg = np.zeros(2*len(self.mesh.T))
-		rho = 1
-		Ax = self.mesh.getA().dot(self.mesh.x0)
 		
-		grav = np.array([0,9.81])
-		ggg = np.kron(np.ones(6), grav)
-		CA = self.mesh.getC().dot(self.mesh.getA())
-		# print(ggg)
-		# print(0.5*np.dot(ggg,CA).dot(dgds)/3.0)
+		Ax = self.mesh.getA().dot(self.mesh.x0)
+				
 		CAdgds = self.mesh.getC().dot(self.mesh.getA().dot(dgds))
 		for t in range(len(self.mesh.T)):
 			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
-			fg -= self.GravityElementForce(rho, area, grav, CAdgds[6*t:6*t+2, :], t)
+			fg -= self.GravityElementForce(self.rho, area, self.grav, CAdgds[6*t:6*t+2, :], t)
 
-		print("")
 		return fg
 
 	def PrinStretchElementEnergy(self, sx, sy):
@@ -683,6 +640,7 @@ class NeohookeanElastic:
 			return -1*self.mu*math.log(xy) + 0.5*self.lambd*math.log(xy)*math.log(xy)
 
 		E =  f(sx) + f(sy) + h(sx*sy)
+
 		if(E<0):
 			print(sx, sy)
 			print(f(sx), f(sy), h(sx*sy))
@@ -706,30 +664,24 @@ class NeohookeanElastic:
 		return En
 
 	def PrinStretchForce(self, _q):
+		# print(_q)
 		force = np.zeros(2*len(self.mesh.T))
 		for t in range(len(self.mesh.T)):
 			force[2*t:2*t +2] = self.PrinStretchElementForce(_q[3*t + 1], _q[3*t + 2])
 		return force
 
-	def Energy(self, _q):
-		En = 0.0
-		GF = self.mesh.getGlobalF()[0]
-		xt = GF.dot(self.mesh.getA().dot(self.mesh.x0))
-		# print(xt)
-		for t in range(len(self.mesh.T)):
-			En += self.ElementEnergy(xt[6*t:6*t+6], t)
+	def Energy(self, iarap, iq):
+		e1 =  self.GravityEnergy(iarap = iarap) 
+		e2 = self.PrinStretchEnergy(_q=iq)
+		return e1+e2
 
-		return En
-
-	def Forces(self, _q):
-		self.f.fill(0)
-		GF = self.mesh.getGlobalF()[0]
-		xt = GF.dot(self.mesh.getA().dot(self.mesh.x0))
-		for t in range(len(self.mesh.T)):
-			self.ElementForce(self.f, xt[6*t:6*t+6], t)
+	def Forces(self, iarap, iq):
+		f1 =  self.GravityForce(iarap = iarap)
+		f2 = self.PrinStretchForce(_q=iq)
+		return f1+f2
 
 def FiniteDifferencesARAP():
-	eps = 1e-4
+	eps = 1e-5
 	mesh = Mesh(rectangle_mesh(2,2))
 	arap = ARAP(mesh, ito_fix=[1,3])
 	
@@ -780,12 +732,17 @@ def FiniteDifferencesARAP():
 		realdEdR, realdEdr = arap.dEdr()
 		dEdr = []
 		for i in range(len(mesh.T)):
-			mesh.q[3*i] += eps
+			mesh.q[3*i] += 0.5*eps
 			F,R,S,U = mesh.getGlobalF()
-			Ei = arap.energy(_g =mesh.g, _R=R, _S=S0, _U=U0)
-			dEdr.append((Ei - E0)/eps)
-			mesh.q[3*i] -= eps
+			Eleft = arap.energy(_g =mesh.g, _R=R, _S=S0, _U=U0)
+			mesh.q[3*i] -= 0.5*eps
 
+			mesh.q[3*i] -= 0.5*eps
+			F,R,S,U = mesh.getGlobalF()
+			Eright = arap.energy(_g =mesh.g, _R=R, _S=S0, _U=U0)
+			mesh.q[3*i] += 0.5*eps
+
+			dEdr.append((Eleft - Eright)/eps)
 		print(np.sum(np.array(dEdr) - realdEdr))
 
 	def check_d_gradEgrdg():
@@ -845,7 +802,7 @@ def FiniteDifferencesARAP():
 				fake[len(mesh.g): ,2*i+(j-1)] = (arap.dEdr()[1] - dEdr[1])/eps
 				mesh.q[3*i+j] -= eps
 
-		print(np.linalg.norm(fake - real))
+		print(np.linalg.norm(fake[8:10,:] - real[8:10,:]))
 		return real
 
 	def check_d_gradEgdS():
@@ -884,8 +841,9 @@ def FiniteDifferencesARAP():
 		# print(np.sum(np.multiply(real[0,:,:], _dSds[:,:,0])))
 	
 	def check_Hessian_dEdgdg():
-		Egg = []
+		real = arap.Hess_Egg()
 
+		Egg = []
 		dg = np.zeros(len(mesh.g)) + mesh.g
 		for i in range(len(mesh.g)):
 			Egg.append([])
@@ -908,12 +866,12 @@ def FiniteDifferencesARAP():
 		
 
 		print("Egg")
-		print(np.array(Egg))
-		Jac, real1, real2 = arap.Jacobian()
+		print(np.sum(np.array(Egg) - real))
 
 	def check_Hessian_dEdrdg():
-		Erg = []
+		real = arap.Hess_Erg()
 
+		Erg = []
 		dg = np.zeros(len(mesh.g)) + mesh.g
 		for i in range(len(mesh.g)):
 			Erg.append([])
@@ -938,12 +896,12 @@ def FiniteDifferencesARAP():
 				Erg[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 
 		print("Erg")
-		print(np.array(Erg))
-		Jac, real1, real2 = arap.Jacobian()
+		print(np.sum(np.array(Erg) - real))
 
 	def check_Hessian_dEdrdr():
-		Err = []
+		real = arap.Hess_Err()
 
+		Err = []
 		for i in range(len(mesh.T)):
 			Err.append([])
 			for j in range(len(mesh.T)):
@@ -967,12 +925,12 @@ def FiniteDifferencesARAP():
 				Err[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 
 		print("Err")
-		print(np.array(Err))
-		Jac, real1, real2 = arap.Jacobian()
+		print(np.sum(np.array(Err) - real))
 	
 	def check_Hessian_dEdrds():
-		Ers = []
+		real = arap.Hess_Ers()
 
+		Ers = []
 		for i in range(len(mesh.T)):
 			Ers.append([])
 			for j in range(len(mesh.T)):
@@ -997,12 +955,40 @@ def FiniteDifferencesARAP():
 					Ers[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 
 		print("Ers")
-		print(np.array(Ers))
-		Jac, real1, real2 = arap.Jacobian()
+		print(np.sum(np.array(Ers) - real))
 
+	def check_Hessian_dEdgds():
+		real = arap.Hess_Egs()
+
+		Egs = []
+		dg = np.zeros(len(mesh.g)) + mesh.g
+		for i in range(len(mesh.g)):
+			Egs.append([])
+			for j in range(len(mesh.T)):
+				for k in range(1,3):
+					dg[i] += eps
+					mesh.q[3*j+k] += eps
+					F,R,S,U = mesh.getGlobalF()
+					Eij = arap.energy(_g =dg, _R=R0, _S=S, _U=U0)
+					mesh.q[3*j+k] -= eps
+					dg[i] -= eps
+
+					dg[i] += eps
+					F,R,S,U = mesh.getGlobalF()
+					Ei = arap.energy(_g=dg, _R =R0, _S=S, _U=U0)
+					dg[i] -= eps
+
+					mesh.q[3*j+k] += eps
+					F,R,S,U = mesh.getGlobalF()
+					Ej = arap.energy(_g =dg, _R=R, _S=S, _U=U0)
+					mesh.q[3*j+k] -= eps
+
+					Egs[i].append((Eij - Ei - Ej + E0)/(eps*eps))
+
+		print("Egs")
+		print(np.sum(np.array(Egs) - real))
 
 	def check_dgds():
-		# arap.iterate(its =4)
 		Jac, real1, real2 = arap.Jacobian()
 
 		dgds = []
@@ -1013,16 +999,34 @@ def FiniteDifferencesARAP():
 		for i in range(len(mesh.T)):
 			for j in range(1,3):
 				mesh.g = np.zeros(len(mesh.g)) + g0
-				# mesh.q = np.zeros(len(mesh.q)) + q0
-				mesh.q[3*i + j] += eps 
-				arap.iterate(its=4)
-				r1 = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
-				dgds.append((mesh.g - g0)/eps)
-				drds.append((r1 - r0)/eps)
-				mesh.q[3*i + j] -= eps
-		
 
-		print("fake")
+				mesh.q[3*i + j] += 0.5*eps 
+				arap.iterate()
+				r1 = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
+				# print("r1",r1)
+				dgds_left =mesh.g + np.zeros(len(mesh.g))
+				drds_left = r1
+				# print("g", mesh.g)
+				# print("CAg", mesh.getC().dot(mesh.getA().dot(mesh.g)))
+				# print("disc.", mesh.getDiscontinuousVT()[0])
+				mesh.q[3*i + j] -= 0.5*eps
+				arap.iterate()
+
+				mesh.q[3*i + j] -= 0.5*eps 
+				arap.iterate()
+				r2 = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
+				dgds_right =mesh.g + np.zeros(len(mesh.g))
+				drds_right = r2
+				mesh.q[3*i + j] += 0.5*eps
+				arap.iterate()
+				# print(r2)
+				# print((drds_left - r0)/(0.5*eps))
+				dgds.append((dgds_left - dgds_right)/(eps))
+				drds.append((drds_left - drds_right)/(eps))
+				# exit()
+				
+
+		print("FD")
 		print(np.array(dgds).T)
 		print(np.array(drds).T)
 		print("")
@@ -1030,39 +1034,14 @@ def FiniteDifferencesARAP():
 		print(real1)
 		print(real2)
 		print("DIFF")
-		print(np.linalg.norm(real1 - np.array(dgds).T))
-		print(np.linalg.norm(real2 - np.array(drds).T))	
+		print("dgds:", np.linalg.norm(real1 - np.array(dgds).T))
+		print("drds:", np.linalg.norm(real2 - np.array(drds).T))
 
-	def check_drds():
-		# arap.iterate(its =4)
-		Jac, dgds, real = arap.Jacobian()
-
-		drds = []
-		g0 = np.zeros(len(mesh.g)) + mesh.g
-		q0 = np.zeros(len(mesh.q)) + mesh.q
-		
-		r0 = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
-		print("start")
-		print(r0)
-		for i in range(len(mesh.T)):
-			for j in range(1,3):
-				mesh.g = np.zeros(len(mesh.g)) + g0
-				mesh.q = np.zeros(len(mesh.q)) + q0
-				mesh.q[3*i + j] += eps 
-				arap.iterate(its=4)
-				r1 = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
-				print(r1)
-				print(mesh.g)
-				print(mesh.q)
-				drds.append((r1 - r0)/eps)
-				mesh.q[3*i + j] -= eps
-		
-
-		print("fake")
-		print(np.array(drds).T)
-		print("")
-		print("real")
-		print(real)
+	def test():
+		mesh.q[1] = 1.2
+		arap.iterate(its=4)
+		print(mesh.g)
+		print(mesh.getDiscontinuousVT()[0])
 
 	# check_dEdg()
 	# check_dEds()
@@ -1074,63 +1053,69 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
-	check_Hessian_dEdrds()
-	# check_dgds()
-	# check_drds()
-	# check_jac_s()
+	# check_Hessian_dEdrds()
+	# check_Hessian_dEdgds()
+	check_dgds()
+	# test()
 
-FiniteDifferencesARAP()
+# FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-8
+	eps = 1e-4
 	mesh = Mesh(rectangle_mesh(2,2) )
 	ne = NeohookeanElastic(imesh = mesh,ito_fix=[1,3])
 	arap = ARAP(imesh=mesh, ito_fix=[1,3])
 	
-	def check_PrinStretchEnergy():
-
-		e0 = ne.Energy(_q = mesh.q)
-
-		e1 = ne.PrinStretchEnergy(_q = mesh.q)
-
-		print(e0, e1)
 
 	def check_PrinStretchForce():
-		mesh.q[2] = 0.5
 		e0 = ne.PrinStretchEnergy(_q = mesh.q)
 		real = ne.PrinStretchForce(_q = mesh.q)
-
+		print("e0", e0)
 		dEds = []
 		for i in range(len(mesh.T)):
 			for j in range(1,3):
 				mesh.q[3*i+j] += eps
-				dEds.append((ne.PrinStretchEnergy(_q=mesh.q) -e0)/eps)
+				left = ne.PrinStretchEnergy(_q=mesh.q)
 				mesh.q[3*i+j] -= eps
+
+				mesh.q[3*i+j] -= eps
+				right = ne.PrinStretchEnergy(_q=mesh.q)
+				mesh.q[3*i+j] += eps
+
+				dEds.append((left - right)/(2*eps))
 
 		print("real", real)
 		print("fake", dEds)
+		print("Diff", np.sum(real - np.array(dEds)))
 
 	def check_gravityForce():
 		e0 = ne.GravityEnergy(iarap=arap)
 		print("E0", e0)
-
-		real = ne.GravityForce(iarap = arap)
+		arap.iterate()
+		
+		real = -1*ne.GravityForce(iarap = arap)
 
 		dEgds = []
 		for i in range(len(mesh.T)):
 			for j in range(1,3):
 				mesh.g = np.zeros(len(mesh.g)) + mesh.x0
 				mesh.q[3*i+j] += eps
+				arap.iterate()
 				e1 = ne.GravityEnergy(iarap=arap)
 				dEgds.append((e1 - e0)/eps)
 				mesh.q[3*i+j] -= eps
+				arap.iterate()
 
 		print("real", real)
 		print("fake", dEgds)
+		print("Diff", np.sum(real - np.array(dEgds)))
 
-	# check_PrinStretchEnergy()
+	def test():
+		ne.Energy(iarap=arap, iq=mesh.q)
+		ne.Forces(iarap=arap, iq=mesh.q)
 	# check_PrinStretchForce()
-	check_gravityForce()
+	# check_gravityForce()
+	# test()
 
 # FiniteDifferencesElasticity()
 
@@ -1142,7 +1127,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 0.05
+		self.adder = 0.01
 		# self.set_random_strain()
 
 
@@ -1163,9 +1148,9 @@ class TimeIntegrator:
 		# print(self.mesh.g)
 		if(self.time%5==0):
 			self.adder *=-1
-		self.mesh.g[2*self.mesh.fixed[0]] += self.adder
-		self.mesh.g[2*self.mesh.fixed[1]] += self.adder
-		# self.mesh.g[2*self.mesh.fixed[2]] += self.adder
+		self.mesh.g[2*self.mesh.fixed[0]+1] += self.adder
+		self.mesh.g[2*self.mesh.fixed[1]+1] += self.adder
+		self.mesh.g[2*self.mesh.fixed[2]+1] += self.adder
 		# self.mesh.g[2*self.mesh.fixed[3]] += self.adder
 		# self.mesh.g[2*self.mesh.fixed[4]] += self.adder
 
@@ -1208,10 +1193,9 @@ class TimeIntegrator:
 			self.mesh.q[3*i+1] = res.x[2*i]
 			self.mesh.q[3*i+2] = res.x[2*i+1]
 
-
 	def solve(self):
 		self.iterate()
-		self.arap.iterate(its=4)
+		self.arap.iterate()
 		s0 = []
 		for i in range(len(self.mesh.T)):
 			s0.append(self.mesh.q[3*i +1])
@@ -1222,26 +1206,25 @@ class TimeIntegrator:
 				self.mesh.q[3*i + 1] = s[2*i]
 				self.mesh.q[3*i + 2] = s[2*i +1]
 
-			self.arap.iterate(its=4)
+			self.arap.iterate()
 			E_arap = self.arap.Energy()
-			E_elastic = self.elastic.PrinStretchEnergy(_q=self.mesh.q)
-			print("E", 1e5*E_arap, E_elastic)
-			return 1e5*E_arap + E_elastic
+			E_elastic = self.elastic.Energy(iarap =self.arap, iq=self.mesh.q)
+			print("E", 1e10*E_arap, E_elastic)
+			return 1e10*E_arap + E_elastic
 
 		def jacobian(s):
-			print("q", s)
 			for i in range(len(s)/2):
 				self.mesh.q[3*i + 1] = s[2*i]
 				self.mesh.q[3*i + 2] = s[2*i +1]
 
-			self.arap.iterate(its=4)
+			# self.arap.iterate()
 			# print("g", self.mesh.g)
+
 			J_arap, dgds, drds = self.arap.Jacobian()
-			
-			J_elastic = self.elastic.PrinStretchForce(_q = self.mesh.q)
+			J_elastic = self.elastic.Forces(iarap=self.arap, iq = self.mesh.q)
 
 			# print("Jac", J_arap, J_elastic)
-			return 1e5*J_arap + J_elastic
+			return 1e10*J_arap + J_elastic
 		
 		# res = scipy.optimize.minimize(energy, s0, method='Nelder-Mead',  options={'gtol': 1e-6, 'disp': True})
 		res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True, 'eps':1e-08})
@@ -1253,11 +1236,11 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	mesh = Mesh(triangle_mesh())
+	mesh = Mesh(rectangle_mesh(3,3))
 	# to_fix = [0,1,2,3,4,20,21,22,23,24]
-	# to_fix = [0,1,2,6,7,8]
-	# to_fix = [1,3]
-	to_fix = [0,1]
+	to_fix = [0,3,6,2,5,8]
+	# to_fix = [0,2,1,3]
+	# to_fix = [10*i for i in range(10)]
 	neoh =NeohookeanElastic(imesh=mesh, ito_fix=to_fix)
 	arap = ARAP(imesh=mesh, ito_fix = to_fix)
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
@@ -1270,7 +1253,7 @@ def display():
 		V2 = igl.eigen.MatrixXd(RV)
 		T2 = igl.eigen.MatrixXi(RT)
 		viewer.data.set_mesh(V2, T2)
-		# print(mesh.g)
+	
 		red = igl.eigen.MatrixXd([[1,0,0]])
 		purple = igl.eigen.MatrixXd([[1,0,1]])
 		green = igl.eigen.MatrixXd([[0,1,0]])
@@ -1306,4 +1289,4 @@ def display():
 	viewer.core.is_animating = False
 	viewer.launch()
 
-# display()
+display()
