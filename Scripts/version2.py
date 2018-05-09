@@ -12,6 +12,8 @@ sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.8f}'.format(x)})
 
+temp_png = os.path.join(os.getcwd(),"out.png")
+
 #helpers
 def get_area(p1, p2, p3):
 	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))*0.5
@@ -26,13 +28,13 @@ def rectangle_mesh(x, y, step=1):
 			V.append([step*i, step*j])
 	return V, Delaunay(V).simplices, None
 
-def torus_mesh(r1, r2):
+def torus_mesh(r1, r2, step):
 	V = []
 	T = []
 	for theta in range(0, 12):
 		angle = theta*np.pi/6.0
-		V.append([r1*np.cos(angle), r1*np.sin(angle)])
-		V.append([r2*np.cos(angle), r2*np.sin(angle)])
+		V.append([step*r1*np.cos(angle), step*r1*np.sin(angle)])
+		V.append([step*r2*np.cos(angle), step*r2*np.sin(angle)])
 	for e in Delaunay(V).simplices:
 		if get_area(V[e[0]], V[e[1]], V[e[2]])<5:
 			T.append(list(e))
@@ -45,6 +47,7 @@ def triangle_mesh():
 
 def featherize(x, y, step=1):
 	V,T,U = rectangle_mesh(x, y, step)
+	# V,T, U = torus_mesh(4, 2, step)
 
 	half_x = step*(x)/2.0
 	half_y = step*(y)/2.0
@@ -101,8 +104,6 @@ class Mesh:
 		#set initial U rotations
 
 	def createBlockingMatrix(self):
-		self.P = None #reset P because blocking verts will change P
-
 		onVerts = np.zeros(len(self.V))
 		onVerts[self.fixed] = 1
 		self.fixedOnElement = self.getA().dot(np.kron(onVerts, np.ones(2)))
@@ -574,13 +575,13 @@ class ARAP:
 		
 		return 1
 
-	def iterate(self, its=100):
+	def iterate(self, its=200):
 		eps = 1e-5
 		E0 = self.Energy()
 		for i in range(its):
 			g = self.itT()
 			r = self.itR()
-		# print("ARAP grad", np.linalg.norm(self.dEdg()) + np.linalg.norm(self.dEdr()[0]))		
+		print("ARAP grad", np.linalg.norm(self.dEdg()), np.linalg.norm(self.dEdr()[1]))	
 
 class NeohookeanElastic:
 
@@ -606,7 +607,6 @@ class NeohookeanElastic:
 		dSdsy = np.array([[0,0],[0,1]])
 		
 		return np.dstack((dSdsx, dSdsy))
-
 
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)
@@ -682,14 +682,14 @@ class NeohookeanElastic:
 		return force
 
 	def Energy(self, iq):
-		e1 =  self.GravityEnergy() 
+		e1 = -1*self.GravityEnergy() 
 		e2 = self.PrinStretchEnergy(_q=iq)
-		return e1+e2
+		return e2 + e1
 
 	def Forces(self, iq, idgds):
 		f1 =  self.GravityForce(idgds)
 		f2 = self.PrinStretchForce(_q=iq)
-		return f1+f2
+		return f2 + f1
 
 class TimeIntegrator:
 
@@ -699,7 +699,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 0.005
+		self.adder = 0.001
 		# self.set_random_strain()
 		self.mov = np.array(self.mesh.fixed_min_axis(1))
 		print(self.mov, self.mesh.fixed)
@@ -717,7 +717,7 @@ class TimeIntegrator:
 			self.mesh.q[3*i + 2] = 1.0 + np.random.uniform(0.001,0.1)
 
 	def iterate(self):
-		if(self.time%10==0):
+		if(self.time%20==0):
 			self.adder *=-1
 		self.mesh.g[2*self.mov+1] -= self.adder
 
@@ -739,8 +739,8 @@ class TimeIntegrator:
 			self.arap.iterate()
 			E_arap = self.arap.Energy()
 			E_elastic = self.elastic.Energy(iq=self.mesh.q)
-			print("E", 1e5*E_arap, E_elastic)
-			return 1e5*E_arap + E_elastic
+			print("E", 1e10*E_arap, E_elastic)
+			return 1e10*E_arap + E_elastic
 
 		def jacobian(s):
 			for i in range(len(s)/2):
@@ -750,7 +750,7 @@ class TimeIntegrator:
 			J_arap, dgds, drds = self.arap.Jacobian()
 			J_elastic = self.elastic.Forces(iq = self.mesh.q, idgds=dgds)
 
-			return 1e5*J_arap + J_elastic
+			return 1e10*J_arap + J_elastic
 		
 		res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True, 'eps':1e-08})
 		for i in range(len(res.x)/2):
@@ -761,7 +761,7 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	iV, iT, iU = featherize(1,2,.1)
+	iV, iT, iU = rectangle_mesh(1,1,.1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
@@ -771,10 +771,18 @@ def display():
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
 	viewer = igl.viewer.Viewer()
 
+	tempR = igl.eigen.MatrixXuc(1280, 800)
+	tempG = igl.eigen.MatrixXuc(1280, 800)
+	tempB = igl.eigen.MatrixXuc(1280, 800)
+	tempA = igl.eigen.MatrixXuc(1280, 800)
+
 	def key_down(viewer, a, bbbb):
 		viewer.data.clear()
+		
 		if(a==65):
-			time_integrator.solve()
+			pass
+		time_integrator.solve()
+		
 		DV, DT = mesh.getDiscontinuousVT()
 		RV, RT = mesh.getContinuousVT()
 		V2 = igl.eigen.MatrixXd(RV)
@@ -812,6 +820,10 @@ def display():
 		# print(cag)
 		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
 		
+		if (time_integrator.time>1):
+			viewer.core.draw_buffer(viewer.data, viewer.opengl, False, tempR, tempG, tempB, tempA)
+			igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
+			# pass
 		return True
 
 	key_down(viewer, 'a', 1)
@@ -819,4 +831,4 @@ def display():
 	viewer.core.is_animating = False
 	viewer.launch()
 
-display()
+# display()

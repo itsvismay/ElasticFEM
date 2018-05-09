@@ -1,11 +1,16 @@
 import numpy as np
-from version2 import rectangle_mesh, NeohookeanElastic, ARAP, Mesh
+from version2 import rectangle_mesh, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
 	eps = 1e-5
-	mesh = Mesh(rectangle_mesh(2,2), ito_fix=[1,3])
-	arap = ARAP(mesh)
-	
+	iV, iT, iU = rectangle_mesh(1, 2, .1)
+	its = 50
+	to_fix = get_min_max(iV, a=1)
+
+	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
+	mesh.fixed = mesh.fixed_max_axis(1)
+	print(mesh.fixed)
+	arap = ARAP(mesh)	
 	F0,R0,S0,U0 = mesh.getGlobalF()
 	E0 = arap.energy(_g=mesh.g, _R =R0, _S=S0, _U=U0)
 	print("Default Energy ", E0)
@@ -222,7 +227,7 @@ def FiniteDifferencesARAP():
 				mesh.g = np.zeros(len(mesh.g)) + g0
 
 				mesh.q[3*i + j] += 0.5*eps 
-				arap.iterate()
+				arap.iterate(its=its)
 				r1 = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
 				# print("r1",r1)
 				dgds_left =mesh.g + np.zeros(len(mesh.g))
@@ -231,15 +236,15 @@ def FiniteDifferencesARAP():
 				# print("CAg", mesh.getC().dot(mesh.getA().dot(mesh.g)))
 				# print("disc.", mesh.getDiscontinuousVT()[0])
 				mesh.q[3*i + j] -= 0.5*eps
-				arap.iterate()
+				arap.iterate(its=its)
 
 				mesh.q[3*i + j] -= 0.5*eps 
-				arap.iterate()
+				arap.iterate(its=its)
 				r2 = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
 				dgds_right =mesh.g + np.zeros(len(mesh.g))
 				drds_right = r2
 				mesh.q[3*i + j] += 0.5*eps
-				arap.iterate()
+				arap.iterate(its=its)
 				# print(r2)
 				# print((drds_left - r0)/(0.5*eps))
 				dgds.append((dgds_left - dgds_right)/(eps))
@@ -248,15 +253,18 @@ def FiniteDifferencesARAP():
 				
 
 		print("FD")
-		print(np.array(dgds).T)
-		print(np.array(drds).T)
+		# print(np.array(dgds).T)
+		# print(np.array(drds).T)
 		print("")
 		print("real")
 		print(real1)
-		print(real2)
-		print("DIFF")
+		# print(real2)
+		# print("DIFF")
+		print("T: ", len(mesh.T))
 		print("dgds:", np.linalg.norm(real1 - np.array(dgds).T))
 		print("drds:", np.linalg.norm(real2 - np.array(drds).T))
+		print("its: ", its)
+		print("grad", arap.dEdg() , arap.dEdr()[1])
 
 
 	# check_dEdg()
@@ -273,10 +281,16 @@ def FiniteDifferencesARAP():
 FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-4
-	mesh = Mesh(rectangle_mesh(2,2), ito_fix=[1,3] )
-	ne = NeohookeanElastic(imesh = mesh)
+	mdim = 2
+	eps = 1e-5
+	iV, iT, iU = rectangle_mesh(mdim, mdim, .1)
+	its = 50
+	to_fix = get_min_max(iV, a=1)
+
+	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
+	mesh.fixed = mesh.fixed_max_axis(1)
 	arap = ARAP(imesh=mesh)
+	ne = NeohookeanElastic(imesh = mesh)
 	
 
 	def check_PrinStretchForce():
