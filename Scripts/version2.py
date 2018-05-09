@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import json
 import scipy
 from scipy.optimize import minimize
 from scipy.spatial import Delaunay
@@ -18,12 +19,12 @@ def get_area(p1, p2, p3):
 def get_centroid(p1, p2, p3):
 	return (np.array(p1)+np.array(p2)+np.array(p3))/3.0
 
-def rectangle_mesh(x, y):
+def rectangle_mesh(x, y, step=1):
 	V = []
-	for i in range(0,x):
-		for j in range(0,y):
-			V.append([0.1*i, 0.1*j])
-	return V, Delaunay(V).simplices
+	for i in range(0,x+1):
+		for j in range(0,y+1):
+			V.append([step*i, step*j])
+	return V, Delaunay(V).simplices, None
 
 def torus_mesh(r1, r2):
 	V = []
@@ -35,21 +36,52 @@ def torus_mesh(r1, r2):
 	for e in Delaunay(V).simplices:
 		if get_area(V[e[0]], V[e[1]], V[e[2]])<5:
 			T.append(list(e))
-	return np.array(V), np.array(T)	
+	return np.array(V), np.array(T), None
 
 def triangle_mesh():
 	V = [[0,0], [1,0], [1,1]]
 	T = [[0,1,2]]
-	return V, T
+	return V, T, [0]
+
+def featherize(x, y, step=1):
+	V,T,U = rectangle_mesh(x, y, step)
+
+	half_x = step*(x)/2.0
+	half_y = step*(y)/2.0
+	u = []
+	for i in range(len(T)):
+		e = T[i]
+		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
+		if(c[0]<half_x):
+			u.append(3*np.pi/4)
+		else:
+			u.append(np.pi/4)
+
+	return V, T, u
+
+def get_min_max(iV,a):
+	eps = 1e-5
+	mov = []
+	miny = np.amin(iV, axis=0)[a]
+	maxy = np.amax(iV, axis=0)[a]
+	for i in range(len(iV)):
+		if(abs(iV[i][a] - miny) < eps):
+			mov.append(i)
+
+		if(abs(iV[i][a] - maxy)<eps):
+			mov.append(i)
+
+	return mov
+
 
 class Mesh:
 	#class vars
 
-	def __init__(self, VT):
+	def __init__(self, iVTU, ito_fix=[]):
 		#object vars
-		self.fixed = []
-		self.V = VT[0]
-		self.T = VT[1]
+		self.fixed = ito_fix
+		self.V = np.array(iVTU[0])
+		self.T = iVTU[1]
 
 		self.fixedOnElement = None
 		self.P = None
@@ -58,7 +90,7 @@ class Mesh:
 		self.Mass = None
 		self.x0 = np.ravel(self.V)
 		self.g = np.zeros(len(self.V)*2)+np.ravel(self.V)
-
+		self.u = iVTU[2] if iVTU[2] is not None else np.zeros(len(self.T))
 		self.q = np.zeros(len(self.T)*(1+2)) #theta, sx, sy
 
 		#set initial strains
@@ -66,34 +98,49 @@ class Mesh:
 			self.q[3*i + 1] = 1
 			self.q[3*i + 2] = 1
 
-		#set initial rots
-		# for i in range(len(self.T)):
-		# 	self.q[3*i] = np.pi/100
-		# 	break
+		#set initial U rotations
 
-	def createBlockingMatrix(self, to_fix=[]):
+	def createBlockingMatrix(self):
 		self.P = None #reset P because blocking verts will change P
 
-		self.fixed = to_fix
-
 		onVerts = np.zeros(len(self.V))
-		onVerts[to_fix] = 1
+		onVerts[self.fixed] = 1
 		self.fixedOnElement = self.getA().dot(np.kron(onVerts, np.ones(2)))
-		if(len(to_fix) == len(self.V)):
+		if(len(self.fixed) == len(self.V)):
 			return np.array([[]]), np.eye(2*len(self.V))
-		b = np.kron(np.delete(np.eye(len(self.V)), to_fix, axis =1), np.eye(2))
+		b = np.kron(np.delete(np.eye(len(self.V)), self.fixed, axis =1), np.eye(2))
 
 		ab = np.zeros(len(self.V))
-		ab[to_fix] = 1
+		ab[self.fixed] = 1
 		to_reset = [i for i in range(len(ab)) if ab[i]==0]
 
-		if (len(to_fix) == 0):
+		if (len(self.fixed) == 0):
 			return b, np.zeros((2*len(self.V), (2*len(self.V))))
 
 		anti_b = np.kron(np.delete(np.eye(len(self.V)), to_reset, axis =1), np.eye(2))
 		
 
 		return b, anti_b
+
+	def fixed_min_axis(self, a):
+		eps = 1e-5
+		mov = []
+		miny = np.amin(self.V[self.fixed], axis=0)[a]
+		
+		for e in self.fixed:
+			if(abs(self.V[e][a] - miny) < eps):
+				mov.append(e)
+		return mov
+
+	def fixed_max_axis(self, a):
+		eps = 1e-5
+		mov = []
+		miny = np.amax(self.V[self.fixed], axis=0)[a]
+		
+		for e in self.fixed:
+			if(abs(self.V[e][a] - miny) < eps):
+				mov.append(e)
+		return mov
 
 	def getP(self):
 		if(self.P is None):
@@ -125,11 +172,7 @@ class Mesh:
 		return self.C
 
 	def getU(self, ind):
-		if ind%2== 1:
-			alpha = 0*np.pi/4
-		else:
-			alpha = 0*np.pi/4
-
+		alpha = self.u[ind]
 		cU, sU = np.cos(alpha), np.sin(alpha)
 		U = np.array(((cU,-sU), (sU, cU)))
 		return U
@@ -229,9 +272,9 @@ class Mesh:
 class ARAP:
 	#class vars
 
-	def __init__(self, imesh, ito_fix = []):
+	def __init__(self, imesh):
 		self.mesh = imesh
-		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix(to_fix = ito_fix)
+		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix()
 		#these are the fixed vertices which stay constant
 
 		A = self.mesh.getA()
@@ -531,22 +574,22 @@ class ARAP:
 		
 		return 1
 
-	def iterate(self, its=1):
+	def iterate(self, its=100):
 		eps = 1e-5
 		E0 = self.Energy()
-		for i in range(100):
+		for i in range(its):
 			g = self.itT()
 			r = self.itR()
 		# print("ARAP grad", np.linalg.norm(self.dEdg()) + np.linalg.norm(self.dEdr()[0]))		
 
 class NeohookeanElastic:
 
-	def __init__(self, imesh, ito_fix = []):
+	def __init__(self, imesh):
 		self.mesh = imesh
 		self.f = np.zeros(2*len(self.mesh.T))
 		self.v = np.zeros(2*len(self.mesh.V))
 		self.M = self.mesh.getMassMatrix()
-		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix(to_fix = ito_fix)
+		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix()
 
 		youngs = 60000
 		poissons = 0.49
@@ -554,8 +597,8 @@ class NeohookeanElastic:
 		self.lambd = youngs*poissons/((1+poissons)*(1-2*poissons))
 		self.dimensions = 2
 
-		self.grav = np.array([0,-9.81])*10
-		self.rho = 1
+		self.grav = np.array([0,-9.81])
+		self.rho = 10
 
 	def dSds(self):
 		#2x2x2 version of dSds (for each element)
@@ -648,8 +691,6 @@ class NeohookeanElastic:
 		f2 = self.PrinStretchForce(_q=iq)
 		return f1+f2
 
-
-
 class TimeIntegrator:
 
 	def __init__(self, imesh, iarap, ielastic = None):
@@ -660,6 +701,8 @@ class TimeIntegrator:
 		self.elastic = ielastic 
 		self.adder = 0.005
 		# self.set_random_strain()
+		self.mov = np.array(self.mesh.fixed_min_axis(1))
+		print(self.mov, self.mesh.fixed)
 
 
 	def set_strain(self):
@@ -674,14 +717,10 @@ class TimeIntegrator:
 			self.mesh.q[3*i + 2] = 1.0 + np.random.uniform(0.001,0.1)
 
 	def iterate(self):
-		# self.set_strain()
-		# self.arap.iterate(its=10)
-		# print(self.mesh.g)
-		if(self.time%5==0):
+		if(self.time%10==0):
 			self.adder *=-1
-		self.mesh.g[2*self.mesh.fixed[0]+1] += self.adder
-		self.mesh.g[2*self.mesh.fixed[1]+1] += self.adder
-		self.mesh.g[2*self.mesh.fixed[2]+1] += self.adder
+		self.mesh.g[2*self.mov+1] -= self.adder
+
 
 		self.time += 1
 
@@ -708,16 +747,11 @@ class TimeIntegrator:
 				self.mesh.q[3*i + 1] = s[2*i]
 				self.mesh.q[3*i + 2] = s[2*i +1]
 
-			# self.arap.iterate()
-			# print("g", self.mesh.g)
-
 			J_arap, dgds, drds = self.arap.Jacobian()
 			J_elastic = self.elastic.Forces(iq = self.mesh.q, idgds=dgds)
 
-			# print("Jac", J_arap, J_elastic)
 			return 1e5*J_arap + J_elastic
 		
-		# res = scipy.optimize.minimize(energy, s0, method='Nelder-Mead',  options={'gtol': 1e-6, 'disp': True})
 		res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True, 'eps':1e-08})
 		for i in range(len(res.x)/2):
 			self.mesh.q[3*i+1] = res.x[2*i]
@@ -727,18 +761,20 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	mesh = Mesh(rectangle_mesh(3,3))
-	# to_fix = [0,1,2,3,4,20,21,22,23,24]
-	to_fix = [0,3,6,2,5,8]
-	# to_fix = [0,2,1,3]
-	# to_fix = [10*i for i in range(10)]
-	neoh =NeohookeanElastic(imesh=mesh, ito_fix=to_fix)
-	arap = ARAP(imesh=mesh, ito_fix = to_fix)
+	iV, iT, iU = featherize(1,2,.1)
+	to_fix = get_min_max(iV,1)
+	
+	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
+
+	neoh =NeohookeanElastic(imesh=mesh )
+	arap = ARAP(imesh=mesh)
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
 	viewer = igl.viewer.Viewer()
 
 	def key_down(viewer, a, bbbb):
 		viewer.data.clear()
+		if(a==65):
+			time_integrator.solve()
 		DV, DT = mesh.getDiscontinuousVT()
 		RV, RT = mesh.getContinuousVT()
 		V2 = igl.eigen.MatrixXd(RV)
@@ -758,21 +794,24 @@ def display():
 			viewer.data.add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
 
 
-		C = []
+		FIXED = []
 		for i in range(len(mesh.fixed)):
-			C.append(mesh.g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
+			FIXED.append(mesh.g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
 
-		viewer.data.add_points(igl.eigen.MatrixXd(np.array(C)), red)
+		viewer.data.add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
 
+		#centroids
 		CAg = mesh.getC().dot(mesh.getA().dot(mesh.g))
 		cag = []
 		for i in range(len(mesh.T)):
 			cag.append(CAg[6*i:6*i+2])
+			C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
+			U = 0.01*mesh.getU(i).transpose()+C
+			viewer.data.add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), red)
 
 		# print(cag)
 		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
 		
-		time_integrator.solve()
 		return True
 
 	key_down(viewer, 'a', 1)
@@ -780,4 +819,4 @@ def display():
 	viewer.core.is_animating = False
 	viewer.launch()
 
-# display()
+display()

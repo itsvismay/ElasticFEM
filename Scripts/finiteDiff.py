@@ -3,8 +3,8 @@ from version2 import rectangle_mesh, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
 	eps = 1e-5
-	mesh = Mesh(rectangle_mesh(2,2))
-	arap = ARAP(mesh, ito_fix=[1,3])
+	mesh = Mesh(rectangle_mesh(2,2), ito_fix=[1,3])
+	arap = ARAP(mesh)
 	
 	F0,R0,S0,U0 = mesh.getGlobalF()
 	E0 = arap.energy(_g=mesh.g, _R =R0, _S=S0, _U=U0)
@@ -274,9 +274,9 @@ FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-4
-	mesh = Mesh(rectangle_mesh(2,2) )
-	ne = NeohookeanElastic(imesh = mesh,ito_fix=[1,3])
-	arap = ARAP(imesh=mesh, ito_fix=[1,3])
+	mesh = Mesh(rectangle_mesh(2,2), ito_fix=[1,3] )
+	ne = NeohookeanElastic(imesh = mesh)
+	arap = ARAP(imesh=mesh)
 	
 
 	def check_PrinStretchForce():
