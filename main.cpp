@@ -31,6 +31,7 @@ int main(int argc, char *argv[])
 	MatrixXd V;
 	MatrixXi T;
 	MatrixXi F;
+
 	igl::readMESH(j_input["mesh_file"], V, T, F);
 
 

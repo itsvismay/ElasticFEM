@@ -73,7 +73,11 @@ public:
     void getFirstOrder(VectorXd& x_k, VectorXd& g){
         SparseMatrix<double>& P = SM->get_Pf();
         SM->setForces(f, x_k);
-        g = P.transpose()*(SM->get_Mass()*x_k - SM->get_Mass()*SM->get_x() - SM->get_Mass()*SM->get_v()*h - f*h*h);
+        g = P.transpose()*(
+            SM->get_Mass()*x_k - 
+            SM->get_Mass()*SM->get_x() - 
+            SM->get_Mass()*SM->get_v()*h - 
+            f*h*h);
     	
         return;
     }	
@@ -212,6 +216,8 @@ public:
     {
         SparseMatrix<double>& P = SM->get_Pf();
         xbfgs = P.transpose()*SM->get_copy_x();
+        // make sure xbfgs is fully sized when passed into getInternalEnergy
+
         VectorXd& v_old = SM->get_v();
         VectorXd& x_old = SM->get_x();
 
