@@ -2,9 +2,9 @@ import numpy as np
 from version2 import rectangle_mesh, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
-	eps = 1e-5
-	iV, iT, iU = rectangle_mesh(1, 2, .1)
-	its = 50
+	eps = 1e-3
+	iV, iT, iU = rectangle_mesh(2, 3, .1)
+	its = 100
 	to_fix = get_min_max(iV, a=1)
 
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
@@ -257,14 +257,15 @@ def FiniteDifferencesARAP():
 		# print(np.array(drds).T)
 		print("")
 		print("real")
-		print(real1)
+		# print(real1)
 		# print(real2)
 		# print("DIFF")
 		print("T: ", len(mesh.T))
 		print("dgds:", np.linalg.norm(real1 - np.array(dgds).T))
 		print("drds:", np.linalg.norm(real2 - np.array(drds).T))
 		print("its: ", its)
-		print("grad", arap.dEdg() , arap.dEdr()[1])
+		print("Energy: ", arap.Energy())
+		print("grad",  np.linalg.norm(arap.dEdg()), np.linalg.norm(arap.dEdr()[1]))
 
 
 	# check_dEdg()

@@ -347,8 +347,7 @@ class ARAP:
 		dgds = results[0:lhs_left.shape[1],:]
 		drds = results[lhs_left.shape[1]:,:]
 		
-		Eg,Er,Es,ER, ES = self.Gradients()
-
+		Eg,Er,Es = self.Gradients()
 		dEds = np.matmul(Eg, dgds) + np.matmul(Er, drds) + Es
 
 		return dEds, dgds, drds
@@ -406,7 +405,7 @@ class ARAP:
 		dEds = np.tensordot(dEdS, _dSds, axes = ([0,1], [0,1]))
 		
 
-		return dEdg, dEdr, dEds, dEdR, dEdS
+		return dEdg, dEdr, dEds
 	
 	def dRdr(self):
 		#	Iterate through each element, 
@@ -474,16 +473,16 @@ class ARAP:
 		return _dSds
 
 	def dEdr(self):
-		g, r, s, R, S = self.Gradients()
-		return R, r
+		g, r, s = self.Gradients()
+		return None, r
 
 	def dEdg(self):
-		g, r, s, R, S = self.Gradients()
+		g, r, s = self.Gradients()
 		return g
 
 	def dEds(self):
-		g, r, s, R, S = self.Gradients()
-		return S, s
+		g, r, s = self.Gradients()
+		return None, s
 
 	def Hess_Egg(self, block =False):
 		return self.Hessians()[0]
@@ -575,13 +574,20 @@ class ARAP:
 		
 		return 1
 
-	def iterate(self, its=200):
-		eps = 1e-5
+	def iterate(self, its=100):
 		E0 = self.Energy()
+		Eg0 = self.Gradients()[0]
 		for i in range(its):
 			g = self.itT()
 			r = self.itR()
-		print("ARAP grad", np.linalg.norm(self.dEdg()), np.linalg.norm(self.dEdr()[1]))	
+			E1 = self.Energy()
+			Eg,Er,Es = self.Gradients()
+			# print("i", i,np.linalg.norm(Eg-Eg0))
+			if(5e-9 > np.linalg.norm(Eg-Eg0)):
+				print("ARAP converged", np.linalg.norm(Eg), np.linalg.norm(Er))	
+				return
+			Eg0 = Eg
+		# 	E0 = E1
 
 class NeohookeanElastic:
 
@@ -633,6 +639,7 @@ class NeohookeanElastic:
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 				
 		CAdgds = self.mesh.getC().dot(self.mesh.getA().dot(dgds))
+
 		for t in range(len(self.mesh.T)):
 			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
 			fg -= self.GravityElementForce(self.rho, area, self.grav, CAdgds[6*t:6*t+2, :], t)
@@ -682,13 +689,13 @@ class NeohookeanElastic:
 		return force
 
 	def Energy(self, iq):
-		e1 = -1*self.GravityEnergy() 
 		e2 = self.PrinStretchEnergy(_q=iq)
+		e1 = -1*self.GravityEnergy() 
 		return e2 + e1
 
 	def Forces(self, iq, idgds):
-		f1 =  self.GravityForce(idgds)
 		f2 = self.PrinStretchForce(_q=iq)
+		f1 =  self.GravityForce(idgds)
 		return f2 + f1
 
 class TimeIntegrator:
@@ -699,7 +706,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 0.001
+		self.adder = 1e-2
 		# self.set_random_strain()
 		self.mov = np.array(self.mesh.fixed_min_axis(1))
 		print(self.mov, self.mesh.fixed)
@@ -737,10 +744,10 @@ class TimeIntegrator:
 				self.mesh.q[3*i + 2] = s[2*i +1]
 
 			self.arap.iterate()
-			E_arap = self.arap.Energy()
+			E_arap = 1e3*self.arap.Energy()
 			E_elastic = self.elastic.Energy(iq=self.mesh.q)
-			print("E", 1e10*E_arap, E_elastic)
-			return 1e10*E_arap + E_elastic
+			print("E", E_arap, E_elastic)
+			return E_arap + E_elastic
 
 		def jacobian(s):
 			for i in range(len(s)/2):
@@ -750,7 +757,7 @@ class TimeIntegrator:
 			J_arap, dgds, drds = self.arap.Jacobian()
 			J_elastic = self.elastic.Forces(iq = self.mesh.q, idgds=dgds)
 
-			return 1e10*J_arap + J_elastic
+			return 1e3*J_arap + J_elastic
 		
 		res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True, 'eps':1e-08})
 		for i in range(len(res.x)/2):
@@ -761,7 +768,7 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	iV, iT, iU = rectangle_mesh(1,1,.1)
+	iV, iT, iU = featherize(3,3,.1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
@@ -826,9 +833,10 @@ def display():
 			# pass
 		return True
 
+	# for clicks in range(40):
 	key_down(viewer, 'a', 1)
 	viewer.callback_key_down= key_down
 	viewer.core.is_animating = False
 	viewer.launch()
 
-# display()
+display()
