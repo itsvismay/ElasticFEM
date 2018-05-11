@@ -9,6 +9,8 @@ import numdifftools as nd
 import random
 import sys, os
 import cProfile
+from scipy import sparse
+from scipy.sparse import csc_matrix
 sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.8f}'.format(x)})
@@ -163,7 +165,7 @@ class Mesh:
 			for i in range(len(self.T)):
 				P[6*i:6*i+6, 6*i:6*i+6] = sub_P
 
-			self.P = P
+			self.P = csc_matrix(P)
 
 		return self.P
 
@@ -176,12 +178,12 @@ class Mesh:
 					v = e[j]
 					A[6*i+2*j, 2*v] = 1
 					A[6*i+2*j+1, 2*v+1] = 1
-			self.A = A
+			self.A = csc_matrix(A)
 		return self.A
 
 	def getC(self):
 		if(self.C is None):
-			self.C = np.kron(np.eye(len(self.T)), np.kron(np.ones((3,3))/3 , np.eye(2)))
+			self.C = csc_matrix(np.kron(np.eye(len(self.T)), np.kron(np.ones((3,3))/3 , np.eye(2))))
 		return self.C
 
 	def getU(self, ind):
@@ -285,10 +287,11 @@ class ARAP:
 		AtPtPA = A.T.dot(P.T.dot(P.dot(A)))
 
 		#LU inverse
-		col1 = np.concatenate((AtPtPA, C), axis=0)
-		col2 = np.concatenate((C.T, np.zeros((C.shape[0], C.shape[0]))), axis=0)
-		KKT = np.concatenate((col1, col2), axis =1)
-		self.CholFac, self.Lower = scipy.linalg.lu_factor(KKT)
+		col1 = sparse.vstack((AtPtPA, C))
+		col2 = sparse.vstack((C.T, np.zeros((C.shape[0], C.shape[0]))))
+		KKT = sparse.hstack((col1, col2))
+		print(sparse.issparse(KKT))
+		self.CholFac = scipy.sparse.linalg.splu(KKT)
 
 	def energy(self, _g, _R, _S, _U):
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(_g))
@@ -326,20 +329,21 @@ class ARAP:
 			rb_size = R.shape[0]
 		
 			
-			col1 = np.concatenate((lhs_left, np.concatenate((C, np.zeros((rb_size, g_size))))))
+			col1 = sparse.vstack((lhs_left, sparse.vstack((C, np.zeros((rb_size, g_size))))))
 			# print("col", col1.shape)
-			col2 = np.concatenate((lhs_right, np.concatenate((np.zeros((gb_size, r_size)), R))))
+			col2 = sparse.vstack((lhs_right, sparse.vstack((np.zeros((gb_size, r_size)), R))))
 			# print("col", col2.shape)
-			col3 = np.concatenate((C.T, np.concatenate((np.zeros((r_size, gb_size)), np.concatenate((np.zeros((gb_size, gb_size)), np.zeros((rb_size, gb_size))))))) )
+			col3 = sparse.vstack((C.T, sparse.vstack((np.zeros((r_size, gb_size)), sparse.vstack((np.zeros((gb_size, gb_size)), np.zeros((rb_size, gb_size))))))) )
 			# print("col", col3.shape)
-			col4 = np.concatenate(( np.concatenate((np.zeros((g_size, rb_size)), R.T)), 
-				np.concatenate((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
+			col4 = sparse.vstack(( sparse.vstack((np.zeros((g_size, rb_size)), R.T)), 
+				sparse.vstack((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
 			# print("col", col4.shape)
 
-			jacKKT = np.hstack((col1, col2, col3, col4))
+			jacKKT = sparse.hstack((col1, col2, col3, col4))
+			KKT_constrains = sparse.vstack((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
+			sparse.issparse(KKT_constrains, jacKKT)
+			exit()
 			jacChol, jacLower = scipy.linalg.lu_factor(jacKKT)
-			KKT_constrains = np.concatenate((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
-
 			Jac_s = scipy.linalg.lu_solve((jacChol, jacLower), KKT_constrains)
 			results = Jac_s[0:rhs.shape[0], :]
 
@@ -365,7 +369,9 @@ class ARAP:
 		# b = datetime.datetime.now()
 		Egg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
 
-		_dRdr = self.dRdr()
+		_dRdr = csc_matrix(self.dRdr())
+		print(sparse.issparse(_dRdr))
+		exit()
 		Erg = np.tensordot(np.multiply.outer(-1*PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
 		# c = datetime.datetime.now()
 		
@@ -560,11 +566,9 @@ class ARAP:
 		
 		FPAx = self.mesh.GF.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
 		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
-		
-		gd = np.concatenate((AtPtFPAx, Abtg))	
-		gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), gd)
+		gd = np.concatenate((AtPtFPAx, Abtg))
+		gu = self.CholFac.solve(gd)
 		self.mesh.g = gu[0:AtPtFPAx.size]
-
 		return 1
 
 	def iterate(self, its=100):
@@ -794,7 +798,7 @@ def display():
 			pass
 		time_integrator.solve()
 		# aa = datetime.datetime.now()
-		# arap.Hessians()
+		# arap.iterate()
 		# print(6*len(mesh.T))
 		# bb = datetime.datetime.now()
 		# print("TIME: ", (bb-aa).microseconds)
