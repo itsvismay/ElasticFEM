@@ -53,8 +53,8 @@ def triangle_mesh():
 	return V, T, [0]
 
 def featherize(x, y, step=1):
-	# V,T,U = rectangle_mesh(x, y, step)
-	V,T, U = torus_mesh(4, 3, 2, step)
+	V,T,U = rectangle_mesh(x, y, step)
+	# V,T, U = torus_mesh(4, 3, 2, step)
 
 	half_x = step*(x)/2.0
 	half_y = step*(y)/2.0
@@ -355,39 +355,42 @@ class ARAP:
 		return dEds, dgds, drds
 
 	def Hessians(self):
-		# a = datetime.datetime.now()
+		a = datetime.datetime.now()
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		PAg = PA.dot(self.mesh.g)
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
 		USUtPAx = USUt.dot(self.PAx)
 		UtPAx = self.mesh.GU.T.dot(PA.dot(self.mesh.x0))
 		
-		# b = datetime.datetime.now()
 		Egg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
 
 		_dRdr = self.dRdr()
-		Erg = np.tensordot(np.multiply.outer(-1*PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
-		# c = datetime.datetime.now()
+		sample = np.multiply.outer(-1*PA.T, USUtPAx.T)
+		Erg = np.tensordot(sample, _dRdr, axes=([1,2], [0,1]))
 		
+		# a = datetime.datetime.now()
 		_ddRdrdr = self.d2Rdr2()
-		# print(_ddRdrdr.shape)
 		negPAg_USUtPAx = np.multiply.outer( -1*PA.dot(self.mesh.g), USUtPAx)
 		Err = np.tensordot(negPAg_USUtPAx, _ddRdrdr, axes = ([0,1],[1,2]))
-		# d = datetime.datetime.now()
+		# b = datetime.datetime.now()
+		# print(Err)
+		# print((b-a).microseconds)
+		# exit()
 		
-		_dSds = self.dSds()		
+		_dSds = self.dSds()
 		PAtRU = PA.T.dot(self.mesh.GR.dot(self.mesh.GU))
 		d_gEgdS = np.multiply.outer(-1*PAtRU, UtPAx.T)
 		Egs = np.tensordot(d_gEgdS, _dSds, axes =([1,2],[0,1]))
-		# e = datetime.datetime.now()
-		
+
+		a = datetime.datetime.now()
 		right_side = np.tensordot(np.multiply.outer(self.mesh.GU, UtPAx), _dRdr, axes=([0,1],[0,1]))
 		negPAg_U_UtPAx_dRdr = np.multiply.outer(-1*PAg, right_side)
-		# negPAg_U_UtPAx = np.multiply.outer(-1*PAg, np.multiply.outer(self.mesh.GU, UtPAx))
-		# negPAg_U_UtPAx_dRdr = np.tensordot(negPAg_U_UtPAx, _dRdr, axes=([0,1],[0,1]))
+		b = datetime.datetime.now()
 		Ers = np.tensordot(negPAg_U_UtPAx_dRdr, _dSds, axes=([0,1],[0,1]))
-		# f = datetime.datetime.now()
-		# print("Hess time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds)
+		print(Ers)
+		print((b-a).microseconds)
+		exit()
+
 		return Egg, Erg, Err, Egs, Ers
 
 	def Gradients(self):
@@ -586,7 +589,7 @@ class NeohookeanElastic:
 		self.mesh = imesh
 		self.f = np.zeros(2*len(self.mesh.T))
 		self.v = np.zeros(2*len(self.mesh.V))
-		self.M = self.mesh.getMassMatrix()
+		#self.M = self.mesh.getMassMatrix()
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix()
 
 		youngs = 60000
@@ -772,7 +775,7 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	iV, iT, iU = featherize(4,4,.1)
+	iV, iT, iU = featherize(1,1,.1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)

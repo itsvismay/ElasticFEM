@@ -55,8 +55,8 @@ def triangle_mesh():
 	return V, T, [0]
 
 def featherize(x, y, step=1):
-	# V,T,U = rectangle_mesh(x, y, step)
-	V,T, U = torus_mesh(4, 3, 2, step)
+	V,T,U = rectangle_mesh(x, y, step)
+	# V,T, U = torus_mesh(4, 3, 2, step)
 
 	half_x = step*(x)/2.0
 	half_y = step*(y)/2.0
@@ -284,11 +284,11 @@ class ARAP:
 		B = self.BLOCK
 		C = self.ANTI_BLOCK.T
 		self.PAx = P.dot(A.dot(self.mesh.x0))
-		AtPtPA = A.T.dot(P.T.dot(P.dot(A)))
+		self.AtPtPA = A.T.dot(P.T.dot(P.dot(A)))
 
 		#LU inverse
-		col1 = sparse.vstack((AtPtPA, C))
-		col2 = sparse.vstack((C.T, np.zeros((C.shape[0], C.shape[0]))))
+		col1 = sparse.vstack((self.AtPtPA, C))
+		col2 = np.vstack((C.T, np.zeros((C.shape[0], C.shape[0]))))
 		KKT = sparse.hstack((col1, col2))
 		print(sparse.issparse(KKT))
 		self.CholFac = scipy.sparse.linalg.splu(KKT)
@@ -364,34 +364,85 @@ class ARAP:
 		PAg = PA.dot(self.mesh.g)
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
 		USUtPAx = USUt.dot(self.PAx)
-		UtPAx = self.mesh.GU.T.dot(PA.dot(self.mesh.x0))
+		UtPAx = self.mesh.GU.T.dot(self.PAx)
 		
+		lenx = len(self.mesh.x0)
+		lent = len(self.mesh.T)
 		# b = datetime.datetime.now()
-		Egg = self.mesh.getA().T.dot(self.mesh.getP().T.dot(self.mesh.getP().dot(self.mesh.getA())))
+		Egg = self.AtPtPA
 
-		_dRdr = csc_matrix(self.dRdr())
-		print(sparse.issparse(_dRdr))
-		exit()
-		Erg = np.tensordot(np.multiply.outer(-1*PA.T, USUtPAx.T), _dRdr, axes=([1,2], [0,1]))
-		# c = datetime.datetime.now()
-		
+		_dRdr = self.dRdr()
+
+		Erg = np.zeros((lenx, lent))		
+		for k in range(lent):
+			for c in range(lenx):
+				col_c = PA.getcol(c)
+				
+				for j in col_c.nonzero()[0]:
+					for i in range(6*lent):
+						crj = col_c[j,0]
+						ui = USUtPAx[i]
+						Rijk = _dRdr[i,j,k]
+						Erg[c, k] += ui*crj*Rijk
+
 		_ddRdrdr = self.d2Rdr2()
-		# print(_ddRdrdr.shape)
-		negPAg_USUtPAx = np.multiply.outer( -1*PA.dot(self.mesh.g), USUtPAx)
+		
+
+		Err = np.zeros((lent, lent))
+		negPAg_USUtPAx = np.multiply.outer( -1*PAg, USUtPAx)
 		Err = np.tensordot(negPAg_USUtPAx, _ddRdrdr, axes = ([0,1],[1,2]))
-		# d = datetime.datetime.now()
 		
-		_dSds = self.dSds()		
-		PAtRU = PA.T.dot(self.mesh.GR.dot(self.mesh.GU))
-		d_gEgdS = np.multiply.outer(-1*PAtRU, UtPAx.T)
-		Egs = np.tensordot(d_gEgdS, _dSds, axes =([1,2],[0,1]))
-		# e = datetime.datetime.now()
 		
-		right_side = np.tensordot(np.multiply.outer(self.mesh.GU, UtPAx), _dRdr, axes=([0,1],[0,1]))
-		negPAg_U_UtPAx_dRdr = np.multiply.outer(-1*PAg, right_side)
-		# negPAg_U_UtPAx = np.multiply.outer(-1*PAg, np.multiply.outer(self.mesh.GU, UtPAx))
-		# negPAg_U_UtPAx_dRdr = np.tensordot(negPAg_U_UtPAx, _dRdr, axes=([0,1],[0,1]))
-		Ers = np.tensordot(negPAg_U_UtPAx_dRdr, _dSds, axes=([0,1],[0,1]))
+		
+		_dSds = self.dSds()
+		PAtRU = scipy.sparse.csr_matrix(PA.T.dot(self.mesh.GR.dot(self.mesh.GU)))
+		Egs = np.zeros((lenx, 2*lent))
+		for k in range(2*lent):
+			for r in range(lenx):
+				ror = PAtRU.getrow(r)
+				for i in ror.nonzero()[1]:
+					for j in range(6*lent):
+						ui = UtPAx[j]
+						pir = ror[0,i]
+						Sijk = _dSds[i,j,k]
+						Egs[r,k] -= ui*pir*Sijk 
+
+	
+
+		Ers = np.zeros((lent, 2*lent))
+		RS = np.zeros((6*lent, lent))
+		tempGU = sparse.csc_matrix(self.mesh.GU)
+		a = datetime.datetime.now()
+		
+
+		for k in range(lent):
+			for u in range(6*lent):
+				ui = UtPAx[u]
+				for c in range(tempGU.shape[1]):
+					gucol = tempGU.getcol(c)
+					for r in gucol.nonzero()[0]:
+						gck = gucol[r,0]
+						Rcrk = _dRdr[c, r, k]
+						RS[u,k] += ui*Rcrk*gck
+		
+		for k in range(2*lent):
+			for j in range(6*lent):
+				for r in range(6*lent):
+					rowr = RS[r,:]
+					for i in range(len(rowr)):
+						pagj = PAg[j]
+						rsi = rowr[i]
+						Sijk = _dSds[r,j,k]
+						Ers[i,k] += pagj*Sijk*rsi
+
+		# right_side = np.tensordot(np.multiply.outer(self.mesh.GU, UtPAx), _dRdr, axes=([0,1],[0,1]))
+		# negPAg_U_UtPAx_dRdr = np.multiply.outer(-1*PAg, right_side)
+		# Ers = np.tensordot(negPAg_U_UtPAx_dRdr, _dSds, axes=([0,1],[0,1]))
+		b = datetime.datetime.now()
+
+		print(Ers)
+		print((b-a).microseconds)
+		exit()
 		# f = datetime.datetime.now()
 		# print("Hess time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds)
 		return Egg, Erg, Err, Egs, Ers
@@ -590,7 +641,7 @@ class NeohookeanElastic:
 		self.mesh = imesh
 		self.f = np.zeros(2*len(self.mesh.T))
 		self.v = np.zeros(2*len(self.mesh.V))
-		self.M = self.mesh.getMassMatrix()
+		#self.M = self.mesh.getMassMatrix()
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix()
 
 		youngs = 60000
@@ -776,7 +827,7 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	iV, iT, iU = featherize(4,4,.1)
+	iV, iT, iU = featherize(1,1,.1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
@@ -855,7 +906,7 @@ def display():
 display()
 
 def headless():
-	iV, iT, iU = featherize(4,4,.1)
+	iV, iT, iU = featherize(1,1,.1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
