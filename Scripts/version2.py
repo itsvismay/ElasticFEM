@@ -4,6 +4,7 @@ import json
 import scipy
 from scipy.optimize import minimize
 from scipy.spatial import Delaunay
+from collections import defaultdict
 import datetime
 import numdifftools as nd
 import random
@@ -33,8 +34,8 @@ def rectangle_mesh(x, y, step=1):
 def torus_mesh(r1, r2, r3, step):
 	V = []
 	T = []
-	for theta in range(0, 21):
-		angle = theta*np.pi/17
+	for theta in range(0, 15):
+		angle = theta*np.pi/11
 		if(angle<=np.pi):
 			V.append([step*r1*np.cos(angle), step*r1*np.sin(angle)])
 			V.append([step*r2*np.cos(angle), step*r2*np.sin(angle)])
@@ -54,8 +55,8 @@ def triangle_mesh():
 	return V, T, [0]
 
 def featherize(x, y, step=1):
-	V,T,U = rectangle_mesh(x, y, step)
-	# V,T, U = torus_mesh(5, 4, 3, step)
+	# V,T,U = rectangle_mesh(x, y, step)
+	V,T, U = torus_mesh(5, 4, 3, step)
 
 	half_x = step*(x)/2.0
 	half_y = step*(y)/2.0
@@ -104,6 +105,12 @@ class Mesh:
 		self.u = iVTU[2] if iVTU[2] is not None else np.zeros(len(self.T))
 		self.q = np.zeros(len(self.T)*(1+2)) #theta, sx, sy
 
+		self.r_clusters = None
+		self.r_element_cluster_map = None
+		self.r_cluster_element_map = defaultdict(list)
+		self.RotationBLOCK = None
+		self.setupRotClusters()
+
 		self.GF = np.zeros((6*len(self.T), 6*len(self.T)))
 		self.GR = np.zeros((6*len(self.T), 6*len(self.T)))
 		self.GS = np.zeros((6*len(self.T), 6*len(self.T)))
@@ -114,14 +121,38 @@ class Mesh:
 			self.q[3*i + 1] = 1
 			self.q[3*i + 2] = 1
 
+
 		self.getGlobalF(updateR = True, updateS = True, updateU=True)
+
+	def setupRotClusters(self):
+		# of rotation clusters
+		nrc = 2
+		self.r_clusters = np.zeros(nrc)
+		self.r_element_cluster_map = np.zeros(len(self.T))
+		
+		centroids = self.getC().dot(self.getA().dot(self.x0))
+		minx = np.amin(self.V, axis=0)[0]
+		maxx = np.amax(self.V, axis=0)[0]
+		for i in range(len(self.T)):
+			if(centroids[6*i]<=(maxx - minx)/2.0):
+				self.r_element_cluster_map[i] = 0
+				self.r_cluster_element_map[0].append(i)
+			else:
+				self.r_element_cluster_map[i] = 1
+				self.r_cluster_element_map[1].append(i)
+
+		self.RotationBLOCK = []
+		for i in range(len(self.r_clusters)):
+			fixed = self.r_cluster_element_map[i]
+			b = sparse.kron(np.delete(np.eye(len(self.T)), fixed, axis=1), sparse.eye(6))
+			self.RotationBLOCK.append(b)
 
 	def createBlockingMatrix(self):
 		onVerts = np.zeros(len(self.V))
 		onVerts[self.fixed] = 1
 		self.fixedOnElement = self.getA().dot(np.kron(onVerts, np.ones(2)))
 		if(len(self.fixed) == len(self.V)):
-			return np.array([[]]), np.eye(2*len(self.V))
+			return np.array([[]]), sparse.eye(2*len(self.V)).tocsc()
 		b = np.kron(np.delete(np.eye(len(self.V)), self.fixed, axis =1), np.eye(2))
 
 		ab = np.zeros(len(self.V))
@@ -129,12 +160,11 @@ class Mesh:
 		to_reset = [i for i in range(len(ab)) if ab[i]==0]
 
 		if (len(self.fixed) == 0):
-			return b, np.zeros((2*len(self.V), (2*len(self.V))))
+			return sparse.csc_matris(b), sparse.csc_matrix(np.zeros((2*len(self.V), (2*len(self.V)))))
 
 		anti_b = np.kron(np.delete(np.eye(len(self.V)), to_reset, axis =1), np.eye(2))
-		
 
-		return b, anti_b
+		return sparse.csc_matrix(b), sparse.csc_matrix(anti_b)
 
 	def fixed_min_axis(self, a):
 		eps = 1e-5
@@ -192,10 +222,9 @@ class Mesh:
 		return U
 
 	def getR(self, ind):
-		theta = self.q[3*ind]
+		theta = self.r_clusters[self.r_element_cluster_map[ind]]
 		c, s = np.cos(theta), np.sin(theta)
 		R = np.array(((c,-s), (s, c)))
-		# print("R",scipy.linalg.logm(R))
 		return R
 
 	def getS(self, ind):
@@ -277,7 +306,6 @@ class ARAP:
 		self.mesh = imesh
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix()
 		#these are the fixed vertices which stay constant
-
 		A = self.mesh.getA()
 		P = self.mesh.getP()
 		B = self.BLOCK
@@ -288,10 +316,10 @@ class ARAP:
 		self.DSDs = None
 
 		#LU inverse
-		col1 = np.concatenate((AtPtPA, C), axis=0)
-		col2 = np.concatenate((C.T, np.zeros((C.shape[0], C.shape[0]))), axis=0)
-		KKT = np.concatenate((col1, col2), axis =1)
-		self.CholFac, self.Lower = scipy.linalg.lu_factor(KKT)
+		col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
+		col1 = sparse.vstack((AtPtPA, C))
+		KKT = sparse.hstack((col1, col2))
+		self.CholFac = scipy.sparse.linalg.splu(KKT.tocsc())
 
 	def energy(self, _g, _R, _S, _U):
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(_g))
@@ -327,24 +355,33 @@ class ARAP:
 			gb_size = C.shape[0]
 			r_size = R.shape[1]
 			rb_size = R.shape[0]
-		
-			
-			col1 = np.concatenate((lhs_left, np.concatenate((C, np.zeros((rb_size, g_size))))))
-			# print("col", col1.shape)
-			col2 = np.concatenate((lhs_right, np.concatenate((np.zeros((gb_size, r_size)), R))))
-			# print("col", col2.shape)
-			col3 = np.concatenate((C.T, np.concatenate((np.zeros((r_size, gb_size)), np.concatenate((np.zeros((gb_size, gb_size)), np.zeros((rb_size, gb_size))))))) )
-			# print("col", col3.shape)
-			col4 = np.concatenate(( np.concatenate((np.zeros((g_size, rb_size)), R.T)), 
-				np.concatenate((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
-			# print("col", col4.shape)
 
-			jacKKT = np.hstack((col1, col2, col3, col4))
-			jacChol, jacLower = scipy.linalg.lu_factor(jacKKT)
-			KKT_constrains = np.concatenate((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
+			if rb_size>0:
+				col1 = sparse.vstack((lhs_left, np.vstack((C.toarray(), np.zeros((rb_size, g_size))))))
+				# print("col", col1.shape, col1.nnz)
+				col2 = sparse.vstack((lhs_right, np.vstack((np.zeros((gb_size, r_size)), R))))
+				# print("col", col2.shape, col2.nnz)
+				col3 = sparse.vstack(( C.T, sparse.vstack((sparse.csc_matrix((r_size, gb_size)), np.vstack((np.zeros((gb_size, gb_size)), np.zeros((rb_size, gb_size))))))) )
+				# print("col", col3.shape, col3.nnz)
+				col4 = sparse.vstack(( np.vstack((np.zeros((g_size, rb_size)), R.T)), np.vstack((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
+				jacKKT = sparse.hstack((col1, col2, col3, col4))
+			else:
+				col1 = sparse.vstack((lhs_left, C))
+				# print("col", col1.shape, col1.nnz)
+				col2 = sparse.vstack((lhs_right, sparse.csc_matrix((gb_size, r_size))))
+				# print("col", col2.shape, col2.nnz)
+				col3 = sparse.vstack(( C.T, 
+					sparse.vstack((sparse.csc_matrix((r_size, gb_size)), 
+								sparse.csc_matrix((gb_size, gb_size))))))
+				# print("col", col3.shape, col3.nnz)
+				jacKKT = sparse.hstack((col1, col2, col3))
 
-			Jac_s = scipy.linalg.lu_solve((jacChol, jacLower), KKT_constrains)
+			KKT_constrains = np.vstack((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
+			# print(sparse.issparse(jacKKT), sparse.issparse(KKT_constrains), jacKKT.shape, jacKKT.nnz)
+			jacChol = scipy.sparse.linalg.splu(jacKKT)
+			Jac_s = jacChol.solve(KKT_constrains)
 			results = Jac_s[0:rhs.shape[0], :]
+		
 
 		e = datetime.datetime.now()
 		dgds = results[0:lhs_left.shape[1],:]
@@ -354,7 +391,7 @@ class ARAP:
 		aa = datetime.datetime.now()
 		dEds = np.matmul(Eg, dgds) + np.matmul(Er, drds) + Es
 		bb = datetime.datetime.now()
-		# print("Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds, (aa-f).microseconds, (bb-aa).microseconds)
+		print("Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds, (aa-f).microseconds, (bb-aa).microseconds)
 		return dEds, dgds, drds
 
 	def Hessians(self):
@@ -427,8 +464,8 @@ class ARAP:
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
-		_dRdr = self.dRdr()
-		_dSds = self.dSds()#rank 3 tensor
+		# _dRdr = self.dRdr()
+		# _dSds = self.dSds()#rank 3 tensor
 		DR = self.sparseDRdr()
 		DS = self.sparseDSds()
 
@@ -448,7 +485,7 @@ class ARAP:
 		UtPAx = self.mesh.GU.T.dot(self.PAx)
 		RU = self.mesh.GR.dot(self.mesh.GU)
 		dEdS =  np.multiply.outer(self.mesh.GS.dot(UtPAx), UtPAx) - np.multiply.outer(np.dot(RU.T, PAg), UtPAx)
-		dEds = np.tensordot(dEdS, _dSds, axes = ([0,1], [0,1]))
+		# dEds = np.tensordot(dEdS, _dSds, axes = ([0,1], [0,1]))
 		dEds = np.zeros(2*len(self.mesh.T))
 		for i in range(len(dEds)):
 			dEds[i] = DS[i].multiply(dEdS).sum()
@@ -550,7 +587,6 @@ class ARAP:
 			self.DSDs = DS
 		return self.DSDs
 
-
 	def dSds(self):
 		#	Iterate through each element, 
 		#		set dSdsx and dSdsy 
@@ -608,32 +644,30 @@ class ARAP:
 	def Hess_Ers(self, block=False):
 		return self.Hessians()[4]
 
-	def itR(self):
+	def itR(self, GU, GS):
 		theta_list = []
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		Ax = self.mesh.getA().dot(self.mesh.x0)
-		for i in range(len(self.mesh.T)):
-			PAx_e = self.PAx[6*i:6*i+6]
+
+		for i in range(len(self.mesh.r_clusters)):
+			B = self.mesh.RotationBLOCK[i]
+			PAx_e = B.T.dot(self.PAx)
 			
-			PAg_e = PAg[6*i:6*i+6]
-			Ue = np.kron(np.eye(3), self.mesh.getU(i))
-			Se = np.kron(np.eye(3), self.mesh.getS(i))
+			PAg_e = B.T.dot(PAg)
+			Ue = B.T.dot(GU.dot(B))
+			Se = B.T.dot(GS.dot(B))
+			
 
 			USUPAx = Ue.dot(Se.dot(Ue.T.dot(PAx_e.T)))
-			m_PAg = np.zeros((3,2))
-			m_PAg[0:1, 0:2] = PAg_e[0:2]
-			m_PAg[1:2, 0:2] = PAg_e[2:4]
-			m_PAg[2:3, 0:2] = PAg_e[4:6]
+			m_PAg = np.reshape(PAg_e, (len(PAg_e)/2,2))
+			m_USUPAx = np.reshape(USUPAx, (len(PAg_e)/2,2))
+			
 
-			m_USUPAx = np.zeros((3,2))
-			m_USUPAx[0:1, 0:2] = USUPAx[0:2].T
-			m_USUPAx[1:2, 0:2] = USUPAx[2:4].T
-			m_USUPAx[2:3, 0:2] = USUPAx[4:6].T
 			F = np.matmul(m_PAg.T,m_USUPAx)
 
 			u, s, vt = np.linalg.svd(F, full_matrices=True)
 			R = np.matmul(vt.T, u.T)
-			# print(R)
+			
 			veca = np.array([1,0])
 			vecb = np.dot(R, veca)
 
@@ -647,32 +681,33 @@ class ARAP:
 				theta *=-1
 
 			theta_list.append(theta)
-			self.mesh.q[3*i] = theta
+			self.mesh.r_clusters[i] = theta
 		return theta_list
 	
 	def itT(self):
-		B = self.BLOCK
 		Abtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
 		
 		FPAx = self.mesh.GF.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
 		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
 		
 		gd = np.concatenate((AtPtFPAx, Abtg))	
-		gu = scipy.linalg.lu_solve((self.CholFac, self.Lower), gd)
+		gu = self.CholFac.solve(gd)
 		self.mesh.g = gu[0:AtPtFPAx.size]
 
 		return 1
 
 	def iterate(self, its=100):
 		Eg0 = self.dEdg()
+		GU = sparse.csc_matrix(self.mesh.GU)
+		GS = sparse.csc_matrix(self.mesh.GS)
 		for i in range(its):
 			g = self.itT()
-			r = self.itR()
+			r = self.itR(GU, GS)
 			self.mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
 			Eg = self.dEdg()
 			# print("i", i,np.linalg.norm(Eg-Eg0))
 			if(5e-9 > np.linalg.norm(Eg-Eg0)):
-				# print("ARAP converged", np.linalg.norm(Eg), np.linalg.norm(Er))	
+				# print("ARAP converged", np.linalg.norm(Eg))	
 				return
 			Eg0 = Eg
 
@@ -795,7 +830,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 1e-2
+		self.adder = 3e-2
 		# self.set_random_strain()
 		self.mov = np.array(self.mesh.fixed_min_axis(1))
 		print(self.mov, self.mesh.fixed)
@@ -813,7 +848,7 @@ class TimeIntegrator:
 			self.mesh.q[3*i + 2] = 1.0 + np.random.uniform(0.001,0.1)
 
 	def iterate(self):
-		if(self.time%10 == 0):
+		if(self.time>= 20):
 			self.adder *= -1
 
 		self.mesh.g[2*self.mov+1] += self.adder
@@ -839,9 +874,9 @@ class TimeIntegrator:
 			# c = datetime.datetime.now()
 			self.arap.iterate()
 			# d = datetime.datetime.now()
-			E_arap = 1e1*self.arap.Energy()
+			E_arap =  1e2*self.arap.Energy()
 			# e = datetime.datetime.now()
-			E_elastic = self.elastic.Energy(iq=self.mesh.q)
+			E_elastic =  self.elastic.Energy(iq=self.mesh.q)
 			# f = datetime.datetime.now()
 			print("E", E_arap, E_elastic)
 			# print("Solve En time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds)
@@ -855,13 +890,14 @@ class TimeIntegrator:
 				self.mesh.q[3*i + 2] = s[2*i +1]
 			# b = datetime.datetime.now()
 			# c = datetime.datetime.now()
+			dgds = None
 			J_arap, dgds, drds = self.arap.Jacobian()
 
 			# d = datetime.datetime.now()
-			J_elastic = self.elastic.Forces(iq = self.mesh.q, idgds=None)
+			J_elastic = self.elastic.Forces(iq = self.mesh.q, idgds=dgds)
 			# e = datetime.datetime.now()
 			# print("Solve Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds)
-			return  J_elastic + 1e1*J_arap
+			return  J_elastic + 1e2*J_arap
 		
 		res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True, 'eps':1e-08})
 		for i in range(len(res.x)/2):
@@ -872,7 +908,7 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	iV, iT, iU = featherize(2,2,.1)
+	iV, iT, iU = featherize(2,2,1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
@@ -890,8 +926,9 @@ def display():
 
 	def key_down(viewer):
 		viewer.data.clear()
-		if(time_integrator.time>20):
-			exit()
+		# if(time_integrator.time>30):
+		# 	exit()
+
 		time_integrator.solve()
 		# aa = datetime.datetime.now()
 		# arap.Hessians()
@@ -951,7 +988,7 @@ def display():
 display()
 
 def headless():
-	iV, iT, iU = rectangle_mesh(1,1,1)
+	iV, iT, iU = featherize(1,1,1)
 	# iV, iT, iU = triangle_mesh()
 	to_fix = get_min_max(iV,1)
 	

@@ -133,7 +133,8 @@ class Mesh:
 			return b, np.zeros((2*len(self.V), (2*len(self.V))))
 
 		anti_b = np.kron(np.delete(np.eye(len(self.V)), to_reset, axis =1), np.eye(2))
-		
+		print(to_reset)
+		exit()
 
 		return b, anti_b
 
@@ -328,7 +329,8 @@ class ARAP:
 			r_size = R.shape[1]
 			rb_size = R.shape[0]
 		
-			
+			print(C.shape)
+			exit()
 			col1 = sparse.vstack((lhs_left, sparse.vstack((C, np.zeros((rb_size, g_size))))))
 			# print("col", col1.shape)
 			col2 = sparse.vstack((lhs_right, sparse.vstack((np.zeros((gb_size, r_size)), R))))
@@ -827,7 +829,8 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	iV, iT, iU = featherize(1,1,.1)
+	iV, iT, iU = featherize(1,1,1)
+	print(len(iV))
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
