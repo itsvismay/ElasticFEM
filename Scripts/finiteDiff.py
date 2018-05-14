@@ -11,8 +11,9 @@ def FiniteDifferencesARAP():
 	mesh.fixed = mesh.fixed_max_axis(1)
 	print(mesh.fixed)
 	arap = ARAP(mesh)	
-	F0,R0,S0,U0 = mesh.getGlobalF()
-	E0 = arap.energy(_g=mesh.g, _R =R0, _S=S0, _U=U0)
+	mesh.getGlobalF()
+
+	E0 = arap.energy(_g=mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 	print("Default Energy ", E0)
 	
 	def check_dEdg():
@@ -68,8 +69,6 @@ def FiniteDifferencesARAP():
 
 			dEdr.append((Eleft - Eright)/eps)
 		print("Er ", np.sum(np.array(dEdr) - realdEdr))
-
-
 
 	def check_Hessian_dEdgdg():
 		real = arap.Hess_Egg()
@@ -165,19 +164,19 @@ def FiniteDifferencesARAP():
 				for k in range(1, 3):
 					mesh.q[3*i] += eps
 					mesh.q[3*j + k] += eps
-					F,R,S,U = mesh.getGlobalF()
-					Eij = arap.energy(_g =mesh.g, _R=R, _S=S, _U=U0)
+					mesh.getGlobalF()
+					Eij = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 					mesh.q[3*j + k] -= eps
 					mesh.q[3*i] -= eps
 
 					mesh.q[3*i] += eps
-					F,R,S,U = mesh.getGlobalF()
-					Ei = arap.energy(_g =mesh.g, _R=R, _S=S, _U=U0)
+					mesh.getGlobalF()
+					Ei = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 					mesh.q[3*i] -= eps
 
 					mesh.q[3*j + k] += eps
-					F,R,S,U = mesh.getGlobalF()
-					Ej = arap.energy(_g =mesh.g, _R=R, _S=S, _U=U0)
+					mesh.getGlobalF()
+					Ej = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 					mesh.q[3*j + k] -= eps
 
 					Ers[i].append((Eij - Ei - Ej + E0)/(eps*eps))
@@ -252,20 +251,20 @@ def FiniteDifferencesARAP():
 				# exit()
 				
 
-		print("FD")
+		# print("FD")
 		# print(np.array(dgds).T)
 		# print(np.array(drds).T)
-		print("")
-		print("real")
+		# print("")
+		# print("real")
 		# print(real1)
 		# print(real2)
 		# print("DIFF")
-		print("T: ", len(mesh.T))
-		print("dgds:", np.linalg.norm(real1 - np.array(dgds).T))
-		print("drds:", np.linalg.norm(real2 - np.array(drds).T))
-		print("its: ", its)
-		print("Energy: ", arap.Energy())
-		print("grad",  np.linalg.norm(arap.dEdg()), np.linalg.norm(arap.dEdr()[1]))
+		# print("T: ", len(mesh.T))
+		# print("dgds:", np.linalg.norm(real1 - np.array(dgds).T))
+		# print("drds:", np.linalg.norm(real2 - np.array(drds).T))
+		# print("its: ", its)
+		# print("Energy: ", arap.Energy())
+		# print("grad",  np.linalg.norm(arap.dEdg()), np.linalg.norm(arap.dEdr()[1]))
 
 
 	# check_dEdg()
@@ -275,9 +274,9 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
-	# check_Hessian_dEdrds()
+	check_Hessian_dEdrds()
 	# check_Hessian_dEdgds()
-	check_dgds()
+	# check_dgds()
 
 FiniteDifferencesARAP()
 
