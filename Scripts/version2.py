@@ -40,7 +40,7 @@ def torus_mesh(r1, r2, r3, step):
 		if(angle<=np.pi):
 			V.append([step*r1*np.cos(angle), step*r1*np.sin(angle)])
 			V.append([step*r2*np.cos(angle), step*r2*np.sin(angle)])
-			# V.append([step*r3*np.cos(angle), step*r3*np.sin(angle)])
+			V.append([step*r3*np.cos(angle), step*r3*np.sin(angle)])
 	
 	V.append([0,0])
 	for e in Delaunay(V).simplices:
@@ -56,8 +56,8 @@ def triangle_mesh():
 	return V, T, [0]
 
 def featherize(x, y, step=1):
-	V,T,U = rectangle_mesh(x, y, step)
-	# V,T, U = torus_mesh(5, 4, 3, step)
+	# V,T,U = rectangle_mesh(x, y, step)
+	V,T, U = torus_mesh(5, 4, 3, step)
 
 	half_x = step*(x)/2.0
 	half_y = step*(y)/2.0
@@ -888,7 +888,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 3e-2
+		self.adder = 3e-3
 		# self.set_random_strain()
 		self.mov = np.array(self.mesh.fixed_min_axis(1))
 
@@ -965,7 +965,7 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	iV, iT, iU = featherize(1,3,.1)
+	iV, iT, iU = rectangle_mesh(1,3,.1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
@@ -985,10 +985,10 @@ def display():
 		viewer.data.clear()
 		# if(time_integrator.time>30):
 		# 	exit()
-		time_integrator.iterate()
-		arap.iterate()
+		# time_integrator.iterate()
+		# arap.iterate()
 		# print(mesh.red_r)
-		# time_integrator.solve()
+		time_integrator.solve()
 
 		
 		DV, DT = mesh.getDiscontinuousVT()
@@ -1001,8 +1001,7 @@ def display():
 		purple = igl.eigen.MatrixXd([[1,0,1]])
 		green = igl.eigen.MatrixXd([[0,1,0]])
 		black = igl.eigen.MatrixXd([[0,0,0]])
-
-		paxes = []
+		
 
 		for e in DT:
 			P = DV[e]
@@ -1024,14 +1023,28 @@ def display():
 			C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
 			U = 0.01*mesh.getU(i).transpose()+C
 			viewer.data.add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), red)
-
-		# print(cag)
-		viewer.data.add_points(igl.eigen.MatrixXd(np.array(cag)), green)
+			viewer.data.add_points(igl.eigen.MatrixXd(np.array([CAg[6*i:6*i+2]])), igl.eigen.MatrixXd([[0,1*mesh.r_element_cluster_map[i],1-0.5*mesh.r_element_cluster_map[i]]]))
+			# print(np.array([CAg[6*i:6*i+2]]))
+		# print(np.array(cag))
+		# print(igl.eigen.MatrixXd(np.array(cag)))
 		
+		#Write image
 		if (time_integrator.time>1):
 			viewer.core.draw_buffer(viewer.data, viewer.opengl, False, tempR, tempG, tempB, tempA)
 			igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
 			# pass
+
+
+		# Clustered Rotations
+		# colors  = []
+		# e_ind = 0
+		# tot_e = len(mesh.T)
+		# for e in mesh.r_element_cluster_map:
+		# 	colors.append([1, 1, mesh.r_element_cluster_map[e_ind]])
+		# 	e_ind += 1
+		# Colors = igl.eigen.MatrixXd(colors)
+		# viewer.data.set_colors(Colors);
+
 		return True
 
 	# for clicks in range(40):
@@ -1039,7 +1052,7 @@ def display():
 	viewer.callback_key_down = key_down
 	viewer.core.is_animating = False
 	viewer.launch()
-# display()
+display()
 
 def headless():
 	iV, iT, iU = rectangle_mesh(9,9,1)
