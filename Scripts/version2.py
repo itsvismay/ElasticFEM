@@ -33,10 +33,11 @@ def rectangle_mesh(x, y, step=1):
 	return V, Delaunay(V).simplices, None
 
 def torus_mesh(r1, r2, r3, step):
+	print("HERE")
 	V = []
 	T = []
-	for theta in range(0, 3):
-		angle = theta*np.pi/2
+	for theta in range(0, 5):
+		angle = theta*np.pi/3
 		if(angle<=np.pi):
 			V.append([step*r1*np.cos(angle), step*r1*np.sin(angle)])
 			V.append([step*r2*np.cos(angle), step*r2*np.sin(angle)])
@@ -232,8 +233,8 @@ class Mesh:
 		return U
 
 	def getR(self, ind):
-		theta = self.q[3*ind]
-		# theta = self.red_r[self.r_element_cluster_map[ind]]
+		# theta = self.q[3*ind]
+		theta = self.red_r[self.r_element_cluster_map[ind]]
 		c, s = np.cos(theta), np.sin(theta)
 		R = np.array(((c,-s), (s, c)))
 		return R
@@ -327,7 +328,7 @@ class ARAP:
 		self.PAx = P.dot(A.dot(self.mesh.x0))
 		self.AtPtPA = A.T.dot(P.T.dot(P.dot(A)))
 		
-		self.GU_UTPAx = np.multiply.outer(self.mesh.GU, self.mesh.GU.T.dot(self.PAx))
+
 		self.DSDs = None
 
 		#LU inverse
@@ -432,7 +433,7 @@ class ARAP:
 		print("Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds, (aa-f).microseconds, (bb-aa).microseconds)
 		return dEds, dgds, drds
 
-	def Hessians(self, useSparse=False):		
+	def Hessians(self, useSparse=True):		
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		PAg = PA.dot(self.mesh.g)
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
@@ -440,11 +441,12 @@ class ARAP:
 		UtPAx = self.mesh.GU.T.dot(PA.dot(self.mesh.x0))
 		r_size = len(self.mesh.red_r)
 		g_size = len(self.mesh.g)
-		s_size = len(self.mesh.T)*2
+		s_size = 2*len(self.mesh.T)
+		DR = self.sparseDRdr()
+		DS = self.sparseDSds()
 		
 		Egg = self.AtPtPA
 
-		DR = self.sparseDRdr()
 
 		sample = np.multiply.outer(-1*PA.T, USUtPAx.T)
 		if not useSparse:
@@ -473,7 +475,6 @@ class ARAP:
 						Err[i,j] = spD.multiply(negPAg_USUtPAx).sum()
 		
 
-		DS = self.sparseDSds()
 		PAtRU = PA.T.dot(self.mesh.GR.dot(self.mesh.GU))
 		d_gEgdS = np.multiply.outer(-1*PAtRU, UtPAx.T)
 		
@@ -491,36 +492,34 @@ class ARAP:
 		# print(self.mesh.GU)
 		
 		if not useSparse:
-			right_side = np.tensordot(self.GU_UTPAx, self.dRdr(), axes=([1,2],[0,1]))
-		else:
-			right_side = np.zeros((6*len(self.mesh.T), r_size))
-			for j in range(right_side.shape[1]):
-				sp = DR[j]
-				for i in range(right_side.shape[0]):
-					if sp.nnz>0:
-						right_side[i,j] = sp.multiply(self.GU_UTPAx[i,:,:]).sum()
+			#Original math with rank 4 tensor
+			# first = np.multiply.outer(-PAg, np.multiply.outer(self.mesh.GU, UtPAx))
+			# second = np.tensordot(first, self.dRdr(), axes=([0,1],[0,1]))
+			# Ers = np.tensordot(second, self.dSds(), axes=([0,1],[0,1]))
 
-		negPAg_U_UtPAx_dRdr = np.multiply.outer(PAg, right_side)
-		if not useSparse:
-			Ers = np.tensordot(negPAg_U_UtPAx_dRdr, self.dSds(), axes=([0,1],[0,1]))
+			first = np.multiply.outer(-PAg, self.mesh.GU)
+			mid = np.tensordot(first, self.dRdr(), axes=([0,1],[0,1]))
+			second = np.multiply.outer(UtPAx, mid)
+			Ers = np.tensordot(second, self.dSds(), axes=([0,1],[0,1]))
+
 		else:
 			Ers = np.zeros((r_size, s_size))
+			first = np.multiply.outer(-PAg, self.mesh.GU)
+			mid = np.zeros((first.shape[0], r_size))
+
+			for j in range(mid.shape[1]):
+				spR = DR[j]
+				for i in range(mid.shape[0]):
+					if spR.nnz>0:
+						mid[i,j] = spR.multiply(first[:,:,i]).sum()
+
+			second = np.multiply.outer(UtPAx, mid)
 			for j in range(Ers.shape[1]):
-				sp = DS[j]
+				spS = DS[j]
 				for i in range(Ers.shape[0]):
-					if sp.nnz>0:
-						Ers[i,j] = sp.multiply(negPAg_U_UtPAx_dRdr[:,:,i]).sum()
-		# print(right_side.shape)
-		# print("Diffs")
-		# print(self.GU_UTPAx[:,0,:] - np.multiply.outer(self.mesh.GU, UtPAx)[:,0,:])
-		# exit()
-		first = np.multiply.outer(-PAg, self.GU_UTPAx)#np.multiply.outer(self.mesh.GU, UtPAx))
-		print(first.shape)
-		second = np.tensordot(first, self.dRdr(), axes=([0,1],[0,1]))
-		# print(second[:,:,0])
-		# print(negPAg_U_UtPAx_dRdr[:,:,0])
-		# print(np.linalg.norm(second - negPAg_U_UtPAx_dRdr))
-		Ers = np.tensordot(second, self.dSds(), axes=([0,1],[0,1]))		
+					if spS.nnz>0:
+						Ers[i,j] = spS.multiply(second[:,:,i]).sum()
+
 
 		return Egg, Erg, Err, Egs, Ers
 
@@ -557,6 +556,9 @@ class ARAP:
 		
 		return dEdg, dEdr, dEds
 	
+	def RANK4_PAg_U_UtPAx(self, PAg=None, UtPAx = None):
+		R4 = [[] for i in range()]
+
 	def dRdr(self):
 		#	Iterate through each element, 
 		#		set dRdrx and dRdry 

@@ -3,7 +3,7 @@ from version2 import rectangle_mesh, torus_mesh, featherize, get_min_max, Neohoo
 
 def FiniteDifferencesARAP():
 	eps = 1e-5
-	iV, iT, iU = rectangle_mesh(1,1,.1)
+	iV, iT, iU = featherize(1,1,.1)
 	# iV, iT, iU = torus_mesh(5,4,3,.1)
 	its = 100
 	to_fix = get_min_max(iV, a=1)
@@ -186,9 +186,9 @@ def FiniteDifferencesARAP():
 					mesh.getGlobalF()
 
 					Ers[i].append((Eij - Ei - Ej + E0)/(eps*eps))
-		print(real.T)
-		print("")
-		print(np.array(Ers).T)
+		# print(real)
+		# print("")
+		# print(np.array(Ers))
 		print("Ers ", np.linalg.norm(np.array(Ers) - real))
 
 	def unred_check_Hessian_dEdrds():
@@ -266,24 +266,24 @@ def FiniteDifferencesARAP():
 			for j in range(1,3):
 				mesh.g = np.zeros(len(mesh.g)) + g0
 
-				mesh.q[3*i + j] += 0.5*eps 
-				mesh.getGlobalF()
-				arap.iterate(its=its)
-				drds_left = np.array([mesh.red_r[ii] for ii in range(len(mesh.red_r))])
-				dgds_left = mesh.g + np.zeros(len(mesh.g))
-			
-				mesh.q[3*i + j] -= 0.5*eps
-				mesh.getGlobalF()
-				arap.iterate(its=its)
-
-				mesh.q[3*i + j] -= 0.5*eps 
-				mesh.getGlobalF()
-				arap.iterate(its=its)
-				drds_right = np.array([mesh.red_r[ii] for ii in range(len(mesh.red_r))])
-				dgds_right = mesh.g + np.zeros(len(mesh.g))
 				mesh.q[3*i + j] += 0.5*eps
 				mesh.getGlobalF()
-				arap.iterate(its=its)
+				arap.iterate()
+				drds_left = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
+				dgds_left =mesh.g + np.zeros(len(mesh.g))
+
+				mesh.q[3*i + j] -= 0.5*eps
+				mesh.getGlobalF()
+				arap.iterate()
+
+				mesh.q[3*i + j] -= 0.5*eps
+				mesh.getGlobalF()
+				arap.iterate()
+				drds_right = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
+				dgds_right =mesh.g + np.zeros(len(mesh.g))
+				mesh.q[3*i + j] += 0.5*eps
+				mesh.getGlobalF()
+				arap.iterate()
 
 
 				dgds.append((dgds_left - dgds_right)/(eps))
@@ -315,9 +315,8 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
 	# check_Hessian_dEdrds()
-	unred_check_Hessian_dEdrds()
 	# check_Hessian_dEdgds()
-	# check_dgds_drds()
+	check_dgds_drds()
 
 FiniteDifferencesARAP()
 
