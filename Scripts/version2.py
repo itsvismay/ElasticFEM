@@ -105,11 +105,16 @@ class Mesh:
 		self.u = iVTU[2] if iVTU[2] is not None else np.zeros(len(self.T))
 		self.q = np.zeros(len(self.T)*(1+2)) #theta, sx, sy
 
+		#Rotation clusterings
 		self.red_r = None
 		self.r_element_cluster_map = None
 		self.r_cluster_element_map = defaultdict(list)
 		self.RotationBLOCK = None
 		self.setupRotClusters()
+
+		#S skinnings
+		self.red_s = None
+		self.setupStrainSkinnings()
 
 		self.GF = np.zeros((6*len(self.T), 6*len(self.T)))
 		self.GR = np.zeros((6*len(self.T), 6*len(self.T)))
