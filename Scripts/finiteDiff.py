@@ -2,15 +2,16 @@ import numpy as np
 from version2 import rectangle_mesh, torus_mesh, featherize, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
-	eps = 1e-5
-	iV, iT, iU = featherize(1,1,.1)
+	eps = 1e-4
+	iV, iT, iU = featherize(1,3,.1)
 	# iV, iT, iU = torus_mesh(5,4,3,.1)
 	its = 100
 	to_fix = get_min_max(iV, a=1)
-	
+	# print(to_fix)
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
 	mesh.fixed = mesh.fixed_max_axis(1)
-
+	# print(mesh.fixed)
+	
 	arap = ARAP(mesh)	
 	mesh.getGlobalF()
 
@@ -260,7 +261,7 @@ def FiniteDifferencesARAP():
 		dgds = []
 		drds = []
 		g0 = np.zeros(len(mesh.g)) + mesh.g
-		r0 = np.array([mesh.red_r[ii] for ii in range(len(mesh.red_r))]) 
+		r0 = np.array(mesh.red_r) 
 		q0 = np.zeros(len(mesh.q)) + mesh.q
 		for i in range(len(mesh.T)):
 			for j in range(1,3):
@@ -268,8 +269,9 @@ def FiniteDifferencesARAP():
 
 				mesh.q[3*i + j] += 0.5*eps
 				mesh.getGlobalF()
+
 				arap.iterate()
-				drds_left = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
+				drds_left = np.array(mesh.red_r)
 				dgds_left =mesh.g + np.zeros(len(mesh.g))
 
 				mesh.q[3*i + j] -= 0.5*eps
@@ -279,7 +281,7 @@ def FiniteDifferencesARAP():
 				mesh.q[3*i + j] -= 0.5*eps
 				mesh.getGlobalF()
 				arap.iterate()
-				drds_right = np.array([mesh.q[3*ii] for ii in range(len(mesh.T))])
+				drds_right = np.array(mesh.red_r)
 				dgds_right =mesh.g + np.zeros(len(mesh.g))
 				mesh.q[3*i + j] += 0.5*eps
 				mesh.getGlobalF()

@@ -33,11 +33,10 @@ def rectangle_mesh(x, y, step=1):
 	return V, Delaunay(V).simplices, None
 
 def torus_mesh(r1, r2, r3, step):
-	print("HERE")
 	V = []
 	T = []
-	for theta in range(0, 3):
-		angle = theta*np.pi/2
+	for theta in range(0, 6):
+		angle = theta*np.pi/3
 		if(angle<=np.pi):
 			V.append([step*r1*np.cos(angle), step*r1*np.sin(angle)])
 			V.append([step*r2*np.cos(angle), step*r2*np.sin(angle)])
@@ -57,8 +56,8 @@ def triangle_mesh():
 	return V, T, [0]
 
 def featherize(x, y, step=1):
-	# V,T,U = rectangle_mesh(x, y, step)
-	V,T, U = torus_mesh(5, 4, 3, step)
+	V,T,U = rectangle_mesh(x, y, step)
+	# V,T, U = torus_mesh(5, 4, 3, step)
 
 	half_x = step*(x)/2.0
 	half_y = step*(y)/2.0
@@ -86,7 +85,6 @@ def get_min_max(iV,a):
 			mov.append(i)
 
 	return mov
-
 
 class Mesh:
 	#class vars
@@ -139,7 +137,7 @@ class Mesh:
 		maxx = np.amax(self.V, axis=0)[0]
 		for i in range(len(self.T)):
 
-			if(centroids[6*i]<=(maxx - minx)/2.0):
+			if(centroids[6*i]<=(maxx + minx)/2.0):
 				self.r_element_cluster_map[i] = 0
 				self.r_cluster_element_map[0].append(i)
 			else:
@@ -334,6 +332,7 @@ class ARAP:
 		col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
 		col1 = sparse.vstack((self.AtPtPA, C))
 		KKT = sparse.hstack((col1, col2))
+
 		self.CholFac = scipy.sparse.linalg.splu(KKT.tocsc())
 
 	def energy(self, _g, _R, _S, _U):
@@ -385,7 +384,7 @@ class ARAP:
 					jacKKT = sparse.hstack((col1, col2, col3, col4))
 				else:
 					col1 = sparse.vstack((lhs_left, C))
-					print("col", col1.shape, col1.nnz)
+					# print("col", col1.shape, col1.nnz)
 					col2 = sparse.vstack((lhs_right, sparse.csc_matrix((gb_size, r_size))))
 					# print("col", col2.shape, col2.nnz)
 					col3 = sparse.vstack(( C.T, 
@@ -394,12 +393,12 @@ class ARAP:
 					# print("col", col3.shape, col3.nnz)
 					jacKKT = sparse.hstack((col1, col2, col3))
 
-				print(jacKKT.toarray())
-				print("\n\n")
-				KKT_constrains = sparse.vstack((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
-				print(KKT_constrains.toarray())
+				# print(jacKKT.toarray())
+				# print("\n\n")
+				KKT_constrains = np.vstack((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
+				# print(KKT_constrains)
 				# exit()
-				print(sparse.issparse(jacKKT), sparse.issparse(KKT_constrains), jacKKT.shape, jacKKT.nnz)
+				# print(sparse.issparse(jacKKT), sparse.issparse(KKT_constrains), jacKKT.shape, jacKKT.nnz)
 				jacChol = scipy.sparse.linalg.splu(jacKKT.tocsc())
 				Jac_s = jacChol.solve(KKT_constrains)
 			
@@ -413,7 +412,6 @@ class ARAP:
 				col4 = np.concatenate(( np.concatenate((np.zeros((g_size, rb_size)), R.T)),
 					np.concatenate((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
 				# print("col", col4.shape)
-
 				jacKKT = np.hstack((col1, col2, col3, col4))
 				jacChol, jacLower = scipy.linalg.lu_factor(jacKKT)
 				KKT_constrains = np.concatenate((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
@@ -447,7 +445,6 @@ class ARAP:
 		DS = self.sparseDSds()
 		
 		Egg = self.AtPtPA
-
 
 		sample = np.multiply.outer(-1*PA.T, USUtPAx.T)
 		if not useSparse:
@@ -521,7 +518,7 @@ class ARAP:
 					if spS.nnz>0:
 						Ers[i,j] = spS.multiply(second[:,:,i]).sum()
 
-
+		
 		return Egg, Erg, Err, Egs, Ers
 
 	def Gradients(self):
@@ -556,9 +553,6 @@ class ARAP:
 
 		
 		return dEdg, dEdr, dEds
-	
-	def RANK4_PAg_U_UtPAx(self, PAg=None, UtPAx = None):
-		R4 = [[] for i in range()]
 
 	def dRdr(self):
 		#	Iterate through each element, 
@@ -754,7 +748,7 @@ class ARAP:
 		FPAx = self.mesh.GF.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
 		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
 		
-		gd = np.concatenate((AtPtFPAx, Abtg))	
+		gd = np.concatenate((AtPtFPAx, Abtg))
 		gu = self.CholFac.solve(gd)
 		self.mesh.g = gu[0:AtPtFPAx.size]
 
@@ -770,8 +764,8 @@ class ARAP:
 			self.mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
 			Eg = self.dEdg()
 			# print("i", i,np.linalg.norm(Eg-Eg0))
-			if(1e-9 > np.linalg.norm(Eg-Eg0)):
-				# print("ARAP converged", np.linalg.norm(Eg))	
+			if(1e-10 > np.linalg.norm(Eg-Eg0)):
+				print("ARAP converged", np.linalg.norm(Eg))	
 				return
 			Eg0 = Eg
 
@@ -898,7 +892,6 @@ class TimeIntegrator:
 		# self.set_random_strain()
 		self.mov = np.array(self.mesh.fixed_min_axis(1))
 
-
 	def set_strain(self):
 		for i in range(len(self.mesh.T)):
 			pass
@@ -972,7 +965,7 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	iV, iT, iU = featherize(2,2,1)
+	iV, iT, iU = featherize(1,3,.1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
@@ -992,10 +985,10 @@ def display():
 		viewer.data.clear()
 		# if(time_integrator.time>30):
 		# 	exit()
-		# time_integrator.iterate()
-		# arap.iterate()
+		time_integrator.iterate()
+		arap.iterate()
 		# print(mesh.red_r)
-		time_integrator.solve()
+		# time_integrator.solve()
 
 		
 		DV, DT = mesh.getDiscontinuousVT()
@@ -1046,7 +1039,6 @@ def display():
 	viewer.callback_key_down = key_down
 	viewer.core.is_animating = False
 	viewer.launch()
-
 # display()
 
 def headless():
