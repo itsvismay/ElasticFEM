@@ -19,6 +19,45 @@ np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all
 temp_png = os.path.join(os.getcwd(),"out.png")
 
 #helpers
+def generate_bbw_matrix():
+	# List of boundary indices (aka fixed value indices into VV)
+	b = igl.eigen.MatrixXi()
+	# List of boundary conditions of each weight function
+	bc = igl.eigen.MatrixXd()
+
+	igl.boundary_conditions(V, T, C, igl.eigen.MatrixXi(), BE, igl.eigen.MatrixXi(), b, bc)
+
+	bbw_data = igl.BBWData()
+	# only a few iterations for sake of demo
+	bbw_data.active_set_params.max_iter = 8
+	bbw_data.verbosity = 2
+	if not igl.bbw(V, T, b, bc, bbw_data, W):
+		exit(-1)
+
+	# Normalize weights to sum to one
+	igl.normalize_row_sums(W, W)
+	# precompute linear blend skinning matrix
+	igl.lbs_matrix(V, W, M)
+
+def generate_euclidean_weights(CAx, handles, others):
+	W = np.zeros((len(handles) + len(others), len(handles)))
+
+	for i in range(len(handles)):
+		caxi = CAx[6*handles[i]:6*handles[i]+2]
+		W[handles[i], i] = 1
+		for j in range(len(others)):
+			caxj = CAx[6*others[j]:6*others[j]+2 ]
+			d = np.linalg.norm(caxi - caxj)
+
+			W[others[j], i] = 1.0/d 
+	for j in range(len(others)):
+		W[others[j],:] /= np.sum(W[others[j],:])
+
+	# print(W)
+	# print(np.kron(W, np.eye(2)))
+	# exit()
+	return np.kron(W, np.eye(2))
+
 def get_area(p1, p2, p3):
 	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))*0.5
 
@@ -114,6 +153,7 @@ class Mesh:
 
 		#S skinnings
 		self.red_s = None
+		self.sW = None
 		self.setupStrainSkinnings()
 
 		self.GF = np.zeros((6*len(self.T), 6*len(self.T)))
@@ -128,6 +168,25 @@ class Mesh:
 
 
 		self.getGlobalF(updateR = True, updateS = True, updateU=True)
+
+	def setupStrainSkinnings(self):
+		print("Setting up skinnings")
+		t_set = Set([i for i in range(len(self.T))])
+
+		self.s_handles_ind =[i for i in range(len(self.T)) if i%7==0]
+		# self.s_handles_ind = [1,5]
+		self.red_s = np.ones(2*len(self.s_handles_ind))
+
+		centroids = self.getC().dot(self.getA().dot(self.x0))
+		
+		#generate weights by euclidean dist
+		self.sW = generate_euclidean_weights(centroids, self.s_handles_ind, list(t_set.difference(Set(self.s_handles_ind))))
+
+		# print(self.T)
+		# print(self.s_handles_ind)
+		# exit()
+		print("Done setting up skinnings")
+		return
 
 	def setupRotClusters(self):
 		print("Setting up rotation clusters")
@@ -242,7 +301,13 @@ class Mesh:
 		return R
 
 	def getS(self, ind):
-		S = np.array([[self.q[3*ind+1], 0], [0, self.q[3*ind+2]]])  
+		# sx = self.q[3*ind+1]
+		# sy = self.q[3*ind+2]
+
+		sx = self.sW[2*ind,:].dot(self.red_s)
+		sy = self.sW[2*ind+1,:].dot(self.red_s)
+		
+		S = np.array([[sx, 0], [0, sy]])  
 		return S
 
 	def getF(self, ind):
@@ -792,13 +857,6 @@ class NeohookeanElastic:
 		self.grav = np.array([0,-9.81])
 		self.rho = 10
 
-	def dSds(self):
-		#2x2x2 version of dSds (for each element)
-		dSdsx = np.array([[1,0],[0,0]])
-		dSdsy = np.array([[0,0],[0,1]])
-		
-		return np.dstack((dSdsx, dSdsy))
-
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)
 		return e 
@@ -873,7 +931,7 @@ class NeohookeanElastic:
 			force[2*t:2*t +2] = self.PrinStretchElementForce(_q[3*t + 1], _q[3*t + 2])
 		return force
 
-	def Energy(self, iq):
+	def Energy(self, irs):
 		e2 = self.PrinStretchEnergy(_q=iq)
 		e1 = -1*self.GravityEnergy() 
 		return e2 + e1
@@ -893,7 +951,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 3e-3
+		self.adder = 3e-1
 		# self.set_random_strain()
 		self.mov = np.array(self.mesh.fixed_min_axis(1))
 
@@ -910,11 +968,14 @@ class TimeIntegrator:
 
 	def iterate(self):
 
-		if(self.time%20 == 0):
+		if(self.time%10 == 0):
 			self.adder *= -1
 
-		self.mesh.g[2*self.mov+1] -= self.adder
-
+		# self.mesh.g[2*self.mov+1] -= self.adder
+		self.mesh.red_s[0] -=self.adder
+		print(self.mesh.red_s)
+		print(self.mesh.s_handles_ind[0])
+		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
 
 		self.time += 1
 
@@ -937,7 +998,7 @@ class TimeIntegrator:
 			# d = datetime.datetime.now()
 			E_arap =  1e1*self.arap.Energy()
 			# e = datetime.datetime.now()
-			E_elastic =  self.elastic.Energy(iq=self.mesh.q)
+			E_elastic =  self.elastic.Energy(irs=self.mesh.q)
 			# f = datetime.datetime.now()
 			print("E", E_arap, E_elastic)
 			# print("Solve En time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds)
@@ -955,7 +1016,7 @@ class TimeIntegrator:
 			J_arap, dgds, drds = self.arap.Jacobian()
 
 			# d = datetime.datetime.now()
-			J_elastic = self.elastic.Forces(iq = self.mesh.q, idgds=dgds)
+			J_elastic = self.elastic.Forces(irs = self.mesh.q, idgds=dgds)
 			# e = datetime.datetime.now()
 			# print("Solve Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds)
 			return  J_elastic + 1e1*J_arap
@@ -970,7 +1031,7 @@ class TimeIntegrator:
 		print("g", self.mesh.g)
 
 def display():
-	iV, iT, iU = rectangle_mesh(1,3,.1)
+	iV, iT, iU = rectangle_mesh(2,2,.1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
@@ -990,10 +1051,10 @@ def display():
 		viewer.data.clear()
 		# if(time_integrator.time>30):
 		# 	exit()
-		# time_integrator.iterate()
-		# arap.iterate()
+		time_integrator.iterate()
+		arap.iterate()
 		# print(mesh.red_r)
-		time_integrator.solve()
+		# time_integrator.solve()
 
 		
 		DV, DT = mesh.getDiscontinuousVT()
@@ -1020,11 +1081,17 @@ def display():
 
 		viewer.data.add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
 
-		#centroids
+			
 		CAg = mesh.getC().dot(mesh.getA().dot(mesh.g))
-		cag = []
+		#Skinning handles
+		for i in range(len(mesh.s_handles_ind)):
+			C = np.matrix([CAg[6*mesh.s_handles_ind[i]:6*mesh.s_handles_ind[i]+2],CAg[6*mesh.s_handles_ind[i]:6*mesh.s_handles_ind[i]+2]])
+			U = 0.02*mesh.getU(i).transpose()+C
+			viewer.data.add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
+			# viewer.data.add_points(igl.eigen.MatrixXd(np.array([CAg[6*mesh.s_handles_ind[i]:6*mesh.s_handles_ind[i]+2]])), black)
+		
+		#centroids and rotation clusters
 		for i in range(len(mesh.T)):
-			cag.append(CAg[6*i:6*i+2])
 			C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
 			U = 0.01*mesh.getU(i).transpose()+C
 			viewer.data.add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), red)
