@@ -884,7 +884,7 @@ class NeohookeanElastic:
 		return gt
 
 	def GravityForce(self, dgds):
-		fg = np.zeros(2*len(self.mesh.T))		
+		fg = np.zeros(len(self.mesh.red_s))		
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 				
 		CAdgds = self.mesh.getC().dot(self.mesh.getA().dot(dgds))
@@ -915,15 +915,6 @@ class NeohookeanElastic:
 			exit()
 		return E
 
-	def PrinStretchElementForce(self, sx, sy):
-		if(sx*sy < 0):
-			return np.array([1e40, 1e40])
-		t1 = (self.lambd*math.log(sx*sy) + self.mu*(sx*sx - 1))/sx
-		t2 = (self.lambd*math.log(sx*sy) + self.mu*(sy*sy - 1))/sy
-		# t1 = self.mu*sx + 2*sy*(sx*sy -1)
-		# t2 = self.mu*sy + 2*sx*(sx*sy -1)
-		return np.array([t1, t2])
-
 	def PrinStretchEnergy(self, _rs):
 		En = 0
 		for t in range(len(self.mesh.T)):
@@ -932,12 +923,24 @@ class NeohookeanElastic:
 			En += self.PrinStretchElementEnergy(sx, sy)
 		return En
 
+	def PrinStretchElementForce(self, sr, wx, wy):
+		
+		t0 =sr.T.dot(wx)
+		t1 = sr.T.dot(wy)
+		if(t0*t1 < 0):
+			return np.ones(len(sr))*1e40
+		t2 = t0*t1
+		t3 = self.mu/t2 
+		t4 = self.lambd*math.log(t2)/t2
+
+		# print(self.mu*t0*wx , self.mu*t1*wy ,- (t1*t3*wx + t0*t3*wy) , t1*t4*wx + t0*t4*wy)
+		f = self.mu*t0*wx + self.mu*t1*wy - (t1*t3*wx + t0*t3*wy) + t1*t4*wx + t0*t4*wy
+		return f
+
 	def PrinStretchForce(self, _rs):
 		force = np.zeros(len(self.mesh.red_s))
 		for t in range(len(self.mesh.T)):
-			sx = self.mesh.sW[2*t,:].dot(_rs)
-			sy = self.mesh.sW[2*t+1,:].dot(_rs)
-			force[2*self.mesh.s_handles_ind[t]:2*self.mesh.s_handles_ind[t] +2] = self.PrinStretchElementForce(sx, sy)
+			force -= self.PrinStretchElementForce(_rs,self.mesh.sW[2*t,:], self.mesh.sW[2*t+1,:] )
 		return force
 
 	def Energy(self, irs):
