@@ -3,7 +3,7 @@ from version2 import rectangle_mesh, torus_mesh, featherize, get_min_max, Neohoo
 
 def FiniteDifferencesARAP():
 	eps = 1e-4
-	iV, iT, iU = featherize(1,3,.1)
+	iV, iT, iU = rectangle_mesh(1,1,.1)
 	# iV, iT, iU = torus_mesh(5,4,3,.1)
 	its = 100
 	to_fix = get_min_max(iV, a=1)
@@ -166,27 +166,26 @@ def FiniteDifferencesARAP():
 		Ers = []
 		for i in range(len(mesh.red_r)):
 			Ers.append([])
-			for j in range(len(mesh.T)):
-				for k in range(1, 3):
-					mesh.red_r[i] += eps
-					mesh.q[3*j + k] += eps
-					mesh.getGlobalF()
-					Eij = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
-					mesh.q[3*j + k] -= eps
-					mesh.red_r[i] -= eps
+			for j in range(len(mesh.red_s)):
+				mesh.red_r[i] += eps
+				mesh.red_s[j] += eps
+				mesh.getGlobalF()
+				Eij = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				mesh.red_s[j] -= eps
+				mesh.red_r[i] -= eps
 
-					mesh.red_r[i] += eps
-					mesh.getGlobalF()
-					Ei = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
-					mesh.red_r[i] -= eps
+				mesh.red_r[i] += eps
+				mesh.getGlobalF()
+				Ei = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				mesh.red_r[i] -= eps
 
-					mesh.q[3*j + k] += eps
-					mesh.getGlobalF()
-					Ej = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
-					mesh.q[3*j + k] -= eps
-					mesh.getGlobalF()
+				mesh.red_s[j] += eps
+				mesh.getGlobalF()
+				Ej = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				mesh.red_s[j] -= eps
+				mesh.getGlobalF()
 
-					Ers[i].append((Eij - Ei - Ej + E0)/(eps*eps))
+				Ers[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 		# print(real)
 		# print("")
 		# print(np.array(Ers))
@@ -232,26 +231,25 @@ def FiniteDifferencesARAP():
 		dg = np.zeros(len(mesh.g)) + mesh.g
 		for i in range(len(mesh.g)):
 			Egs.append([])
-			for j in range(len(mesh.T)):
-				for k in range(1,3):
-					dg[i] += eps
-					mesh.q[3*j+k] += eps
-					mesh.getGlobalF()
-					Eij = arap.energy(_g =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
-					mesh.q[3*j+k] -= eps
-					dg[i] -= eps
+			for j in range(len(mesh.red_s)):
+				dg[i] += eps
+				mesh.red_s[j] += eps
+				mesh.getGlobalF()
+				Eij = arap.energy(_g =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				mesh.red_s[j] -= eps
+				dg[i] -= eps
 
-					dg[i] += eps
-					mesh.getGlobalF()
-					Ei = arap.energy(_g=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
-					dg[i] -= eps
+				dg[i] += eps
+				mesh.getGlobalF()
+				Ei = arap.energy(_g=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				dg[i] -= eps
 
-					mesh.q[3*j+k] += eps
-					mesh.getGlobalF()
-					Ej = arap.energy(_g =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
-					mesh.q[3*j+k] -= eps
+				mesh.red_s[j] += eps
+				mesh.getGlobalF()
+				Ej = arap.energy(_g =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				mesh.red_s[j] -= eps
 
-					Egs[i].append((Eij - Ei - Ej + E0)/(eps*eps))
+				Egs[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 		# print(real)
 		print("Egs ", np.sum(np.array(Egs) - real))
 
@@ -263,34 +261,33 @@ def FiniteDifferencesARAP():
 		g0 = np.zeros(len(mesh.g)) + mesh.g
 		r0 = np.array(mesh.red_r) 
 		q0 = np.zeros(len(mesh.q)) + mesh.q
-		for i in range(len(mesh.T)):
-			for j in range(1,3):
-				mesh.g = np.zeros(len(mesh.g)) + g0
+		for i in range(len(mesh.red_s)):
+			mesh.g = np.zeros(len(mesh.g)) + g0
 
-				mesh.q[3*i + j] += 0.5*eps
-				mesh.getGlobalF()
+			mesh.red_s[i] += 0.5*eps
+			mesh.getGlobalF()
 
-				arap.iterate()
-				drds_left = np.array(mesh.red_r)
-				dgds_left =mesh.g + np.zeros(len(mesh.g))
+			arap.iterate()
+			drds_left = np.array(mesh.red_r)
+			dgds_left =mesh.g + np.zeros(len(mesh.g))
 
-				mesh.q[3*i + j] -= 0.5*eps
-				mesh.getGlobalF()
-				arap.iterate()
+			mesh.red_s[i] -= 0.5*eps
+			mesh.getGlobalF()
+			arap.iterate()
 
-				mesh.q[3*i + j] -= 0.5*eps
-				mesh.getGlobalF()
-				arap.iterate()
-				drds_right = np.array(mesh.red_r)
-				dgds_right =mesh.g + np.zeros(len(mesh.g))
-				mesh.q[3*i + j] += 0.5*eps
-				mesh.getGlobalF()
-				arap.iterate()
+			mesh.red_s[i] -= 0.5*eps
+			mesh.getGlobalF()
+			arap.iterate()
+			drds_right = np.array(mesh.red_r)
+			dgds_right =mesh.g + np.zeros(len(mesh.g))
+			mesh.red_s[i] += 0.5*eps
+			mesh.getGlobalF()
+			arap.iterate()
 
 
-				dgds.append((dgds_left - dgds_right)/(eps))
-				drds.append((drds_left - drds_right)/(eps))
-				# exit()
+			dgds.append((dgds_left - dgds_right)/(eps))
+			drds.append((drds_left - drds_right)/(eps))
+			# exit()
 				
 
 		print("FD")
@@ -313,11 +310,11 @@ def FiniteDifferencesARAP():
 	# check_dEds()
 	# check_dEdr()
 
-	# check_Hessian_dEdgdg()
-	# check_Hessian_dEdrdg()
-	# check_Hessian_dEdrdr()
-	# check_Hessian_dEdrds()
-	# check_Hessian_dEdgds()
+	check_Hessian_dEdgdg()
+	check_Hessian_dEdrdg()
+	check_Hessian_dEdrdr()
+	check_Hessian_dEdrds()
+	check_Hessian_dEdgds()
 	check_dgds_drds()
 
 FiniteDifferencesARAP()

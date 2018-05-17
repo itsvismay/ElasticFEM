@@ -510,7 +510,7 @@ class ARAP:
 		UtPAx = self.mesh.GU.T.dot(PA.dot(self.mesh.x0))
 		r_size = len(self.mesh.red_r)
 		g_size = len(self.mesh.g)
-		s_size = 2*len(self.mesh.T)
+		s_size = len(self.mesh.red_s)
 		DR = self.sparseDRdr()
 		DS = self.sparseDSds()
 		
@@ -617,7 +617,7 @@ class ARAP:
 		RU = self.mesh.GR.dot(self.mesh.GU)
 		dEdS =  np.multiply.outer(self.mesh.GS.dot(UtPAx), UtPAx) - np.multiply.outer(np.dot(RU.T, PAg), UtPAx)
 		# dEds = np.tensordot(dEdS, _dSds, axes = ([0,1], [0,1]))
-		dEds = np.zeros(2*len(self.mesh.T))
+		dEds = np.zeros(len(self.mesh.red_s))
 		for i in range(len(dEds)):
 			dEds[i] = DS[i].multiply(dEdS).sum()
 
@@ -699,19 +699,25 @@ class ARAP:
 	def sparseDSds(self):
 		if self.DSDs == None:
 			DS = []
-			for t in range(len(self.mesh.T)):
-				dSdsx = np.array([[1,0],[0,0]])
-				dSdsy = np.array([[0,0],[0,1]])
+			s = self.mesh.sW.dot(np.array(self.mesh.red_s))
+			for t in range(len(self.mesh.red_s)/2):
+				sWx = self.mesh.sW[:,2*t]
+				sWy = self.mesh.sW[:,2*t+1]
+				x_block = []
+				y_block = []
+				for i in range(s.shape[0]/2):
+					dSdsx = np.array([[sWx[2*i],0],[0,0]])
+					dSdsy = np.array([[0,0],[0,sWy[2*i+1]]])
 
-				dSdsx_e = sparse.kron(sparse.eye(3), dSdsx)
-				dSdsy_e = sparse.kron(sparse.eye(3), dSdsy)
-				gdSdsx = sparse.csc_matrix(np.zeros((6*len(self.mesh.T), 6*len(self.mesh.T)))) 
-				gdSdsy = sparse.csc_matrix(np.zeros((6*len(self.mesh.T), 6*len(self.mesh.T))))
-				gdSdsx[6*t:6*t+6, 6*t:6*t+6] = dSdsx_e
-				gdSdsy[6*t:6*t+6, 6*t:6*t+6] = dSdsy_e
+					x_block.append(sparse.kron(sparse.eye(3), dSdsx))
+					y_block.append(sparse.kron(sparse.eye(3), dSdsy))
+
+				gdSdsx = sparse.block_diag(x_block)
+				gdSdsy = sparse.block_diag(y_block)
 
 				DS.append(gdSdsx)
-				DS.append(gdSdsy)
+				DS.append(gdSdsy)	
+
 			self.DSDs = DS
 		return self.DSDs
 
@@ -918,26 +924,29 @@ class NeohookeanElastic:
 		# t2 = self.mu*sy + 2*sx*(sx*sy -1)
 		return np.array([t1, t2])
 
-	def PrinStretchEnergy(self, _q):
+	def PrinStretchEnergy(self, _rs):
 		En = 0
 		for t in range(len(self.mesh.T)):
-			En += self.PrinStretchElementEnergy(_q[3*t + 1], _q[3*t + 2])
+			sx = self.mesh.sW[2*t,:].dot(_rs)
+			sy = self.mesh.sW[2*t+1,:].dot(_rs)
+			En += self.PrinStretchElementEnergy(sx, sy)
 		return En
 
-	def PrinStretchForce(self, _q):
-		# print(_q)
-		force = np.zeros(2*len(self.mesh.T))
+	def PrinStretchForce(self, _rs):
+		force = np.zeros(len(self.mesh.red_s))
 		for t in range(len(self.mesh.T)):
-			force[2*t:2*t +2] = self.PrinStretchElementForce(_q[3*t + 1], _q[3*t + 2])
+			sx = self.mesh.sW[2*t,:].dot(_rs)
+			sy = self.mesh.sW[2*t+1,:].dot(_rs)
+			force[2*self.mesh.s_handles_ind[t]:2*self.mesh.s_handles_ind[t] +2] = self.PrinStretchElementForce(sx, sy)
 		return force
 
 	def Energy(self, irs):
-		e2 = self.PrinStretchEnergy(_q=iq)
+		e2 = self.PrinStretchEnergy(_rs=irs)
 		e1 = -1*self.GravityEnergy() 
 		return e2 + e1
 
-	def Forces(self, iq, idgds):
-		f2 = self.PrinStretchForce(_q=iq)
+	def Forces(self, irs, idgds):
+		f2 = self.PrinStretchForce(_rs=irs)
 		if idgds is None:
 			return f2
 		f1 =  self.GravityForce(idgds)
@@ -951,7 +960,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 3e-1
+		self.adder = 3e-3
 		# self.set_random_strain()
 		self.mov = np.array(self.mesh.fixed_min_axis(1))
 
@@ -971,60 +980,44 @@ class TimeIntegrator:
 		if(self.time%10 == 0):
 			self.adder *= -1
 
-		# self.mesh.g[2*self.mov+1] -= self.adder
-		self.mesh.red_s[0] -=self.adder
-		print(self.mesh.red_s)
-		print(self.mesh.s_handles_ind[0])
-		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
-
+		self.mesh.g[2*self.mov+1] -= self.adder
+		
 		self.time += 1
 
 	def solve(self):
 		self.iterate()
-		s0 = []
-		for i in range(len(self.mesh.T)):
-			s0.append(self.mesh.q[3*i +1])
-			s0.append(self.mesh.q[3*i +2])
+		s0 = np.array(self.mesh.red_s) + np.zeros(len(self.mesh.red_s))
 
 		def energy(s):
-			# a = datetime.datetime.now()
-			for i in range(len(s)/2):
-				self.mesh.q[3*i + 1] = s[2*i]
-				self.mesh.q[3*i + 2] = s[2*i +1]
-			# b = datetime.datetime.now()
+			for i in range(len(s)):
+				self.mesh.red_s[i] = s[i]
+
 			self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
-			# c = datetime.datetime.now()
+			
 			self.arap.iterate()
-			# d = datetime.datetime.now()
-			E_arap =  1e1*self.arap.Energy()
-			# e = datetime.datetime.now()
-			E_elastic =  self.elastic.Energy(irs=self.mesh.q)
-			# f = datetime.datetime.now()
+			E_arap = 0# 1e1*self.arap.Energy()
+			
+			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
+			
 			print("E", E_arap, E_elastic)
-			# print("Solve En time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds)
 
 			return E_arap + E_elastic
 
 		def jacobian(s):
-			# a = datetime.datetime.now()
-			for i in range(len(s)/2):
-				self.mesh.q[3*i + 1] = s[2*i]
-				self.mesh.q[3*i + 2] = s[2*i +1]
-			# b = datetime.datetime.now()
-			# c = datetime.datetime.now()
+			for i in range(len(s)):
+				self.mesh.red_s[i] = s[i]
+		
 			dgds = None
-			J_arap, dgds, drds = self.arap.Jacobian()
+			#J_arap, dgds, drds = self.arap.Jacobian()
 
-			# d = datetime.datetime.now()
-			J_elastic = self.elastic.Forces(irs = self.mesh.q, idgds=dgds)
-			# e = datetime.datetime.now()
-			# print("Solve Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds)
+			J_elastic = self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
+
 			return  J_elastic + 1e1*J_arap
 		
 		res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True, 'eps':1e-08})
-		for i in range(len(res.x)/2):
-			self.mesh.q[3*i+1] = res.x[2*i]
-			self.mesh.q[3*i+2] = res.x[2*i+1]
+		
+		for i in range(len(res.x)):
+			self.mesh.red_s[i] = res.x[i]
 		
 		print("r", self.mesh.red_r)
 		print("s", res.x)
@@ -1051,10 +1044,10 @@ def display():
 		viewer.data.clear()
 		# if(time_integrator.time>30):
 		# 	exit()
-		time_integrator.iterate()
-		arap.iterate()
+		# time_integrator.iterate()
+		# arap.iterate()
 		# print(mesh.red_r)
-		# time_integrator.solve()
+		time_integrator.solve()
 
 		
 		DV, DT = mesh.getDiscontinuousVT()
@@ -1124,7 +1117,7 @@ def display():
 	viewer.callback_key_down = key_down
 	viewer.core.is_animating = False
 	viewer.launch()
-display()
+# display()
 
 def headless():
 	iV, iT, iU = rectangle_mesh(9,9,1)
