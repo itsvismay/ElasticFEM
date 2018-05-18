@@ -310,14 +310,14 @@ def FiniteDifferencesARAP():
 	# check_dEds()
 	# check_dEdr()
 
-	check_Hessian_dEdgdg()
-	check_Hessian_dEdrdg()
-	check_Hessian_dEdrdr()
-	check_Hessian_dEdrds()
-	check_Hessian_dEdgds()
+	# check_Hessian_dEdgdg()
+	# check_Hessian_dEdrdg()
+	# check_Hessian_dEdrdr()
+	# check_Hessian_dEdrds()
+	# check_Hessian_dEdgds()
 	check_dgds_drds()
 
-# FiniteDifferencesARAP()
+FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-6
@@ -379,8 +379,8 @@ def FiniteDifferencesElasticity():
 		print("fake", dEgds)
 		print("Diff", np.sum(real - np.array(dEgds)))
 
-	# check_PrinStretchForce()
-	check_gravityForce()
+	check_PrinStretchForce()
+	# check_gravityForce()
 	# test()
 
-FiniteDifferencesElasticity()
+# FiniteDifferencesElasticity()
