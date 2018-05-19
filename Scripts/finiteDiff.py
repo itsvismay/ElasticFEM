@@ -2,8 +2,8 @@ import numpy as np
 from version2 import rectangle_mesh, torus_mesh, featherize, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
-	eps = 1e-4
-	iV, iT, iU = rectangle_mesh(2,2,.1)
+	eps = 1e-5
+	iV, iT, iU = rectangle_mesh(1,1,.1)
 	# iV, iT, iU = torus_mesh(5,4,3,.1)
 	its = 100
 	to_fix = get_min_max(iV, a=1)
@@ -32,20 +32,17 @@ def FiniteDifferencesARAP():
 
 	def check_dEds():
 		realdEdS, realdEds = arap.dEds()
-		dEds = []
-		for i in range(len(mesh.T)):
-			mesh.q[3*i+1] += eps
-			mesh.getGlobalF()
-			Ei = arap.energy(_g =mesh.g, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
-			dEds.append((Ei - E0)/eps)
-			mesh.q[3*i+1] -= eps
-
-			mesh.q[3*i+2] += eps
-			mesh.getGlobalF()
-			Ei = arap.energy(_g =mesh.g, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
-			dEds.append((Ei - E0)/eps)
-			mesh.q[3*i+2] -=eps
 		print(realdEds)
+
+		dEds = []
+		for i in range(len(mesh.red_s)):
+			mesh.red_s[i] += eps
+			mesh.getGlobalF()
+			Ei = arap.energy(_g =mesh.g, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+			dEds.append((Ei - E0)/eps)
+			mesh.red_s[i] -= eps
+
+		print(dEds)
 		print("Es ", np.sum(np.array(dEds)-realdEds))
 
 	def check_dEdS():
@@ -290,13 +287,13 @@ def FiniteDifferencesARAP():
 			# exit()
 				
 
-		# print("FD")
-		# print(np.array(dgds).T)
-		# print(np.array(drds).T)
-		# print("")
-		# print("real")
-		# print(real1)
-		# print(real2)
+		print("FD")
+		print(np.array(dgds).T)
+		print(np.array(drds).T)
+		print("")
+		print("real")
+		print(real1)
+		print(real2)
 		print("DIFF")
 		# print("T: ", len(mesh.T))
 		print("dgds:", np.linalg.norm(real1 - np.array(dgds).T))

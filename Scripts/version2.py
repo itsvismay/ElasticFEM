@@ -56,7 +56,7 @@ def generate_euclidean_weights(CAx, handles, others):
 	# print(W)
 	# print(np.kron(W, np.eye(2)))
 	# exit()
-	return np.kron(W, np.eye(2))
+	return np.kron(W, np.eye(3))
 
 def get_area(p1, p2, p3):
 	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))*0.5
@@ -74,8 +74,8 @@ def rectangle_mesh(x, y, step=1):
 def torus_mesh(r1, r2, r3, step):
 	V = []
 	T = []
-	for theta in range(0, 80):
-		angle = theta*np.pi/69
+	for theta in range(0, 17):
+		angle = theta*np.pi/11
 		if(angle<=np.pi):
 			V.append([step*r1*np.cos(angle), step*r1*np.sin(angle)])
 			V.append([step*r2*np.cos(angle), step*r2*np.sin(angle)])
@@ -95,8 +95,8 @@ def triangle_mesh():
 	return V, T, [0]
 
 def featherize(x, y, step=1):
-	# V,T,U = rectangle_mesh(x, y, step)
-	V,T, U = torus_mesh(5, 4, 3, step)
+	V,T,U = rectangle_mesh(x, y, step)
+	# V,T, U = torus_mesh(5, 4, 3, step)
 
 	half_x = step*(x)/2.0
 	half_y = step*(y)/2.0
@@ -134,7 +134,7 @@ class Mesh:
 		self.V = np.array(iVTU[0])
 		self.T = iVTU[1]
 
-		self.fixedOnElement = None
+		self.number_of_verts_fixed_on_element = None
 		self.P = None
 		self.A = None
 		self.C = None
@@ -171,11 +171,17 @@ class Mesh:
 
 	def setupStrainSkinnings(self):
 		print("Setting up skinnings")
+		if len(self.T) == 1:
+			self.s_handles_ind = [0]
+			self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
+			self.sW = np.eye(3)
+			return
+
 		t_set = Set([i for i in range(len(self.T))])
 
-		# self.s_handles_ind =[i for i in range(len(self.T)) if i%4==0]
-		self.s_handles_ind = [1]
-		self.red_s = np.ones(2*len(self.s_handles_ind))
+		self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
+		# self.s_handles_ind = [1]
+		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
 		centroids = self.getC().dot(self.getA().dot(self.x0))
 		
@@ -183,7 +189,7 @@ class Mesh:
 		self.sW = generate_euclidean_weights(centroids, self.s_handles_ind, list(t_set.difference(Set(self.s_handles_ind))))
 		# print(self.T)
 		# print(self.s_handles_ind)
-		# exit()
+	
 		print("Done setting up skinnings")
 		return
 
@@ -257,7 +263,7 @@ class Mesh:
 		print("Creating Block and AB matrix")
 		onVerts = np.zeros(len(self.V))
 		onVerts[self.fixed] = 1
-		self.fixedOnElement = self.getA().dot(np.kron(onVerts, np.ones(2)))
+		self.number_of_verts_fixed_on_element = self.getA().dot(np.kron(onVerts, np.ones(2)))
 		if(len(self.fixed) == len(self.V)):
 			return np.array([[]]), sparse.eye(2*len(self.V)).tocsc()
 		b = np.kron(np.delete(np.eye(len(self.V)), self.fixed, axis =1), np.eye(2))
@@ -341,10 +347,10 @@ class Mesh:
 		# sx = self.q[3*ind+1]
 		# sy = self.q[3*ind+2]
 
-		sx = self.sW[2*ind,:].dot(self.red_s)
-		sy = self.sW[2*ind+1,:].dot(self.red_s)
-		
-		S = np.array([[sx, 0], [0, sy]])  
+		sx = self.sW[3*ind,:].dot(self.red_s)
+		sy = self.sW[3*ind+1,:].dot(self.red_s)
+		z = self.sW[3*ind +2,:].dot(self.red_s)
+		S = np.array([[sx, z], [z, sy]])  
 		return S
 
 	def getF(self, ind):
@@ -463,15 +469,14 @@ class ARAP:
 		self.mesh.getGlobalF(updateR=True, updateS=True, updateU=False)
 		b = datetime.datetime.now()
 		Egg, Erg, Err, Egs, Ers = self.Hessians(useSparse=useSparse)
+
 		c = datetime.datetime.now()
-		print(Egg.shape, Erg.shape)
 		lhs_left = sparse.vstack((Egg, Erg.T))
 		lhs_right = np.concatenate((Erg , Err))
 
 		rhs = -1*np.concatenate((Egs, Ers))
 
 
-		
 		#Constraining Rotation
 		# R = np.eye(len(self.mesh.T))
 		R = np.array([[] for i in self.mesh.red_r]).T
@@ -511,8 +516,9 @@ class ARAP:
 				KKT_constrains = np.vstack((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
 				# print(KKT_constrains)
 				# exit()
-				# print(sparse.issparse(jacKKT), sparse.issparse(KKT_constrains), jacKKT.shape, jacKKT.nnz)
+				print(sparse.issparse(jacKKT), sparse.issparse(KKT_constrains), jacKKT.shape, jacKKT.nnz)
 				jacChol = scipy.sparse.linalg.splu(jacKKT.tocsc())
+				exit()
 				Jac_s = jacChol.solve(KKT_constrains)
 			
 			else:
@@ -542,7 +548,7 @@ class ARAP:
 		aa = datetime.datetime.now()
 		dEds = np.matmul(Eg, dgds) + np.matmul(Er, drds) + Es
 		bb = datetime.datetime.now()
-		print("Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds, (aa-f).microseconds, (bb-aa).microseconds)
+		# print("Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds, (aa-f).microseconds, (bb-aa).microseconds)
 		return dEds, dgds, drds
 
 	def Hessians(self, useSparse=True):		
@@ -557,7 +563,7 @@ class ARAP:
 		DR = self.sparseDRdr()
 		DS = self.sparseDSds()
 		
-		Egg = self.AtPtPA
+		Egg = self.AtPtPA.toarray()
 
 		a1 = datetime.datetime.now()
 
@@ -568,7 +574,13 @@ class ARAP:
 		if not useSparse:
 			print("SPARSE IS FALSE")
 			sample = np.multiply.outer(-1*PA.T.toarray(), USUtPAx.T)
-			Erg = np.tensordot(sample, self.dRdr(), axes=([1,2], [0,1]))
+			Erg = np.zeros((g_size, r_size))
+			for j in range(Erg.shape[1]):
+				sp = DR[j]
+				for i in range(Erg.shape[0]):
+					if sp.nnz>0:
+						Erg[i,j] = sp.multiply(sample[i,:,:]).sum()
+
 		else:
 			sample = self.sparseErg_first(-1*PA, USUtPAx)
 			Erg = np.zeros((g_size, r_size))
@@ -581,16 +593,13 @@ class ARAP:
 		a2 = datetime.datetime.now()
 		
 		negPAg_USUtPAx = np.multiply.outer( -1*PAg, USUtPAx)
-		if not useSparse:
-			Err = np.tensordot(negPAg_USUtPAx, self.d2Rdr2(), axes = ([0,1],[1,2]))
-		else:
-			DDR = self.sparseDDRdrdr()
-			Err = np.zeros((r_size, r_size))
-			for i in range(Err.shape[0]):
-				for j in range(Err.shape[1]):
-					spD = DDR[i][j]
-					if spD.nnz>0:
-						Err[i,j] = spD.multiply(negPAg_USUtPAx).sum()
+		DDR = self.sparseDDRdrdr()
+		Err = np.zeros((r_size, r_size))
+		for i in range(Err.shape[0]):
+			for j in range(Err.shape[1]):
+				spD = DDR[i][j]
+				if spD.nnz>0:
+					Err[i,j] = spD.multiply(negPAg_USUtPAx).sum()
 		
 		a3 = datetime.datetime.now()
 
@@ -598,8 +607,12 @@ class ARAP:
 		PAtRU = PA.T.dot(self.mesh.GR.dot(self.mesh.GU))
 		if not useSparse:
 			d_gEgdS = np.multiply.outer(-1*PAtRU.toarray(), UtPAx.T)
-			print(d_gEgdS[0,:,:].shape)
-			Egs = np.tensordot(d_gEgdS, self.dSds(), axes =([1,2],[0,1]))
+			Egs = np.zeros((g_size, s_size))
+			for j in range(Egs.shape[1]):
+				sp = DS[j]
+				for i in range(Egs.shape[0]):
+					if sp.nnz>0:
+						Egs[i,j] = sp.multiply(d_gEgdS[i,:,:]).sum()
 		else:
 			d_gEgdS = self.sparseEgs_first(-1*PAtRU, UtPAx)
 			Egs = np.zeros((g_size, s_size))
@@ -611,15 +624,22 @@ class ARAP:
 		a4 = datetime.datetime.now()
 
 		if not useSparse:
-			#Original math with rank 4 tensor
-			# first = np.multiply.outer(-PAg, np.multiply.outer(self.mesh.GU, UtPAx))
-			# second = np.tensordot(first, self.dRdr(), axes=([0,1],[0,1]))
-			# Ers = np.tensordot(second, self.dSds(), axes=([0,1],[0,1]))
+			Ers = np.zeros((r_size, s_size))
+			first = np.multiply.outer(-PAg, self.mesh.GU.toarray())
+			mid = np.zeros((len(first), r_size))
 
-			first = np.multiply.outer(-PAg, self.mesh.GU)
-			mid = np.tensordot(first, self.dRdr(), axes=([0,1],[0,1]))
+			for j in range(mid.shape[1]):
+				spR = DR[j]
+				for i in range(mid.shape[0]):
+					if spR.nnz>0:
+						mid[i,j] = spR.multiply(first[:,:,i]).sum()
+
 			second = np.multiply.outer(UtPAx, mid)
-			Ers = np.tensordot(second, self.dSds(), axes=([0,1],[0,1]))
+			for j in range(Ers.shape[1]):
+				spS = DS[j]
+				for i in range(Ers.shape[0]):
+					if spS.nnz>0:
+						Ers[i,j] = spS.multiply(second[:,:,i]).sum()
 		else:
 			Ers = np.zeros((r_size, s_size))
 			first = self.sparseErs_first(PAg)
@@ -797,23 +817,29 @@ class ARAP:
 		if self.DSDs == None:
 			DS = []
 			s = self.mesh.sW.dot(np.array(self.mesh.red_s))
-			for t in range(len(self.mesh.red_s)/2):
-				sWx = self.mesh.sW[:,2*t]
-				sWy = self.mesh.sW[:,2*t+1]
+			for t in range(len(self.mesh.red_s)/3):
+				sWx = self.mesh.sW[:,3*t]
+				sWy = self.mesh.sW[:,3*t+1]
+				sWo = self.mesh.sW[:,3*t+1]
 				x_block = []
 				y_block = []
-				for i in range(s.shape[0]/2):
-					dSdsx = np.array([[sWx[2*i],0],[0,0]])
-					dSdsy = np.array([[0,0],[0,sWy[2*i+1]]])
+				off_diagonal_block =[]
+				for i in range(s.shape[0]/3):
+					dSdsx = np.array([[sWx[3*i],0],[0,0]])
+					dSdsy = np.array([[0,0],[0,sWy[3*i+1]]])
+					dSdso = np.array([[0, sWo[3*i]],[sWo[3*i],0]])
 
 					x_block.append(sparse.kron(sparse.eye(3), dSdsx))
 					y_block.append(sparse.kron(sparse.eye(3), dSdsy))
+					off_diagonal_block.append(sparse.kron(sparse.eye(3), dSdso))
 
 				gdSdsx = sparse.block_diag(x_block)
 				gdSdsy = sparse.block_diag(y_block)
+				gdSdso = sparse.block_diag(off_diagonal_block)
 
 				DS.append(gdSdsx)
-				DS.append(gdSdsy)	
+				DS.append(gdSdsy)
+				DS.append(gdSdso)
 
 			self.DSDs = DS
 		return self.DSDs
@@ -883,6 +909,27 @@ class ARAP:
 		for i in range(len(self.mesh.red_r)):
 			B = self.mesh.RotationBLOCK[i]
 			PAx_e = B.T.dot(self.PAx)
+
+			#Constraining Rotations
+			# num_verts_fixed_in_cluster = B.T.dot(self.mesh.number_of_verts_fixed_on_element)
+			# if(np.sum(num_verts_fixed_in_cluster) == 0):
+			# 	PAx_e = B.T.dot(self.PAx)
+		
+			# elif(np.sum(num_verts_fixed_in_cluster) == 2):
+			# 	print("One rotation")
+			# 	PAx_e = B.T.dot(self.PAx)
+			# 	# rotate_around = np.concatenate(
+			# 	# 	(np.diag(self.mesh.number_of_verts_fixed_on_element[6*i:6*i+2]),
+			# 	# 		np.diag(self.mesh.number_of_verts_fixed_on_element[6*i+2:6*i+4]),
+			# 	# 		np.diag(self.mesh.number_of_verts_fixed_on_element[6*i+4:6*i+6])), axis =1)
+			# 	# r = np.eye(6) - np.concatenate((rotate_around, rotate_around, rotate_around))
+			# 	# # print(r)
+			# 	# PAx_e = r.dot(Ax[6*i:6*i+6])
+
+			# elif(np.sum(num_verts_fixed_in_cluster) >= 3):
+			# 	print("No rotation")
+			# 	continue
+			#---------------
 			
 			PAg_e = B.T.dot(PAg)
 			Ue = B.T.dot(self.mesh.GU.dot(B))
@@ -946,17 +993,17 @@ class NeohookeanElastic:
 		self.mesh = imesh
 		self.f = np.zeros(2*len(self.mesh.T))
 		self.v = np.zeros(2*len(self.mesh.V))
-		#self.M = self.mesh.getMassMatrix()
+		# self.M = self.mesh.getMassMatrix()
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix()
 
-		youngs = 60000
-		poissons = 0.49
-		self.mu = youngs/(2+ 2*poissons)
-		self.lambd = youngs*poissons/((1+poissons)*(1-2*poissons))
+		self.youngs = 60000
+		self.poissons = 0.49
+		self.mu = self.youngs/(2+ 2*self.poissons)
+		self.lambd = self.youngs*self.poissons/((1+self.poissons)*(1-2*self.poissons))
 		self.dimensions = 2
 
 		self.grav = np.array([0,-9.81])
-		self.rho = 0.1
+		self.rho = 100
 
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)
@@ -975,7 +1022,7 @@ class NeohookeanElastic:
 		return Eg
 
 	def GravityElementForce(self, rho, area, grav, cadgds, t):
-		gt = rho*area*np.dot(grav, cadgds)
+		gt = -rho*area*np.dot(grav, cadgds)
 		return gt
 
 	def GravityForce(self, dgds):
@@ -986,7 +1033,7 @@ class NeohookeanElastic:
 
 		for t in range(len(self.mesh.T)):
 			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
-			fg -= self.GravityElementForce(self.rho, area, self.grav, CAdgds[6*t:6*t+2, :], t)
+			fg += self.GravityElementForce(self.rho, area, self.grav, CAdgds[6*t:6*t+2, :], t)
 
 		return fg
 
@@ -1029,18 +1076,59 @@ class NeohookeanElastic:
 		t3 = self.mu/t2 
 		t4 = self.lambd*math.log(t2)/t2
 
-		# print(self.mu*t0*wx , self.mu*t1*wy ,- (t1*t3*wx + t0*t3*wy) , t1*t4*wx + t0*t4*wy)
-		f = self.mu*t0*wx + self.mu*t1*wy - (t1*t3*wx + t0*t3*wy) + t1*t4*wx + t0*t4*wy
+		f = -(self.mu*t0*wx + self.mu*t1*wy - (t1*t3*wx + t0*t3*wy) + t1*t4*wx + t0*t4*wy)
 		return f
 
 	def PrinStretchForce(self, _rs):
 		force = np.zeros(len(self.mesh.red_s))
 		for t in range(len(self.mesh.T)):
-			force -= self.PrinStretchElementForce(_rs,self.mesh.sW[2*t,:], self.mesh.sW[2*t+1,:] )
+			force += self.PrinStretchElementForce(_rs,self.mesh.sW[2*t,:], self.mesh.sW[2*t+1,:] )
+
 		return force
 
+	def WikipediaPrinStretchElementForce(rs, wx, wy):
+		m_D = 0.5*(self.youngs*self.poissons)/((1.0+self.poissons)*(1.0-2.0*self.poissons))
+		m_C = 0.5*self.youngs/(2.0*(1.0+self.poissons))
+
+		t0 = -2.0/3
+		t1 = wx.dot(rs)
+		t2 = wy.dot(rs)
+
+		f = m_C*(math.pow(t1, t0)*math.pow(t2, t0)*(t1*t1 + t2*t2) -2) + m_D*(t1*t2 -1)*(t1*t2-1)
+		return -f 
+
+	def WikipediaForce(self, _rs):
+		force = np.zeros(len(self.mesh.red_s))
+		for t in range(len(self.mesh.T)):
+			force += self.WikipediaPrinStretchElementForce(_rs, self.mesh.sW[2*t,:], self.mesh.sW[2*t+1,:] )
+
+		return force
+
+	def WikipediaPrinStretchElementEnergy(self, sx, sy, area):
+		if(sx<=0 or sy<=0):
+			return 1e40
+
+		J = sx*sy 
+		m_D = 0.5*(self.youngs*self.poissons)/((1.0+self.poissons)*(1.0-2.0*self.poissons))
+		m_C = 0.5*self.youngs/(2.0*(1.0+self.poissons))
+		I1_b = math.pow(J, -2.0/3)*(sx*sx + sy*sy)
+		return area*(m_C*(I1_b -2) + m_D*(J-1)*(J-1))
+
+	def WikipediaEnergy(self,_rs):
+		E = 0
+		
+		Ax = self.mesh.getA().dot(self.mesh.x0)
+	
+		for t in range(len(self.mesh.T)):
+			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
+			sx = self.mesh.sW[2*t,:].dot(_rs)
+			sy = self.mesh.sW[2*t+1,:].dot(_rs)
+			E += self.WikipediaPrinStretchElementEnergy(sx,sy, area)
+
+		return E
+
 	def Energy(self, irs):
-		e2 = self.PrinStretchEnergy(_rs=irs)
+		e2 = self.WikipediaEnergy(_rs=irs)
 		e1 = -1*self.GravityEnergy() 
 		return e2 + e1
 
@@ -1059,10 +1147,10 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 3e-2
+		self.adder = 1e-1
 		# self.set_random_strain()
 		self.mov = np.array(self.mesh.fixed_min_axis(1))
-		self.bnds = [(0, None) for i in range(len(self.mesh.red_s))]
+		self.bnds = [(1e-5, None) for i in range(len(self.mesh.red_s))]
 
 	def set_strain(self):
 		for i in range(len(self.mesh.T)):
@@ -1085,18 +1173,20 @@ class TimeIntegrator:
 		self.time += 1
 
 	def solve(self):
+		pass
+
+	def static_solve(self):
 		self.iterate()
-		s0 = np.array(self.mesh.red_s) + np.zeros(len(self.mesh.red_s))
+		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 		
-	
-		alpha1 = 1e10
-		alpha2 = 1
+		alpha1 =1e20
+		alpha2 =1
+
 		def energy(s):
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
 
-			print(self.mesh.red_s)
-			
+			print("guess ", self.mesh.red_s)
 			self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
 			
 			self.arap.iterate()
@@ -1105,6 +1195,7 @@ class TimeIntegrator:
 			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
 			
 			print("E", E_arap, E_elastic)
+	
 
 			return alpha1*E_arap + alpha2*E_elastic
 
@@ -1112,34 +1203,38 @@ class TimeIntegrator:
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
 
-			# print(self.mesh.red_s)
+			print("guess ",self.mesh.red_s)
 			dgds = None
 			self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()
 
-			J_elastic = self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
+			J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
 
+	
 			return  alpha2*J_elastic + alpha1*J_arap
 		
-		res = scipy.optimize.minimize(energy, s0, method='BFGS', jac=jacobian, options={'gtol': 1e-6, 'disp': True, 'eps':1e-08})
+		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'disp': False, 'eps':1e-08})
 		
+
 		for i in range(len(res.x)):
 			self.mesh.red_s[i] = res.x[i]
 		
 		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
-		self.arap.iterate()
-		print("r", self.mesh.red_r)
-		print("s", res.x)
-		print("g", self.mesh.g)
-		# print("GF", self.mesh.GS)
+		print("r1", self.mesh.red_r)
+		print("s1", res.x)
+		print("g1", self.mesh.g)
+		print(res)
+		
 
 def display():
-	iV, iT, iU = rectangle_mesh(3,3,.1)
+	iV, iT, iU = rectangle_mesh(1,1,.1)
 	# iV, iT, iU = torus_mesh(5, 4, 3, .1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
 
+	print(mesh.GS)
+	exit()
 	neoh =NeohookeanElastic(imesh=mesh )
 	arap = ARAP(imesh=mesh)
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
@@ -1151,6 +1246,13 @@ def display():
 	tempB = igl.eigen.MatrixXuc(1280, 800)
 	tempA = igl.eigen.MatrixXuc(1280, 800)
 
+	# sy_inds = [i for i in range(len(mesh.red_s)) if i%2==0]
+	# mesh.red_s[[i for i in range(len(mesh.red_s)) if i%2==1]] = 0.5
+	# mesh.getGlobalF()
+	# mesh.red_s[sy_inds] = 1
+	# print("En", neoh.Energy(irs=mesh.red_s))
+	# mesh.g[2*time_integrator.mov+1] += 0.2
+	# arap.iterate()
 	def mouse_down(viewer, aaa, bbb):
 		bc = igl.eigen.MatrixXd()
 		RV, RT = mesh.getContinuousVT()
@@ -1170,11 +1272,18 @@ def display():
 		viewer.data.clear()
 		# if(time_integrator.time>30):
 		# 	exit()
-		# time_integrator.iterate()
-		# arap.iterate()
 		# print(mesh.red_s)
 		if(aaa==65):
-			time_integrator.solve()
+			# time_integrator.iterate()
+			# arap.iterate()
+			# print("Earap", arap.Energy())
+			# print("En", neoh.Energy(irs=mesh.red_s))
+
+			# J_arap, dgds, drds = arap.Jacobian()
+			# print("Grad arap ", J_arap)
+			# J_elastic = neoh.Forces(irs = mesh.red_s, idgds=dgds)
+			# print("Grad n ", J_elastic)
+			time_integrator.static_solve()
 
 		
 		DV, DT = mesh.getDiscontinuousVT()
@@ -1251,7 +1360,7 @@ def display():
 	viewer.callback_mouse_down = mouse_down
 	viewer.core.is_animating = False
 	viewer.launch()
-display()
+# display()
 
 def headless():
 	# iV, iT, iU = torus_mesh(5, 4, 3, .1)
@@ -1263,13 +1372,48 @@ def headless():
 	mesh.q[0] = 0
 	neoh =NeohookeanElastic(imesh=mesh )
 	arap = ARAP(imesh=mesh)
-	a = datetime.datetime.now()
-	# print(arap.dRdr()[:,:,0])
-	# print(arap.sparseDRdr()[0])
-	# print(arap.d2Rdr2()[1,:,:,1])
-	# print(arap.sparseDDRdrdr()[1][1])
+	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
 
-	arap.Hessians()
-	b = datetime.datetime.now()
-	print("Time", (b-a).microseconds)
+	time_integrator.iterate()
+
+	UtPAx = mesh.GU.T.dot(mesh.getP().dot(mesh.getA().dot(mesh.x0)))
+	DS = arap.sparseDSds()
+
+
+	#LHS
+	RU = mesh.GR.dot(mesh.GU)
+	PAg = mesh.getP().dot(mesh.getA().dot(mesh.g))
+	UtRtPAg_xUTPAx = np.multiply.outer(RU.T.dot(PAg), UtPAx)
+	lhs = np.zeros(len(mesh.red_s))
+	for i in range(len(lhs)):
+		lhs[i] = DS[i].multiply(UtRtPAg_xUTPAx).sum()
+	# print(lhs)
+
+	#RHS
+	rhs_1 = np.zeros(len(mesh.red_s))
+	original = np.multiply.outer(UtPAx, mesh.GS.dot(UtPAx))
+	for i in range(len(rhs_1)):
+		rhs_1[i] = DS[i].multiply(original).sum()
+	print("rhs1")
+	# print(rhs_1)
+	# exit()
+	# print(arap.dEds()[1])
+	
+	rhs_2  = np.zeros(len(mesh.red_s))
+	UU = np.multiply.outer(UtPAx, UtPAx)
+
+
+	print("rhs2")
+
+	for i in range(0, len(rhs_2)):
+		rhs_2[i] = DS[i].multiply(UU).sum()
+
+	A = np.diag(rhs_2)
+
+	InvA = np.linalg.pinv(A)
+	s_vals = InvA.dot(lhs)
+
+	# print(arap.dEds()[1])
+	print(s_vals)
+
 # headless()
