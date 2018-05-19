@@ -74,8 +74,8 @@ def rectangle_mesh(x, y, step=1):
 def torus_mesh(r1, r2, r3, step):
 	V = []
 	T = []
-	for theta in range(0, 17):
-		angle = theta*np.pi/11
+	for theta in range(0, 5):
+		angle = theta*np.pi/2
 		if(angle<=np.pi):
 			V.append([step*r1*np.cos(angle), step*r1*np.sin(angle)])
 			V.append([step*r2*np.cos(angle), step*r2*np.sin(angle)])
@@ -197,7 +197,7 @@ class Mesh:
 		print("Setting up rotation clusters")
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
-		nrc = 4 #len(self.T)
+		nrc = 2 #len(self.T)
 		self.red_r = np.zeros(nrc)
 		self.r_element_cluster_map = np.zeros(len(self.T), dtype = int)
 		
@@ -218,11 +218,11 @@ class Mesh:
 					self.r_cluster_element_map[1].append(i)
 			else:
 				if(centroids[6*i+1]<=(maxy + miny)/2.0):
-					self.r_element_cluster_map[i] = 2
-					self.r_cluster_element_map[2].append(i)
+					self.r_element_cluster_map[i] = 0
+					self.r_cluster_element_map[0].append(i)
 				else:
-					self.r_element_cluster_map[i] = 3
-					self.r_cluster_element_map[3].append(i)
+					self.r_element_cluster_map[i] = 1
+					self.r_cluster_element_map[1].append(i)
 		
 		self.RotationBLOCK = []
 		for i in range(len(self.red_r)):
@@ -464,7 +464,7 @@ class ARAP:
 		en = 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
 		return en
 
-	def Jacobian(self, block = False, kkt= True, useSparse=True):
+	def Jacobian(self, block = False, kkt= True, useSparse=False):
 		a = datetime.datetime.now()
 		self.mesh.getGlobalF(updateR=True, updateS=True, updateU=False)
 		b = datetime.datetime.now()
@@ -516,13 +516,12 @@ class ARAP:
 				KKT_constrains = np.vstack((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
 				# print(KKT_constrains)
 				# exit()
-				print(sparse.issparse(jacKKT), sparse.issparse(KKT_constrains), jacKKT.shape, jacKKT.nnz)
+				# print(sparse.issparse(jacKKT), sparse.issparse(KKT_constrains), jacKKT.shape, jacKKT.nnz)
 				jacChol = scipy.sparse.linalg.splu(jacKKT.tocsc())
-				exit()
 				Jac_s = jacChol.solve(KKT_constrains)
 			
 			else:
-				col1 = np.concatenate((lhs_left, np.concatenate((C.toarray(), np.zeros((rb_size, g_size))))))
+				col1 = np.concatenate((lhs_left.toarray(), np.concatenate((C.toarray(), np.zeros((rb_size, g_size))))))
 				# print("col", col1.shape)
 				col2 = np.concatenate((lhs_right, np.concatenate((np.zeros((gb_size, r_size)), R))))
 				# print("col", col2.shape)
@@ -551,7 +550,7 @@ class ARAP:
 		# print("Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds, (aa-f).microseconds, (bb-aa).microseconds)
 		return dEds, dgds, drds
 
-	def Hessians(self, useSparse=True):		
+	def Hessians(self, useSparse=True):	
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		PAg = PA.dot(self.mesh.g)
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
@@ -563,7 +562,7 @@ class ARAP:
 		DR = self.sparseDRdr()
 		DS = self.sparseDSds()
 		
-		Egg = self.AtPtPA.toarray()
+		Egg = self.AtPtPA
 
 		a1 = datetime.datetime.now()
 
@@ -572,7 +571,7 @@ class ARAP:
 	
 
 		if not useSparse:
-			print("SPARSE IS FALSE")
+			print("Erg NOT SPARSE")
 			sample = np.multiply.outer(-1*PA.T.toarray(), USUtPAx.T)
 			Erg = np.zeros((g_size, r_size))
 			for j in range(Erg.shape[1]):
@@ -606,6 +605,7 @@ class ARAP:
 		
 		PAtRU = PA.T.dot(self.mesh.GR.dot(self.mesh.GU))
 		if not useSparse:
+			print("Egs NOT SPARSE")
 			d_gEgdS = np.multiply.outer(-1*PAtRU.toarray(), UtPAx.T)
 			Egs = np.zeros((g_size, s_size))
 			for j in range(Egs.shape[1]):
@@ -624,6 +624,7 @@ class ARAP:
 		a4 = datetime.datetime.now()
 
 		if not useSparse:
+			print("Ers NOT SPARSE")
 			Ers = np.zeros((r_size, s_size))
 			first = np.multiply.outer(-PAg, self.mesh.GU.toarray())
 			mid = np.zeros((len(first), r_size))
@@ -816,32 +817,34 @@ class ARAP:
 	def sparseDSds(self):
 		if self.DSDs == None:
 			DS = []
-			s = self.mesh.sW.dot(np.array(self.mesh.red_s))
+			s = self.mesh.sW.dot(self.mesh.red_s)
+	
 			for t in range(len(self.mesh.red_s)/3):
 				sWx = self.mesh.sW[:,3*t]
 				sWy = self.mesh.sW[:,3*t+1]
-				sWo = self.mesh.sW[:,3*t+1]
+				sWo = self.mesh.sW[:,3*t+2]
 				x_block = []
 				y_block = []
 				off_diagonal_block =[]
 				for i in range(s.shape[0]/3):
 					dSdsx = np.array([[sWx[3*i],0],[0,0]])
 					dSdsy = np.array([[0,0],[0,sWy[3*i+1]]])
-					dSdso = np.array([[0, sWo[3*i]],[sWo[3*i],0]])
+					dSdso = np.array([[0, sWo[3*i+2]],[sWo[3*i+2],0]])
 
 					x_block.append(sparse.kron(sparse.eye(3), dSdsx))
 					y_block.append(sparse.kron(sparse.eye(3), dSdsy))
 					off_diagonal_block.append(sparse.kron(sparse.eye(3), dSdso))
-
 				gdSdsx = sparse.block_diag(x_block)
 				gdSdsy = sparse.block_diag(y_block)
 				gdSdso = sparse.block_diag(off_diagonal_block)
+			
 
 				DS.append(gdSdsx)
 				DS.append(gdSdsy)
 				DS.append(gdSdso)
 
 			self.DSDs = DS
+
 		return self.DSDs
 
 	def dSds(self):

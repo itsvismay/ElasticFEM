@@ -2,8 +2,8 @@ import numpy as np
 from version2 import rectangle_mesh, torus_mesh, featherize, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
-	eps = 1e-5
-	iV, iT, iU = rectangle_mesh(1,1,.1)
+	eps = 1e-4
+	iV, iT, iU = featherize(1,1,.1)
 	# iV, iT, iU = torus_mesh(5,4,3,.1)
 	its = 100
 	to_fix = get_min_max(iV, a=1)
@@ -247,8 +247,10 @@ def FiniteDifferencesARAP():
 				mesh.red_s[j] -= eps
 
 				Egs[i].append((Eij - Ei - Ej + E0)/(eps*eps))
-		# print(real)
-		print("Egs ", np.sum(np.array(Egs) - real))
+		print(real)
+		print("\n")
+		print(np.array(Egs))
+		print("Egs ", np.linalg.norm(np.array(Egs) - real))
 
 	def check_dgds_drds():
 		Jac, real1, real2 = arap.Jacobian()
