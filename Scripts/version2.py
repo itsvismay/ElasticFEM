@@ -1089,33 +1089,62 @@ class NeohookeanElastic:
 
 		return force
 
-	def WikipediaPrinStretchElementForce(rs, wx, wy):
-		m_D = 0.5*(self.youngs*self.poissons)/((1.0+self.poissons)*(1.0-2.0*self.poissons))
-		m_C = 0.5*self.youngs/(2.0*(1.0+self.poissons))
+	def WikipediaPrinStretchElementForce(self, a, rs, wx, wy, wo):
+		md = 0.5*(self.youngs*self.poissons)/((1.0+self.poissons)*(1.0-2.0*self.poissons))
+		mc = 0.5*self.youngs/(2.0*(1.0+self.poissons))
 
-		t0 = -2.0/3
-		t1 = wx.dot(rs)
-		t2 = wy.dot(rs)
-
-		f = m_C*(math.pow(t1, t0)*math.pow(t2, t0)*(t1*t1 + t2*t2) -2) + m_D*(t1*t2 -1)*(t1*t2-1)
-		return -f 
+		t_0 = np.dot(wo, rs)
+		t_1 = np.dot(wx, rs)
+		t_2 = np.dot(wy, rs)
+		t_3 = ((t_1 * t_2) - (t_0 * t_0))
+		t_4 = np.dot(rs, wo)
+		t_5 = (2.0 / 6)
+		t_6 = np.dot(rs, wx)
+		t_7 = np.dot(rs, wy)
+		t_8 = ((t_6 * t_7) - (t_4 * t_4))
+		t_9 = ((mc * (t_8 ** -(1 + t_5))) * (t_6 + t_7))
+		t_10 = (((2 * a) * t_9) / 6.0)
+		t_11 = -t_5
+		t_12 = ((a * mc) * (t_8 ** t_11))
+		t_13 = (1.0 / 2)
+		t_14 = ((a * md) * ((t_8 ** (t_13 - 1)) * ((t_8 ** t_13) - 1)))
+		functionValue = (a * ((mc * (((t_3 ** t_11) * (t_1 + t_2)) - 2)) + (md * (((t_3 ** t_13) - 1) ** 2))))
+		gradient = (((((((((((4 * a) * t_9) / 6.0) * t_4) * wo) - (((t_10 * t_7) * wx) + ((t_10 * t_6) * wy))) + (t_12 * wx)) + (t_12 * wy)) + ((t_14 * t_7) * wx)) + ((t_14 * t_6) * wy)) - ((((4 * t_14) / 2.0) * t_4) * wo))
+		
+		return -gradient
 
 	def WikipediaForce(self, _rs):
 		force = np.zeros(len(self.mesh.red_s))
+		Ax = self.mesh.getA().dot(self.mesh.x0)
 		for t in range(len(self.mesh.T)):
-			force += self.WikipediaPrinStretchElementForce(_rs, self.mesh.sW[2*t,:], self.mesh.sW[2*t+1,:] )
+			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
+			force += self.WikipediaPrinStretchElementForce(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:] )
 
 		return force
 
-	def WikipediaPrinStretchElementEnergy(self, sx, sy, area):
-		if(sx<=0 or sy<=0):
-			return 1e40
-
-		J = sx*sy 
+	def WikipediaPrinStretchElementEnergy(self, area, rs, wx, wy, wo):
+		
 		m_D = 0.5*(self.youngs*self.poissons)/((1.0+self.poissons)*(1.0-2.0*self.poissons))
 		m_C = 0.5*self.youngs/(2.0*(1.0+self.poissons))
-		I1_b = math.pow(J, -2.0/3)*(sx*sx + sy*sy)
-		return area*(m_C*(I1_b -2) + m_D*(J-1)*(J-1))
+		
+		#MATH version
+		# c = [[sx, so],[so, sy]]
+		# I1 = np.trace(c)
+		# I3 = np.linalg.det(c)
+		# J = math.sqrt(I3)
+		# I1_b = math.pow(J, -2.0/3)*(I1)
+		# v1 = area*(m_C*(I1_b -2) + m_D*(J-1)*(J-1))
+
+		sx = wx.dot(rs)
+		sy = wy.dot(rs)
+		so = wo.dot(rs)
+		if(sx<0 or sy<0):
+			return 1e40
+		term1 = m_C*(math.pow((sx*sy - so*so), -2.0/6)*(sx + sy) - 2)
+		term2 = m_D*math.pow((math.pow(sx*sy -so*so, 1/2.0) - 1), 2)
+		v2 = area*(term1 + term2)
+
+		return v2
 
 	def WikipediaEnergy(self,_rs):
 		E = 0
@@ -1124,11 +1153,10 @@ class NeohookeanElastic:
 	
 		for t in range(len(self.mesh.T)):
 			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
-			sx = self.mesh.sW[2*t,:].dot(_rs)
-			sy = self.mesh.sW[2*t+1,:].dot(_rs)
-			E += self.WikipediaPrinStretchElementEnergy(sx,sy, area)
+			E += self.WikipediaPrinStretchElementEnergy(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:],self.mesh.sW[3*t+2,:])
 
 		return E
+
 
 	def Energy(self, irs):
 		e2 = self.WikipediaEnergy(_rs=irs)
@@ -1136,7 +1164,7 @@ class NeohookeanElastic:
 		return e2 + e1
 
 	def Forces(self, irs, idgds):
-		f2 = self.PrinStretchForce(_rs=irs)
+		f2 = self.WikipediaForce(_rs=irs)
 		if idgds is None:
 			return f2
 		f1 =  self.GravityForce(idgds)
