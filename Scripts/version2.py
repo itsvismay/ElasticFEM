@@ -74,8 +74,8 @@ def rectangle_mesh(x, y, step=1):
 def torus_mesh(r1, r2, r3, step):
 	V = []
 	T = []
-	for theta in range(0, 5):
-		angle = theta*np.pi/2
+	for theta in range(0, 80):
+		angle = theta*np.pi/69
 		if(angle<=np.pi):
 			V.append([step*r1*np.cos(angle), step*r1*np.sin(angle)])
 			V.append([step*r2*np.cos(angle), step*r2*np.sin(angle)])
@@ -179,8 +179,8 @@ class Mesh:
 
 		t_set = Set([i for i in range(len(self.T))])
 
-		self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
-		# self.s_handles_ind = [1]
+		# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
+		self.s_handles_ind = [1,7]
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
 		centroids = self.getC().dot(self.getA().dot(self.x0))
@@ -197,7 +197,7 @@ class Mesh:
 		print("Setting up rotation clusters")
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
-		nrc = 2 #len(self.T)
+		nrc = 4 #len(self.T)
 		self.red_r = np.zeros(nrc)
 		self.r_element_cluster_map = np.zeros(len(self.T), dtype = int)
 		
@@ -218,11 +218,11 @@ class Mesh:
 					self.r_cluster_element_map[1].append(i)
 			else:
 				if(centroids[6*i+1]<=(maxy + miny)/2.0):
-					self.r_element_cluster_map[i] = 0
-					self.r_cluster_element_map[0].append(i)
+					self.r_element_cluster_map[i] = 2
+					self.r_cluster_element_map[2].append(i)
 				else:
-					self.r_element_cluster_map[i] = 1
-					self.r_cluster_element_map[1].append(i)
+					self.r_element_cluster_map[i] = 3
+					self.r_cluster_element_map[3].append(i)
 		
 		self.RotationBLOCK = []
 		for i in range(len(self.red_r)):
@@ -464,7 +464,8 @@ class ARAP:
 		en = 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
 		return en
 
-	def Jacobian(self, block = False, kkt= True, useSparse=False):
+	def Jacobian(self, block = False, kkt= True, useSparse=True):
+		print("START JACOBIAN")
 		a = datetime.datetime.now()
 		self.mesh.getGlobalF(updateR=True, updateS=True, updateU=False)
 		b = datetime.datetime.now()
@@ -548,9 +549,11 @@ class ARAP:
 		dEds = np.matmul(Eg, dgds) + np.matmul(Er, drds) + Es
 		bb = datetime.datetime.now()
 		# print("Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds, (aa-f).microseconds, (bb-aa).microseconds)
+		print("END JACOBIAN")
 		return dEds, dgds, drds
 
 	def Hessians(self, useSparse=True):	
+		print("			START HESSIAN")
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		PAg = PA.dot(self.mesh.g)
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
@@ -661,7 +664,7 @@ class ARAP:
 		
 		a5 = datetime.datetime.now()
 		# print("Times", (a2-a1).microseconds, (a3-a2).microseconds, (a4-a3).microseconds, (a5-a4).microseconds)
-		
+		print("			END HESSIAN")
 		return Egg, Erg, Err, Egs, Ers
 
 	def sparseErg_first(self, nPAT, USUtPAx):
@@ -710,6 +713,7 @@ class ARAP:
 		return second
 
 	def Gradients(self):
+		print("			Start GRADIENTS")
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
@@ -739,7 +743,7 @@ class ARAP:
 		for i in range(len(dEds)):
 			dEds[i] = DS[i].multiply(dEdS).sum()
 
-		
+		print("			End Gradients")
 		return dEdg, dEdr, dEds
 
 	def dRdr(self):
@@ -978,6 +982,7 @@ class ARAP:
 		return 1
 
 	def iterate(self, its=100):
+		print(" 	ARAP")
 		Eg0 = self.dEdg()
 		for i in range(its):
 			g = self.itT()
@@ -986,6 +991,7 @@ class ARAP:
 			Eg = self.dEdg()
 			# print("i", i,np.linalg.norm(Eg-Eg0))
 			if(1e-10 > np.linalg.norm(Eg-Eg0)):
+				print("		ENd ARAP")
 				# print("ARAP converged", np.linalg.norm(Eg))	
 				return
 			Eg0 = Eg
@@ -1040,55 +1046,6 @@ class NeohookeanElastic:
 
 		return fg
 
-	def PrinStretchElementEnergy(self, sx, sy):
-		#from jernej's paper
-		#neohookean energy
-		if(sx <=0 or sy<=0):
-			return 1e40
-		def f(x):
-			return 0.5*self.mu*(x*x -1)
-		def h(xy):
-			# return abs(math.log((xy - 1)*(xy - 1)))
-			# print(xy)
-			return -1*self.mu*math.log(xy) + 0.5*self.lambd*math.log(xy)*math.log(xy)
-
-		E =  f(sx) + f(sy) + h(sx*sy)
-
-		if(E<0):
-			print(sx, sy)
-			print(f(sx), f(sy), h(sx*sy))
-			print(self.mu, self.lambd)
-			exit()
-		return E
-
-	def PrinStretchEnergy(self, _rs):
-		En = 0
-		for t in range(len(self.mesh.T)):
-			sx = self.mesh.sW[2*t,:].dot(_rs)
-			sy = self.mesh.sW[2*t+1,:].dot(_rs)
-			En += self.PrinStretchElementEnergy(sx, sy)
-		return En
-
-	def PrinStretchElementForce(self, sr, wx, wy):
-		
-		t0 =sr.T.dot(wx)
-		t1 = sr.T.dot(wy)
-		if(t0*t1 < 0):
-			return np.ones(len(sr))*1e40
-		t2 = t0*t1
-		t3 = self.mu/t2 
-		t4 = self.lambd*math.log(t2)/t2
-
-		f = -(self.mu*t0*wx + self.mu*t1*wy - (t1*t3*wx + t0*t3*wy) + t1*t4*wx + t0*t4*wy)
-		return f
-
-	def PrinStretchForce(self, _rs):
-		force = np.zeros(len(self.mesh.red_s))
-		for t in range(len(self.mesh.T)):
-			force += self.PrinStretchElementForce(_rs,self.mesh.sW[2*t,:], self.mesh.sW[2*t+1,:] )
-
-		return force
-
 	def WikipediaPrinStretchElementForce(self, a, rs, wx, wy, wo):
 		md = 0.5*(self.youngs*self.poissons)/((1.0+self.poissons)*(1.0-2.0*self.poissons))
 		mc = 0.5*self.youngs/(2.0*(1.0+self.poissons))
@@ -1096,6 +1053,10 @@ class NeohookeanElastic:
 		t_0 = np.dot(wo, rs)
 		t_1 = np.dot(wx, rs)
 		t_2 = np.dot(wy, rs)
+
+		if(t_1<=0 or t_2<=0 or t_1*t_2-t_0*t_0<=0):
+			return 1e40
+
 		t_3 = ((t_1 * t_2) - (t_0 * t_0))
 		t_4 = np.dot(rs, wo)
 		t_5 = (2.0 / 6)
@@ -1138,7 +1099,7 @@ class NeohookeanElastic:
 		sx = wx.dot(rs)
 		sy = wy.dot(rs)
 		so = wo.dot(rs)
-		if(sx<0 or sy<0):
+		if(sx<=0 or sy<=0 or sx*sy-so*so<=0):
 			return 1e40
 		term1 = m_C*(math.pow((sx*sy - so*so), -2.0/6)*(sx + sy) - 2)
 		term2 = m_D*math.pow((math.pow(sx*sy -so*so, 1/2.0) - 1), 2)
@@ -1157,17 +1118,18 @@ class NeohookeanElastic:
 
 		return E
 
-
 	def Energy(self, irs):
 		e2 = self.WikipediaEnergy(_rs=irs)
 		e1 = -1*self.GravityEnergy() 
 		return e2 + e1
 
 	def Forces(self, irs, idgds):
+		print("START ELastic FOrce")
 		f2 = self.WikipediaForce(_rs=irs)
 		if idgds is None:
 			return f2
 		f1 =  self.GravityForce(idgds)
+		print("End ELAstic Force")
 		return f2 + f1
 
 class TimeIntegrator:
@@ -1178,7 +1140,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap 
 		self.elastic = ielastic 
-		self.adder = 1e-1
+		self.adder = 5e-2
 		# self.set_random_strain()
 		self.mov = np.array(self.mesh.fixed_min_axis(1))
 		self.bnds = [(1e-5, None) for i in range(len(self.mesh.red_s))]
@@ -1210,19 +1172,19 @@ class TimeIntegrator:
 		self.iterate()
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 		
-		alpha1 =1e20
+		alpha1 =1e5
 		alpha2 =1
 
 		def energy(s):
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
 
-			print("guess ", self.mesh.red_s)
+			# print("guess ", self.mesh.red_s)
 			self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
 			
 			self.arap.iterate()
+
 			E_arap = self.arap.Energy()
-			
 			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
 			
 			print("E", E_arap, E_elastic)
@@ -1234,7 +1196,7 @@ class TimeIntegrator:
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
 
-			print("guess ",self.mesh.red_s)
+			# print("guess ",self.mesh.red_s)
 			dgds = None
 			self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()
@@ -1258,14 +1220,12 @@ class TimeIntegrator:
 		
 
 def display():
-	iV, iT, iU = rectangle_mesh(1,1,.1)
+	iV, iT, iU = rectangle_mesh(15,15,.1)
 	# iV, iT, iU = torus_mesh(5, 4, 3, .1)
 	to_fix = get_min_max(iV,1)
 	
 	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
 
-	print(mesh.GS)
-	exit()
 	neoh =NeohookeanElastic(imesh=mesh )
 	arap = ARAP(imesh=mesh)
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
@@ -1299,12 +1259,12 @@ def display():
 
 		return False
 
-	def key_down(viewer, aaa, bbb):
+	def key_down(viewer):
 		viewer.data.clear()
-		# if(time_integrator.time>30):
-		# 	exit()
+		if(time_integrator.time>20):
+			exit()
 		# print(mesh.red_s)
-		if(aaa==65):
+		# if(aaa==65):
 			# time_integrator.iterate()
 			# arap.iterate()
 			# print("Earap", arap.Energy())
@@ -1314,6 +1274,7 @@ def display():
 			# print("Grad arap ", J_arap)
 			# J_elastic = neoh.Forces(irs = mesh.red_s, idgds=dgds)
 			# print("Grad n ", J_elastic)
+		if(viewer.core.is_animating):
 			time_integrator.static_solve()
 
 		
@@ -1354,7 +1315,7 @@ def display():
 		for i in range(len(mesh.T)):
 			S = mesh.getS(i)
 			C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-			U = 0.02*S.dot(mesh.getU(i).transpose())+C
+			U = 0.01*S.dot(mesh.getU(i).transpose())+C
 			if(np.linalg.norm(mesh.sW[2*i,:])>=1):
 				viewer.data.add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 				viewer.data.add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), green)
@@ -1386,12 +1347,12 @@ def display():
 		return True
 
 	# for clicks in range(40):
-	key_down(viewer, 'b', 123)
-	viewer.callback_key_down = key_down
+	# key_down(viewer, 'b', 123)
+	viewer.callback_post_draw = key_down
 	viewer.callback_mouse_down = mouse_down
 	viewer.core.is_animating = False
 	viewer.launch()
-# display()
+display()
 
 def headless():
 	# iV, iT, iU = torus_mesh(5, 4, 3, .1)
