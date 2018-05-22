@@ -115,7 +115,7 @@ def featherize(x, y, step=1):
 	return V, T, u
 
 def get_min_max(iV,a):
-	eps = 1e-5
+	eps = 1e-1
 	mov = []
 	miny = np.amin(iV, axis=0)[a]
 	maxy = np.amax(iV, axis=0)[a]
@@ -171,8 +171,8 @@ def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4):
 	# V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
 	# V.append([(r4+1)*step + 1.5*step*r1, (r4+1)*step ])
 	# V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
-	for theta in range(0, 8):
-		angle = theta*np.pi/4
+	for theta in range(0, 18):
+		angle = theta*np.pi/9
 		# if(angle<=np.pi):
 		V.append([2*step*r1*np.cos(angle) + (r4+1)*step, step*r1*np.sin(angle)+ (r4+1)*step])
 		V.append([2*step*r2*np.cos(angle) + (r4+1)*step, step*r2*np.sin(angle)+ (r4+1)*step])
@@ -248,8 +248,8 @@ class Mesh:
 
 		t_set = Set([i for i in range(len(self.T))])
 
-		self.s_handles_ind =[i for i in range(len(self.T)) if i%50==0]
-		# self.s_handles_ind = [1,20, 30]
+		# self.s_handles_ind =[i for i in range(len(self.T)) if i%50==0]
+		self.s_handles_ind = [1,10,15]
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
 		centroids = self.getC().dot(self.getA().dot(self.x0))
@@ -1275,7 +1275,7 @@ class TimeIntegrator:
 		# 	self.adder *= -1
 
 		# self.mesh.g[2*self.mov+1] -= self.adder
-		self.elastic.muscle_fibre_mag += 25*self.time
+		self.elastic.muscle_fibre_mag += 50*self.time
 		print(self.elastic.muscle_fibre_mag)
 		self.time += 1
 
@@ -1300,7 +1300,7 @@ class TimeIntegrator:
 
 			E_arap = self.arap.Energy()
 			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
-			
+			# print("s", self.mesh.red_s)
 			print("E", E_arap, E_elastic)
 	
 
