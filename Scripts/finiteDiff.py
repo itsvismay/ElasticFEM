@@ -320,7 +320,7 @@ def FiniteDifferencesARAP():
 
 def FiniteDifferencesElasticity():
 	eps = 1e-5
-	iV, iT, iU = featherize(2,2,.1)
+	iV, iT, iU = rectangle_mesh(2,2,.1)
 	# iV, iT, iU = torus_mesh(5,4,3,.1)
 	its = 100
 	to_fix = get_min_max(iV, a=1)
@@ -378,8 +378,29 @@ def FiniteDifferencesElasticity():
 		print("fake", dEgds)
 		print("Diff", np.sum(real - np.array(dEgds)))
 
-	check_PrinStretchForce()
+	def check_muscleForce():
+		e0 = ne.MuscleEnergy(_rs = mesh.red_s)
+		real = -ne.MuscleForce(_rs = mesh.red_s)
+		print("e0", e0)
+		dEds = []
+		for i in range(len(mesh.red_s)):
+			mesh.red_s[i] += 0.5*eps
+			left = ne.MuscleEnergy(_rs=mesh.red_s)
+			mesh.red_s[i] -= 0.5*eps
+			
+			mesh.red_s[i] -= 0.5*eps
+			right = ne.MuscleEnergy(_rs=mesh.red_s)
+			mesh.red_s[i] += 0.5*eps
+
+			dEds.append((left - right)/(eps))
+
+		print("real", real)
+		print("fake", dEds)
+		print("Diff", np.sum(real - np.array(dEds)))
+
+	# check_PrinStretchForce()
 	# check_gravityForce()
+	check_muscleForce()
 	# test()
 
 FiniteDifferencesElasticity()

@@ -64,12 +64,15 @@ def get_area(p1, p2, p3):
 def get_centroid(p1, p2, p3):
 	return (np.array(p1)+np.array(p2)+np.array(p3))/3.0
 
-def rectangle_mesh(x, y, step=1):
+def rectangle_mesh(x, y, angle=0, step=1):
 	V = []
 	for i in range(0,x+1):
 		for j in range(0,y+1):
 			V.append([step*i, step*j])
-	return V, Delaunay(V).simplices, None
+
+	T = Delaunay(V).simplices
+	
+	return V, T, np.array([angle for i in range(len(T))])
 
 def torus_mesh(r1, r2, r3, step):
 	V = []
@@ -105,9 +108,9 @@ def featherize(x, y, step=1):
 		e = T[i]
 		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
 		if(c[0]<half_x):
-			u.append(3*np.pi/4)
+			u.append((np.pi/2) - 0.1)
 		else:
-			u.append(np.pi/4)
+			u.append((np.pi/2) + 0.1)
 
 	return V, T, u
 
@@ -120,10 +123,76 @@ def get_min_max(iV,a):
 		if(abs(iV[i][a] - miny) < eps):
 			mov.append(i)
 
-		if(abs(iV[i][a] - maxy)<eps):
+		if(abs(iV[i][a] - maxy)< eps):
 			mov.append(i)
 
 	return mov
+
+def get_min(iV, a):
+	eps = 1e-5
+	mov = []
+	miny = np.amin(iV, axis=0)[a]
+	for i in range(len(iV)):
+		if(abs(iV[i][a] - miny) < eps):
+			mov.append(i)
+
+	return mov
+
+def feather_muscle1_test_setup(x = 3, y = 2):
+	step = 0.1
+	V,T,U = rectangle_mesh(x, y, step=step)
+	# V,T, U = torus_mesh(5, 4, 3, step)
+
+	half_x = step*(x)/2.0
+	half_y = step*(y)/2.0
+	u = []
+	for i in range(len(T)):
+		e = T[i]
+		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
+		if(c[1]<half_y):
+			u.append(-0.15)
+		else:
+			u.append(0.15)
+
+	to_fix =[]
+	for i in get_min_max(V,1):
+		if(V[i][0]>half_x):
+			to_fix.append(i)
+
+	return (V, T, u), to_fix
+
+def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4):
+	step = 0.1
+	V = []
+	T = []
+	u = []
+	V.append([(r4+1)*step, (r4+1)*step])
+	# V.append([(r4+1)*step + 1.5*step*r1, (r4+1)*step ])
+	# V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
+	# V.append([(r4+1)*step + 1.5*step*r1, (r4+1)*step ])
+	# V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
+	for theta in range(0, 8):
+		angle = theta*np.pi/4
+		# if(angle<=np.pi):
+		V.append([2*step*r1*np.cos(angle) + (r4+1)*step, step*r1*np.sin(angle)+ (r4+1)*step])
+		V.append([2*step*r2*np.cos(angle) + (r4+1)*step, step*r2*np.sin(angle)+ (r4+1)*step])
+		V.append([2*step*r3*np.cos(angle) + (r4+1)*step, step*r3*np.sin(angle)+ (r4+1)*step])
+		V.append([2*step*r4*np.cos(angle) + (r4+1)*step, step*r4*np.sin(angle)+ (r4+1)*step])
+
+	T = Delaunay(V).simplices
+	
+	for i in range(len(T)):
+		e = T[i]
+		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
+		if(c[1]< (step*(r4+1))):
+			u.append(-0.15)
+		else:
+			u.append(0.15)
+
+
+	to_fix =get_min_max(V,0)
+	print(to_fix)
+	return (V, T, u), to_fix
 
 class Mesh:
 	#class vars
@@ -179,8 +248,8 @@ class Mesh:
 
 		t_set = Set([i for i in range(len(self.T))])
 
-		# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
-		self.s_handles_ind = [1,7]
+		self.s_handles_ind =[i for i in range(len(self.T)) if i%50==0]
+		# self.s_handles_ind = [1,20, 30]
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
 		centroids = self.getC().dot(self.getA().dot(self.x0))
@@ -450,6 +519,7 @@ class ARAP:
 		col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
 		col1 = sparse.vstack((self.AtPtPA, C))
 		KKT = sparse.hstack((col1, col2))
+		print(KKT)
 
 		self.CholFac = scipy.sparse.linalg.splu(KKT.tocsc())
 
@@ -465,7 +535,6 @@ class ARAP:
 		return en
 
 	def Jacobian(self, block = False, kkt= True, useSparse=True):
-		print("START JACOBIAN")
 		a = datetime.datetime.now()
 		self.mesh.getGlobalF(updateR=True, updateS=True, updateU=False)
 		b = datetime.datetime.now()
@@ -549,11 +618,10 @@ class ARAP:
 		dEds = np.matmul(Eg, dgds) + np.matmul(Er, drds) + Es
 		bb = datetime.datetime.now()
 		# print("Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds, (aa-f).microseconds, (bb-aa).microseconds)
-		print("END JACOBIAN")
+
 		return dEds, dgds, drds
 
 	def Hessians(self, useSparse=True):	
-		print("			START HESSIAN")
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		PAg = PA.dot(self.mesh.g)
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
@@ -664,7 +732,6 @@ class ARAP:
 		
 		a5 = datetime.datetime.now()
 		# print("Times", (a2-a1).microseconds, (a3-a2).microseconds, (a4-a3).microseconds, (a5-a4).microseconds)
-		print("			END HESSIAN")
 		return Egg, Erg, Err, Egs, Ers
 
 	def sparseErg_first(self, nPAT, USUtPAx):
@@ -713,7 +780,6 @@ class ARAP:
 		return second
 
 	def Gradients(self):
-		print("			Start GRADIENTS")
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
@@ -743,7 +809,6 @@ class ARAP:
 		for i in range(len(dEds)):
 			dEds[i] = DS[i].multiply(dEdS).sum()
 
-		print("			End Gradients")
 		return dEdg, dEdr, dEds
 
 	def dRdr(self):
@@ -982,7 +1047,6 @@ class ARAP:
 		return 1
 
 	def iterate(self, its=100):
-		print(" 	ARAP")
 		Eg0 = self.dEdg()
 		for i in range(its):
 			g = self.itT()
@@ -991,7 +1055,6 @@ class ARAP:
 			Eg = self.dEdg()
 			# print("i", i,np.linalg.norm(Eg-Eg0))
 			if(1e-10 > np.linalg.norm(Eg-Eg0)):
-				print("		ENd ARAP")
 				# print("ARAP converged", np.linalg.norm(Eg))	
 				return
 			Eg0 = Eg
@@ -1013,6 +1076,9 @@ class NeohookeanElastic:
 
 		self.grav = np.array([0,-9.81])
 		self.rho = 100
+
+		self.muscle_fiber_mag_target = 1000
+		self.muscle_fibre_mag = 100
 
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)
@@ -1118,19 +1184,66 @@ class NeohookeanElastic:
 
 		return E
 
+	def MuscleElementEnergy(self, rs,wx, wy, wo, u):
+		sx = wx.dot(rs)
+		sy = wy.dot(rs)
+		so = wo.dot(rs)
+		if(sx<=0 or sy<=0 or sx*sy-so*so<=0):
+			return 1e40
+
+		c = np.array([[sx, so],[so, sy]])
+
+		return 0.5*self.muscle_fibre_mag*(u.dot(c.dot(c.T.dot(u.T))))
+
+	def MuscleEnergy(self, _rs):
+		En = 0
+		for t in range(len(self.mesh.T)):
+			alpha = self.mesh.u[t]
+			c, s = np.cos(alpha), np.sin(alpha)
+			u = np.array([c,s]).dot(np.array([[c,-s],[s, c]]))
+		
+			En += self.MuscleElementEnergy(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u)
+		
+		return En 
+
+	def MuscleElementForce(self, rs, wx, wy, wo, u1, u2):
+
+		t0 = self.muscle_fibre_mag *u1*u1 
+		t1 = t0*(rs.dot(wx)*wx + rs.dot(wo)*wo)
+
+
+		t2 = 0.5*self.muscle_fibre_mag*u1*u2
+		t3 = t2*rs.dot(wo)
+		t4 = t3*wx + t2*rs.dot(wx)*wo + t3*wy + t2*rs.dot(wy)*wo
+
+		t5 = self.muscle_fibre_mag *u2*u2 
+		t6 = t5*(rs.dot(wy)*wy + rs.dot(wo)*wo)
+			
+		return -1*(t1 + 2*t4 + t6)
+
+	def MuscleForce(self, _rs):
+		force = np.zeros(len(self.mesh.red_s))
+		for t in range(len(self.mesh.T)):
+			alpha = self.mesh.u[t]
+			c, s = np.cos(alpha), np.sin(alpha)
+			u = np.array([c,s]).dot(np.array([[c,-s],[s, c]]))
+			force += self.MuscleElementForce(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u[0], u[1])
+		
+		return force 
+
 	def Energy(self, irs):
 		e2 = self.WikipediaEnergy(_rs=irs)
 		e1 = -1*self.GravityEnergy() 
-		return e2 + e1
+		e3 = self.MuscleEnergy(_rs=irs)
+		return e1 + e2 + e3
 
 	def Forces(self, irs, idgds):
-		print("START ELastic FOrce")
 		f2 = self.WikipediaForce(_rs=irs)
-		if idgds is None:
-			return f2
 		f1 =  self.GravityForce(idgds)
-		print("End ELAstic Force")
-		return f2 + f1
+		if idgds is None:
+			return f2 + f3
+		f3 = self.MuscleForce(_rs=irs)
+		return f1 + f2 + f3
 
 class TimeIntegrator:
 
@@ -1158,11 +1271,12 @@ class TimeIntegrator:
 
 	def iterate(self):
 
-		if(self.time%10 == 0):
-			self.adder *= -1
+		# if(self.time%10 == 0):
+		# 	self.adder *= -1
 
-		self.mesh.g[2*self.mov+1] -= self.adder
-		
+		# self.mesh.g[2*self.mov+1] -= self.adder
+		self.elastic.muscle_fibre_mag += 25*self.time
+		print(self.elastic.muscle_fibre_mag)
 		self.time += 1
 
 	def solve(self):
@@ -1220,11 +1334,11 @@ class TimeIntegrator:
 		
 
 def display():
-	iV, iT, iU = rectangle_mesh(15,15,.1)
-	# iV, iT, iU = torus_mesh(5, 4, 3, .1)
-	to_fix = get_min_max(iV,1)
-	
-	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
+	# iV, iT, iU = rectangle_mesh(3,3,.1)
+	# # iV, iT, iU = torus_mesh(5, 4, 3, .1)
+	# to_fix = get_min(iV,1)
+	VTU, to_fix = feather_muscle2_test_setup()
+	mesh = Mesh(VTU,ito_fix=to_fix)
 
 	neoh =NeohookeanElastic(imesh=mesh )
 	arap = ARAP(imesh=mesh)
@@ -1238,8 +1352,13 @@ def display():
 	tempA = igl.eigen.MatrixXuc(1280, 800)
 
 	# sy_inds = [i for i in range(len(mesh.red_s)) if i%2==0]
-	# mesh.red_s[[i for i in range(len(mesh.red_s)) if i%2==1]] = 0.5
+	# mesh.red_s[0] = 1.17
+	# mesh.red_s[1] = 0.8
+	# mesh.red_s[2] = 0.00001
+	# print(mesh.red_s)
 	# mesh.getGlobalF()
+	# arap.iterate()
+	# print(mesh.red_s)
 	# mesh.red_s[sy_inds] = 1
 	# print("En", neoh.Energy(irs=mesh.red_s))
 	# mesh.g[2*time_integrator.mov+1] += 0.2
@@ -1261,8 +1380,9 @@ def display():
 
 	def key_down(viewer):
 		viewer.data.clear()
-		if(time_integrator.time>20):
+		if(time_integrator.time>5):
 			exit()
+		# print(mesh.u)
 		# print(mesh.red_s)
 		# if(aaa==65):
 			# time_integrator.iterate()
@@ -1275,7 +1395,10 @@ def display():
 			# J_elastic = neoh.Forces(irs = mesh.red_s, idgds=dgds)
 			# print("Grad n ", J_elastic)
 		if(viewer.core.is_animating):
+			# time_integrator.iterate()
 			time_integrator.static_solve()
+			# print(neoh.WikipediaForce(_rs=mesh.red_s))
+			# print(neoh.MuscleForce(_rs=mesh.red_s))
 
 		
 		DV, DT = mesh.getDiscontinuousVT()
@@ -1315,7 +1438,7 @@ def display():
 		for i in range(len(mesh.T)):
 			S = mesh.getS(i)
 			C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-			U = 0.01*S.dot(mesh.getU(i).transpose())+C
+			U = 0.01*mesh.getU(i).transpose()+C
 			if(np.linalg.norm(mesh.sW[2*i,:])>=1):
 				viewer.data.add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 				viewer.data.add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), green)
@@ -1328,7 +1451,7 @@ def display():
 		# print(igl.eigen.MatrixXd(np.array(cag)))
 		
 		#Write image
-		if (time_integrator.time>1):
+		if (time_integrator.time>0):
 			viewer.core.draw_buffer(viewer.data, viewer.opengl, False, tempR, tempG, tempB, tempA)
 			igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
 			# pass
@@ -1353,59 +1476,3 @@ def display():
 	viewer.core.is_animating = False
 	viewer.launch()
 display()
-
-def headless():
-	# iV, iT, iU = torus_mesh(5, 4, 3, .1)
-	# iV, iT, iU = featherize(2,2,.1)
-	iV, iT, iU = rectangle_mesh(2,2, .1)
-	to_fix = get_min_max(iV,1)
-	
-	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
-	mesh.q[0] = 0
-	neoh =NeohookeanElastic(imesh=mesh )
-	arap = ARAP(imesh=mesh)
-	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
-
-	time_integrator.iterate()
-
-	UtPAx = mesh.GU.T.dot(mesh.getP().dot(mesh.getA().dot(mesh.x0)))
-	DS = arap.sparseDSds()
-
-
-	#LHS
-	RU = mesh.GR.dot(mesh.GU)
-	PAg = mesh.getP().dot(mesh.getA().dot(mesh.g))
-	UtRtPAg_xUTPAx = np.multiply.outer(RU.T.dot(PAg), UtPAx)
-	lhs = np.zeros(len(mesh.red_s))
-	for i in range(len(lhs)):
-		lhs[i] = DS[i].multiply(UtRtPAg_xUTPAx).sum()
-	# print(lhs)
-
-	#RHS
-	rhs_1 = np.zeros(len(mesh.red_s))
-	original = np.multiply.outer(UtPAx, mesh.GS.dot(UtPAx))
-	for i in range(len(rhs_1)):
-		rhs_1[i] = DS[i].multiply(original).sum()
-	print("rhs1")
-	# print(rhs_1)
-	# exit()
-	# print(arap.dEds()[1])
-	
-	rhs_2  = np.zeros(len(mesh.red_s))
-	UU = np.multiply.outer(UtPAx, UtPAx)
-
-
-	print("rhs2")
-
-	for i in range(0, len(rhs_2)):
-		rhs_2[i] = DS[i].multiply(UU).sum()
-
-	A = np.diag(rhs_2)
-
-	InvA = np.linalg.pinv(A)
-	s_vals = InvA.dot(lhs)
-
-	# print(arap.dEds()[1])
-	print(s_vals)
-
-# headless()
