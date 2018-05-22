@@ -129,11 +129,22 @@ def get_min_max(iV,a):
 	return mov
 
 def get_min(iV, a):
-	eps = 1e-5
+	eps = 1e-1
 	mov = []
 	miny = np.amin(iV, axis=0)[a]
 	for i in range(len(iV)):
 		if(abs(iV[i][a] - miny) < eps):
+			mov.append(i)
+
+	return mov
+
+def get_max(iV, a):
+	eps = 2e-1
+	mov = []
+	maxy = np.amax(iV, axis=0)[a]
+	for i in range(len(iV)):
+
+		if(abs(iV[i][a] - maxy)< eps):
 			mov.append(i)
 
 	return mov
@@ -171,8 +182,8 @@ def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4):
 	# V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
 	# V.append([(r4+1)*step + 1.5*step*r1, (r4+1)*step ])
 	# V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
-	for theta in range(0, 18):
-		angle = theta*np.pi/9
+	for theta in range(0, 8):
+		angle = theta*np.pi/4
 		# if(angle<=np.pi):
 		V.append([2*step*r1*np.cos(angle) + (r4+1)*step, step*r1*np.sin(angle)+ (r4+1)*step])
 		V.append([2*step*r2*np.cos(angle) + (r4+1)*step, step*r2*np.sin(angle)+ (r4+1)*step])
@@ -190,7 +201,7 @@ def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4):
 			u.append(0.15)
 
 
-	to_fix =get_min_max(V,0)
+	to_fix =get_max(V,0)
 	print(to_fix)
 	return (V, T, u), to_fix
 
@@ -249,7 +260,7 @@ class Mesh:
 		t_set = Set([i for i in range(len(self.T))])
 
 		# self.s_handles_ind =[i for i in range(len(self.T)) if i%50==0]
-		self.s_handles_ind = [1,10,15]
+		self.s_handles_ind = [1]
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
 		centroids = self.getC().dot(self.getA().dot(self.x0))
@@ -519,7 +530,6 @@ class ARAP:
 		col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
 		col1 = sparse.vstack((self.AtPtPA, C))
 		KKT = sparse.hstack((col1, col2))
-		print(KKT)
 
 		self.CholFac = scipy.sparse.linalg.splu(KKT.tocsc())
 
@@ -1075,7 +1085,7 @@ class NeohookeanElastic:
 		self.dimensions = 2
 
 		self.grav = np.array([0,-9.81])
-		self.rho = 100
+		self.rho = 10000
 
 		self.muscle_fiber_mag_target = 1000
 		self.muscle_fibre_mag = 100
@@ -1108,7 +1118,8 @@ class NeohookeanElastic:
 
 		for t in range(len(self.mesh.T)):
 			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
-			fg += self.GravityElementForce(self.rho, area, self.grav, CAdgds[6*t:6*t+2, :], t)
+			gv = self.mesh.getU(t).dot(self.grav)
+			fg += self.GravityElementForce(self.rho, area, gv, CAdgds[6*t:6*t+2, :], t)
 
 		return fg
 
@@ -1275,7 +1286,7 @@ class TimeIntegrator:
 		# 	self.adder *= -1
 
 		# self.mesh.g[2*self.mov+1] -= self.adder
-		self.elastic.muscle_fibre_mag += 50*self.time
+		self.elastic.muscle_fibre_mag = 0
 		print(self.elastic.muscle_fibre_mag)
 		self.time += 1
 
@@ -1451,10 +1462,9 @@ def display():
 		# print(igl.eigen.MatrixXd(np.array(cag)))
 		
 		#Write image
-		if (time_integrator.time>0):
-			viewer.core.draw_buffer(viewer.data, viewer.opengl, False, tempR, tempG, tempB, tempA)
-			igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
-			# pass
+		viewer.core.draw_buffer(viewer.data, viewer.opengl, False, tempR, tempG, tempB, tempA)
+		igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
+		# pass
 
 
 		# Clustered Rotations
