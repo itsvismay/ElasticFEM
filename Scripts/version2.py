@@ -178,12 +178,12 @@ def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4):
 	T = []
 	u = []
 	V.append([(r4+1)*step, (r4+1)*step])
-	# V.append([(r4+1)*step + 1.5*step*r1, (r4+1)*step ])
-	# V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
-	# V.append([(r4+1)*step + 1.5*step*r1, (r4+1)*step ])
-	# V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
-	for theta in range(0, 8):
-		angle = theta*np.pi/4
+	V.append([(r4+1)*step + 1.5*step*r1, (r4+1)*step ])
+	V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
+	V.append([(r4+1)*step + 1.75*step*r1, (r4+1)*step ])
+	V.append([(r4+1)*step - 1.75*step*r1, (r4+1)*step ])
+	for theta in range(0, 62):
+		angle = theta*np.pi/31
 		# if(angle<=np.pi):
 		V.append([2*step*r1*np.cos(angle) + (r4+1)*step, step*r1*np.sin(angle)+ (r4+1)*step])
 		V.append([2*step*r2*np.cos(angle) + (r4+1)*step, step*r2*np.sin(angle)+ (r4+1)*step])
@@ -309,7 +309,7 @@ class Mesh:
 			fixed = t_set.difference(Set(self.r_cluster_element_map[i]))
 			
 			b = sparse.kron(np.delete(np.eye(len(self.T)), list(fixed), axis=1), sparse.eye(6))
-			self.RotationBLOCK.append(b)
+			self.RotationBLOCK.append(b.tocsc())
 		print("Done setting up rotation clusters \n")
 		return
 
@@ -525,6 +525,7 @@ class ARAP:
 		
 
 		self.DSDs = None
+		self.sparseDSds()
 
 		#LU inverse
 		col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
@@ -532,6 +533,20 @@ class ARAP:
 		KKT = sparse.hstack((col1, col2))
 
 		self.CholFac = scipy.sparse.linalg.splu(KKT.tocsc())
+
+
+		r_size = len(self.mesh.red_r)
+		g_size = len(self.mesh.g)
+		s_size = len(self.mesh.red_s)
+
+		self.Erg = np.zeros((g_size, r_size))
+		self.Err = np.zeros((r_size, r_size))
+		self.Egs = np.zeros((g_size, s_size))
+		self.Ers = np.zeros((r_size, s_size))
+		self.Ers_mid = np.zeros(( 6*len(self.mesh.T), r_size ))	
+
+		self.USUtPAx_E = []
+
 
 	def energy(self, _g, _R, _S, _U):
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(_g))
@@ -545,6 +560,7 @@ class ARAP:
 		return en
 
 	def Jacobian(self, block = False, kkt= True, useSparse=True):
+		print("		Jacobian")
 		a = datetime.datetime.now()
 		self.mesh.getGlobalF(updateR=True, updateS=True, updateU=False)
 		b = datetime.datetime.now()
@@ -628,10 +644,11 @@ class ARAP:
 		dEds = np.matmul(Eg, dgds) + np.matmul(Er, drds) + Es
 		bb = datetime.datetime.now()
 		# print("Jac time: ", (b-a).microseconds, (c-b).microseconds, (d-c).microseconds, (e-d).microseconds, (f-e).microseconds, (aa-f).microseconds, (bb-aa).microseconds)
-
+		print("		Jacobian")
 		return dEds, dgds, drds
 
 	def Hessians(self, useSparse=True):	
+		print("			Hessians")
 		PA = self.mesh.getP().dot(self.mesh.getA())
 		PAg = PA.dot(self.mesh.g)
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
@@ -643,18 +660,12 @@ class ARAP:
 		DR = self.sparseDRdr()
 		DS = self.sparseDSds()
 		
-		Egg = self.AtPtPA
 
 		a1 = datetime.datetime.now()
-
-
-
-	
-
+		###############ERG
 		if not useSparse:
 			print("Erg NOT SPARSE")
 			sample = np.multiply.outer(-1*PA.T.toarray(), USUtPAx.T)
-			Erg = np.zeros((g_size, r_size))
 			for j in range(Erg.shape[1]):
 				sp = DR[j]
 				for i in range(Erg.shape[0]):
@@ -663,86 +674,78 @@ class ARAP:
 
 		else:
 			sample = self.sparseErg_first(-1*PA, USUtPAx)
-			Erg = np.zeros((g_size, r_size))
-			for j in range(Erg.shape[1]):
+			for j in range(self.Erg.shape[1]):
 				sp = DR[j]
-				for i in range(Erg.shape[0]):
+				for i in range(self.Erg.shape[0]):
 					if sp.nnz>0:
-						Erg[i,j] = sp.multiply(sample[i]).sum()
+						self.Erg[i,j] = sp.multiply(sample[i]).sum()
 
 		a2 = datetime.datetime.now()
-		
+		###############ERR
 		negPAg_USUtPAx = np.multiply.outer( -1*PAg, USUtPAx)
 		DDR = self.sparseDDRdrdr()
-		Err = np.zeros((r_size, r_size))
-		for i in range(Err.shape[0]):
-			for j in range(Err.shape[1]):
+		for i in range(self.Err.shape[0]):
+			for j in range(self.Err.shape[1]):
 				spD = DDR[i][j]
 				if spD.nnz>0:
-					Err[i,j] = spD.multiply(negPAg_USUtPAx).sum()
+					self.Err[i,j] = spD.multiply(negPAg_USUtPAx).sum()
 		
 		a3 = datetime.datetime.now()
-
-		
+		###############EGS
 		PAtRU = PA.T.dot(self.mesh.GR.dot(self.mesh.GU))
 		if not useSparse:
 			print("Egs NOT SPARSE")
 			d_gEgdS = np.multiply.outer(-1*PAtRU.toarray(), UtPAx.T)
-			Egs = np.zeros((g_size, s_size))
-			for j in range(Egs.shape[1]):
+			for j in range(self.Egs.shape[1]):
 				sp = DS[j]
-				for i in range(Egs.shape[0]):
+				for i in range(self.Egs.shape[0]):
 					if sp.nnz>0:
-						Egs[i,j] = sp.multiply(d_gEgdS[i,:,:]).sum()
+						self.Egs[i,j] = sp.multiply(d_gEgdS[i,:,:]).sum()
 		else:
 			d_gEgdS = self.sparseEgs_first(-1*PAtRU, UtPAx)
-			Egs = np.zeros((g_size, s_size))
-			for j in range(Egs.shape[1]):
+			for j in range(self.Egs.shape[1]):
 				sp = DS[j]
-				for i in range(Egs.shape[0]):
+				for i in range(self.Egs.shape[0]):
 					if sp.nnz>0:
-						Egs[i,j] = sp.multiply(d_gEgdS[i]).sum()
+						self.Egs[i,j] = sp.multiply(d_gEgdS[i]).sum()
 		a4 = datetime.datetime.now()
-
+		###############ERS
 		if not useSparse:
 			print("Ers NOT SPARSE")
-			Ers = np.zeros((r_size, s_size))
 			first = np.multiply.outer(-PAg, self.mesh.GU.toarray())
-			mid = np.zeros((len(first), r_size))
 
-			for j in range(mid.shape[1]):
+			for j in range(self.Ers_mid.shape[1]):
 				spR = DR[j]
-				for i in range(mid.shape[0]):
+				for i in range(self.Ers_mid.shape[0]):
 					if spR.nnz>0:
-						mid[i,j] = spR.multiply(first[:,:,i]).sum()
+						self.Ers_mid[i,j] = spR.multiply(first[:,:,i]).sum()
 
-			second = np.multiply.outer(UtPAx, mid)
-			for j in range(Ers.shape[1]):
+			second = np.multiply.outer(UtPAx, self.Ers_mid)
+			for j in range(self.Ers.shape[1]):
 				spS = DS[j]
-				for i in range(Ers.shape[0]):
+				for i in range(self.Ers.shape[0]):
 					if spS.nnz>0:
-						Ers[i,j] = spS.multiply(second[:,:,i]).sum()
+						self.Ers[i,j] = spS.multiply(second[:,:,i]).sum()
 		else:
-			Ers = np.zeros((r_size, s_size))
 			first = self.sparseErs_first(PAg)
-			mid = np.zeros((len(first), r_size))
 
-			for j in range(mid.shape[1]):
+			for j in range(self.Ers_mid.shape[1]):
 				spR = DR[j]
-				for i in range(mid.shape[0]):
+				for i in range(self.Ers_mid.shape[0]):
 					if spR.nnz>0:
-						mid[i,j] = spR.multiply(first[i]).sum()
+						self.Ers_mid[i,j] = spR.multiply(first[i]).sum()
 
-			second = self.sparseErs_second(UtPAx, mid)
-			for j in range(Ers.shape[1]):
+			second = self.sparseErs_second(UtPAx, self.Ers_mid)
+			for j in range(self.Ers.shape[1]):
 				spS = DS[j]
-				for i in range(Ers.shape[0]):
+				for i in range(self.Ers.shape[0]):
 					if spS.nnz>0:
-						Ers[i,j] = spS.multiply(second[i]).sum()
-		
+						self.Ers[i,j] = spS.multiply(second[i]).sum()
 		a5 = datetime.datetime.now()
-		# print("Times", (a2-a1).microseconds, (a3-a2).microseconds, (a4-a3).microseconds, (a5-a4).microseconds)
-		return Egg, Erg, Err, Egs, Ers
+		
+		print("TIME: ", (a2-a1).microseconds, (a3-a2).microseconds, (a4-a3).microseconds, (a5-a4).microseconds)
+		print("			Hessians")
+		return self.AtPtPA, self.Erg, self.Err, self.Egs, self.Ers
 
 	def sparseErg_first(self, nPAT, USUtPAx):
 		first = []
@@ -984,52 +987,28 @@ class ARAP:
 		return self.Hessians()[4]
 
 	def itR(self):
-		theta_list = []
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 
 		for i in range(len(self.mesh.red_r)):
-			B = self.mesh.RotationBLOCK[i]
-			PAx_e = B.T.dot(self.PAx)
+			# a1 = datetime.datetime.now()
+			PAg_e = self.mesh.RotationBLOCK[i].T.dot(PAg)
 
-			#Constraining Rotations
-			# num_verts_fixed_in_cluster = B.T.dot(self.mesh.number_of_verts_fixed_on_element)
-			# if(np.sum(num_verts_fixed_in_cluster) == 0):
-			# 	PAx_e = B.T.dot(self.PAx)
-		
-			# elif(np.sum(num_verts_fixed_in_cluster) == 2):
-			# 	print("One rotation")
-			# 	PAx_e = B.T.dot(self.PAx)
-			# 	# rotate_around = np.concatenate(
-			# 	# 	(np.diag(self.mesh.number_of_verts_fixed_on_element[6*i:6*i+2]),
-			# 	# 		np.diag(self.mesh.number_of_verts_fixed_on_element[6*i+2:6*i+4]),
-			# 	# 		np.diag(self.mesh.number_of_verts_fixed_on_element[6*i+4:6*i+6])), axis =1)
-			# 	# r = np.eye(6) - np.concatenate((rotate_around, rotate_around, rotate_around))
-			# 	# # print(r)
-			# 	# PAx_e = r.dot(Ax[6*i:6*i+6])
+			USUPAx = self.USUtPAx_E[i]
 
-			# elif(np.sum(num_verts_fixed_in_cluster) >= 3):
-			# 	print("No rotation")
-			# 	continue
-			#---------------
-			
-			PAg_e = B.T.dot(PAg)
-			Ue = B.T.dot(self.mesh.GU.dot(B))
-			Se = B.T.dot(self.mesh.GS.dot(B))
-			
-
-			USUPAx = Ue.dot(Se.dot(Ue.T.dot(PAx_e.T)))
 			m_PAg = np.reshape(PAg_e, (len(PAg_e)/2,2))
 			m_USUPAx = np.reshape(USUPAx, (len(PAg_e)/2,2))
-			
+			# a2 = datetime.datetime.now()
 
 			F = np.matmul(m_PAg.T,m_USUPAx)
 
 			u, s, vt = np.linalg.svd(F, full_matrices=True)
 			R = np.matmul(vt.T, u.T)
-			
+
 			veca = np.array([1,0])
 			vecb = np.dot(R, veca)
+
+			# a3 = datetime.datetime.now()
 
 			theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
 
@@ -1037,17 +1016,19 @@ class ARAP:
 			c, s = np.cos(theta), np.sin(theta)
 			R_check = np.array(((c,-s), (s, c)))
 
+			
 			if(np.linalg.norm(R-R_check)<1e-8):
 				theta *=-1
 
-			theta_list.append(theta)
 			self.mesh.red_r[i] = theta
-		return theta_list
+			# print("Time: ", (a2-a1).microseconds, (a3-a2).microseconds)
+		# print("\n")
+		return 1
 	
 	def itT(self):
 		Abtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
 		
-		FPAx = self.mesh.GF.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
+		FPAx = self.mesh.GF.dot(self.PAx)
 		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
 		
 		gd = np.concatenate((AtPtFPAx, Abtg))
@@ -1057,14 +1038,32 @@ class ARAP:
 		return 1
 
 	def iterate(self, its=100):
+		print("	+ARAP iterate")
+		self.USUtPAx_E = []
+		for i in range(len(self.mesh.red_r)):
+			B = self.mesh.RotationBLOCK[i]
+			PAx_e = B.T.dot(self.PAx)
+			
+			Ue = B.T.dot(self.mesh.GU.dot(B))
+			Se = B.T.dot(self.mesh.GS.dot(B))
+
+			USUPAx = Ue.dot(Se.dot(Ue.T.dot(PAx_e.T)))
+
+			self.USUtPAx_E.append(USUPAx)
+
 		Eg0 = self.dEdg()
 		for i in range(its):
+			# at = datetime.datetime.now()
 			g = self.itT()
+			# bt = datetime.datetime.now()
 			r = self.itR()
+			# ct = datetime.datetime.now()
+			# print("TIMES: ", (bt-at).microseconds, (ct-bt).microseconds)
 			self.mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
 			Eg = self.dEdg()
 			# print("i", i,np.linalg.norm(Eg-Eg0))
-			if(1e-10 > np.linalg.norm(Eg-Eg0)):
+			if(1e-8 > np.linalg.norm(Eg-Eg0)):
+				print("	-ARAP iterate ")
 				# print("ARAP converged", np.linalg.norm(Eg))	
 				return
 			Eg0 = Eg
@@ -1286,7 +1285,7 @@ class TimeIntegrator:
 		# 	self.adder *= -1
 
 		# self.mesh.g[2*self.mov+1] -= self.adder
-		self.elastic.muscle_fibre_mag = 0
+		self.elastic.muscle_fibre_mag = 100
 		print(self.elastic.muscle_fibre_mag)
 		self.time += 1
 
@@ -1294,6 +1293,7 @@ class TimeIntegrator:
 		pass
 
 	def static_solve(self):
+		print("Static Solve")
 		self.iterate()
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 		
@@ -1331,7 +1331,7 @@ class TimeIntegrator:
 	
 			return  alpha2*J_elastic + alpha1*J_arap
 		
-		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'disp': False, 'eps':1e-08})
+		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
 		
 
 		for i in range(len(res.x)):
@@ -1342,6 +1342,7 @@ class TimeIntegrator:
 		print("s1", res.x)
 		print("g1", self.mesh.g)
 		print(res)
+		print("static solve")
 		
 
 def display():
@@ -1407,7 +1408,9 @@ def display():
 			# print("Grad n ", J_elastic)
 		if(viewer.core.is_animating):
 			# time_integrator.iterate()
-			time_integrator.static_solve()
+			arap.Hessians()
+			# print("TETS: ", len(mesh.T))
+			exit()
 			# print(neoh.WikipediaForce(_rs=mesh.red_s))
 			# print(neoh.MuscleForce(_rs=mesh.red_s))
 
@@ -1462,8 +1465,9 @@ def display():
 		# print(igl.eigen.MatrixXd(np.array(cag)))
 		
 		#Write image
-		viewer.core.draw_buffer(viewer.data, viewer.opengl, False, tempR, tempG, tempB, tempA)
-		igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
+		if(viewer.core.is_animating):
+			viewer.core.draw_buffer(viewer.data, viewer.opengl, False, tempR, tempG, tempB, tempA)
+			igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
 		# pass
 
 
@@ -1483,6 +1487,34 @@ def display():
 	# key_down(viewer, 'b', 123)
 	viewer.callback_post_draw = key_down
 	viewer.callback_mouse_down = mouse_down
-	viewer.core.is_animating = False
+	viewer.core.is_animating = True
 	viewer.launch()
-display()
+
+# display()
+
+
+import re
+import cProfile, pstats, StringIO
+def headless():
+	VTU, to_fix = feather_muscle2_test_setup()
+	mesh = Mesh(VTU,ito_fix=to_fix)
+
+	neoh =NeohookeanElastic(imesh=mesh )
+	arap = ARAP(imesh=mesh)
+	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
+	
+	pr = cProfile.Profile()
+	pr.enable()
+	
+	# print(len(mesh.T))
+	arap.Hessians()
+	print(len(mesh.T))
+
+	pr.disable()
+	s = StringIO.StringIO()
+	sortby = 'cumulative'
+	ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+	ps.print_stats()
+	print s.getvalue()
+
+headless()
