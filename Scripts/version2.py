@@ -115,7 +115,7 @@ def featherize(x, y, step=1):
 	return V, T, u
 
 def get_min_max(iV,a):
-	eps = 1e-1
+	eps = 1e-3
 	mov = []
 	miny = np.amin(iV, axis=0)[a]
 	maxy = np.amax(iV, axis=0)[a]
@@ -442,19 +442,27 @@ class Mesh:
 
 	def getGlobalF(self, updateR = True, updateS = True, updateU = False):
 		U_block_diag = []
-		R_block_diag = []
+		R_matrix = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
 		S_block_diag = []
+
+		#cluster-wise update of R
+		if updateR:
+			for t in range(len(self.red_r)):
+				c, s = np.cos(self.red_r[t]), np.sin(self.red_r[t])
+				r_block = np.array(((c,-s), (s, c)))
+				B = self.RotationBLOCK[t]
+				GR_block = sparse.kron(sparse.eye(3*len(self.r_cluster_element_map[t])), r_block).tocsc()
+		
+				R_matrix += B.dot(GR_block.dot(B.T))
+
+			self.GR = R_matrix
+
 		for i in range(len(self.T)):
-			if updateR:
-				R_block_diag.append(sparse.kron(sparse.eye(3), self.getR(i)))
 			if updateS:
 				S_block_diag.append(sparse.kron(sparse.eye(3), self.getS(i)))
 			if updateU:
 				U_block_diag.append(sparse.kron(sparse.eye(3),self.getU(i)))
 		
-		if updateR:
-			self.GR = sparse.block_diag(R_block_diag) 
-
 		if updateS:
 			self.GS = sparse.block_diag(S_block_diag)
 
@@ -463,7 +471,7 @@ class Mesh:
 		
 		if(updateR or updateS or updateU):
 			self.GF = self.GR.dot(self.GU.dot(self.GS.dot(self.GU.T)))
-
+		
 	def getDiscontinuousVT(self):
 		C = self.getC()
 		CAg = C.dot(self.getA().dot(self.g))
@@ -653,7 +661,7 @@ class ARAP:
 		PAg = PA.dot(self.mesh.g)
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
 		USUtPAx = USUt.dot(self.PAx)
-		UtPAx = self.mesh.GU.T.dot(PA.dot(self.mesh.x0))
+		UtPAx = self.mesh.GU.T.dot(self.PAx)
 		r_size = len(self.mesh.red_r)
 		g_size = len(self.mesh.g)
 		s_size = len(self.mesh.red_s)
@@ -674,11 +682,9 @@ class ARAP:
 
 		# else:
 		# 	sample = self.sparseErg_first(-1*PA, USUtPAx)
-		# 	for j in range(self.Erg.shape[1]):
-		# 		sp = DR[j]
-		# 		for i in range(self.Erg.shape[0]):
-		# 			if sp.nnz>0:
-		# 				self.Erg[i,j] = sample[i].multiply(sp).sum()
+		# 	for i in range(self.Erg.shape[0]):
+		# 		for j in range(self.Erg.shape[1]):
+		# 			self.Erg[i,j] = sample[i].multiply(DR[j]).sum()
 
 		a2 = datetime.datetime.now()
 		###############ERR
@@ -703,18 +709,15 @@ class ARAP:
 		# 				self.Egs[i,j] = sp.multiply(d_gEgdS[i,:,:]).sum()
 		# else:
 		# 	d_gEgdS = self.sparseEgs_first(-1*PAtRU, UtPAx)
-		# 	for j in range(self.Egs.shape[1]):
-		# 		sp = DS[j]
-		# 		for i in range(self.Egs.shape[0]):
-		# 			if sp.nnz>0:
-		# 				self.Egs[i,j] = d_gEgdS[i].multiply(sp).sum()
+		# 	for i in range(self.Egs.shape[0]):
+		# 		for j in range(self.Egs.shape[1]):
+		# 			self.Egs[i,j] = d_gEgdS[i].multiply(DS[j]).sum()
 		
 		a4 = datetime.datetime.now()
 		###############ERS
 		if not useSparse:
 			print("Ers NOT SPARSE")
 			first = np.multiply.outer(-PAg, self.mesh.GU.toarray())
-
 			for j in range(self.Ers_mid.shape[1]):
 				spR = DR[j]
 				for i in range(self.Ers_mid.shape[0]):
@@ -726,23 +729,33 @@ class ARAP:
 				for i in range(self.Ers.shape[0]):
 					self.Ers[i,j] = spS.multiply(second[:,:,i]).sum()
 		else:
-			first = self.sparseErs_first(PAg)
+			# first = self.Ers_first(PAg)
+			# for i in range(self.Ers_mid.shape[0]):
+			# 	for j in range(self.Ers_mid.shape[1]):
+			# 		self.Ers_mid[i,j] = DR[j].multiply(first[i]).sum()
 
-			for j in range(self.Ers_mid.shape[1]):
-				spR = DR[j]
-				for i in range(self.Ers_mid.shape[0]):
-					self.Ers_mid[i,j] = spR.multiply(first[i]).sum()
+			odd, even = self.sparseErs_first(PAg)
+			for i in range(self.Ers_mid.shape[1]):
+				spR = DR[i]
+				odd_spR = spR.multiply(odd).sum(axis = 0) #6T x 6T (each 2 cols get summed to Ers_mid i,j)
+				even_spR = spR.multiply(even).sum(axis = 0)#6T x 6T (each 2 cols get summed to Ers_mid i+1,j)
+				odd_i = odd_spR.reshape((odd_spR.shape[1]/2, 2)).sum(axis=1)
+				even_i = even_spR.reshape((even_spR.shape[1]/2, 2)).sum(axis=1)
+				col_i = np.zeros((len(PAg),1))
+				col_i[2*np.arange(self.Ers_mid.shape[0]/2)] = odd_i
+				col_i[2*np.arange(self.Ers_mid.shape[0]/2)+1] = even_i
+				self.Ers_mid[:, i]   = col_i[:,0]
 
 			second = self.sparseErs_second(UtPAx, self.Ers_mid)
-			for j in range(self.Ers.shape[1]):
-				spS = DS[j]
-				for i in range(self.Ers.shape[0]):
-					if second[i].nnz>0:
-						self.Ers[i,j] = second[i].multiply(spS).sum()
+			for i in range(self.Ers.shape[0]):
+				if second[i].nnz>0:
+					for j in range(self.Ers.shape[1]):
+						self.Ers[i,j] = second[i].multiply(DS[j]).sum()
 
+			print(self.Ers)
 		a5 = datetime.datetime.now()
 		
-		print("TIME: ", (a2-a1).microseconds, (a3-a2).microseconds, (a4-a3).microseconds, (a5-a4).microseconds)
+		# print("TIME: ", (a2-a1).microseconds, (a3-a2).microseconds, (a4-a3).microseconds, (a5-a4).microseconds)
 		print("			Hessians")
 		return self.AtPtPA, self.Erg, self.Err, self.Egs, self.Ers
 
@@ -754,7 +767,7 @@ class ARAP:
 			PATc = nPAT.getcol(c)
 			sp = PATc.dot(spUSUtPAx)
 			first.append(sp)
-		
+
 
 		return first
 
@@ -771,6 +784,37 @@ class ARAP:
 		return first
 
 	def sparseErs_first(self, nPAg):
+
+		odd_blocks = []
+		even_blocks = []
+		for t in range(len(self.mesh.T)):
+			u = self.mesh.getU(t)
+			odd_blocks.append(np.multiply.outer(u[:,0], nPAg[6*t + 0:6*t + 2]))
+			odd_blocks.append(np.multiply.outer(u[:,0], nPAg[6*t + 2:6*t + 4]))
+			odd_blocks.append(np.multiply.outer(u[:,0], nPAg[6*t + 4:6*t + 6]))
+			
+			even_blocks.append(np.multiply.outer(u[:,1], nPAg[6*t + 0:6*t + 2]))
+			even_blocks.append(np.multiply.outer(u[:,1], nPAg[6*t + 2:6*t + 4]))
+			even_blocks.append(np.multiply.outer(u[:,1], nPAg[6*t + 4:6*t + 6]))
+
+		odd = sparse.block_diag(odd_blocks).tocsc()
+		even = sparse.block_diag(even_blocks).tocsc()
+
+		return odd, even
+
+	def sparseErs_second(self, UtPAx, mid):
+		second = []
+		spUtPAx = sparse.csc_matrix(UtPAx.T)
+		spmid = sparse.csc_matrix(mid)
+		for c in range(spmid.shape[1]):
+			midc = spmid.getcol(c)
+			sp = midc.dot(spUtPAx)
+			second.append(sp)
+
+
+		return second
+
+	def Ers_first(self, nPAg):
 		first = []
 		spPAg = sparse.csc_matrix(nPAg.T)
 		for c in range(self.mesh.GU.shape[1]):
@@ -778,18 +822,6 @@ class ARAP:
 			sp = GUc.dot(spPAg)
 			first.append(sp)
 		return first
-
-	def sparseErs_second(self, UtPAx, mid):
-		second = []
-		spUtPAx = sparse.csc_matrix(UtPAx.T)
-		spmid = sparse.csc_matrix(mid)
-
-		for c in range(spmid.shape[1]):
-			midc = spmid.getcol(c)
-			sp = midc.dot(spUtPAx)
-			second.append(sp)
-
-		return second
 
 	def Gradients(self):
 		PA = self.mesh.getP().dot(self.mesh.getA())
@@ -991,15 +1023,18 @@ class ARAP:
 
 		for i in range(len(self.mesh.red_r)):
 			# a1 = datetime.datetime.now()
-			PAg_e = self.mesh.RotationBLOCK[i].T.dot(PAg)
+			one = self.mesh.RotationBLOCK[i].T.dot(PAg)
+			two = self.USUtPAx_E[i]
 
-			USUPAx = self.USUtPAx_E[i]
-
-			m_PAg = np.reshape(PAg_e, (len(PAg_e)/2,2))
-			m_USUPAx = np.reshape(USUPAx, (len(PAg_e)/2,2))
-			# a2 = datetime.datetime.now()
-
+			m_PAg = np.reshape(one, (len(one)/2,2))
+			m_USUPAx = np.reshape(two, (len(two)/2,2))
 			F = np.matmul(m_PAg.T,m_USUPAx)
+			# a2 = datetime.datetime.now()
+			# f_11 = one[2*np.arange(len(one)/2)].dot(two[2*np.arange(len(two)/2)])
+			# f_12 = one[2*np.arange(len(one)/2)].dot(two[2*np.arange(len(two)/2)+1])
+			# f_21 = one[2*np.arange(len(one)/2)+1].dot(two[2*np.arange(len(two)/2)])
+			# f_22 = one[2*np.arange(len(one)/2)+1].dot(two[2*np.arange(len(two)/2)+1])
+			# F = np.array([[f_11, f_12], [f_21, f_22]])
 
 			u, s, vt = np.linalg.svd(F, full_matrices=True)
 			R = np.matmul(vt.T, u.T)
@@ -1007,19 +1042,16 @@ class ARAP:
 			veca = np.array([1,0])
 			vecb = np.dot(R, veca)
 
-			# a3 = datetime.datetime.now()
-
-			theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
 
 			#check angle sign
+			theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
 			c, s = np.cos(theta), np.sin(theta)
 			R_check = np.array(((c,-s), (s, c)))
-
-			
 			if(np.linalg.norm(R-R_check)<1e-8):
 				theta *=-1
 
 			self.mesh.red_r[i] = theta
+			# a3 = datetime.datetime.now()
 			# print("Time: ", (a2-a1).microseconds, (a3-a2).microseconds)
 		# print("\n")
 		return 1
@@ -1288,6 +1320,12 @@ class TimeIntegrator:
 		print(self.elastic.muscle_fibre_mag)
 		self.time += 1
 
+	def move_g(self):
+		if(self.time%10 == 0):
+			self.adder *= -1
+
+		self.mesh.g[2*self.mov +1] -= self.adder
+
 	def solve(self):
 		pass
 
@@ -1348,7 +1386,7 @@ def display():
 	# iV, iT, iU = rectangle_mesh(3,3,.1)
 	# # iV, iT, iU = torus_mesh(5, 4, 3, .1)
 	# to_fix = get_min(iV,1)
-	VTU, to_fix = feather_muscle2_test_setup()
+	VTU, to_fix = feather_muscle2_test_setup(p1 = 100, p2 = 50)
 	mesh = Mesh(VTU,ito_fix=to_fix)
 
 	neoh =NeohookeanElastic(imesh=mesh )
@@ -1406,10 +1444,11 @@ def display():
 			# J_elastic = neoh.Forces(irs = mesh.red_s, idgds=dgds)
 			# print("Grad n ", J_elastic)
 		if(viewer.core.is_animating):
-			# time_integrator.iterate()
-			arap.Hessians()
+			time_integrator.static_solve()
+			# time_integrator.move_g()
+			# arap.iterate()
+			# arap.Hessians()
 			# print("TETS: ", len(mesh.T))
-			exit()
 			# print(neoh.WikipediaForce(_rs=mesh.red_s))
 			# print(neoh.MuscleForce(_rs=mesh.red_s))
 
@@ -1486,7 +1525,7 @@ def display():
 	# key_down(viewer, 'b', 123)
 	viewer.callback_post_draw = key_down
 	viewer.callback_mouse_down = mouse_down
-	viewer.core.is_animating = True
+	viewer.core.is_animating = False
 	viewer.launch()
 
 # display()
@@ -1496,13 +1535,15 @@ import re
 import cProfile, pstats, StringIO
 def headless():
 	VTU, to_fix = feather_muscle2_test_setup(p1 = 60, p2 = 30)
+	# VTU, to_fix = feather_muscle1_test_setup(x = 2, y = 2)
 	print(len(VTU[0]), len(VTU[1]))
 	mesh = Mesh(VTU,ito_fix=to_fix)
 
 	neoh =NeohookeanElastic(imesh=mesh )
 	arap = ARAP(imesh=mesh)
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
-	
+	time_integrator.move_g()
+
 	pr = cProfile.Profile()
 	pr.enable()
 	

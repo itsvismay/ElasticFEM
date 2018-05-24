@@ -3,14 +3,17 @@ from version2 import rectangle_mesh, torus_mesh, featherize, get_min_max, Neohoo
 
 def FiniteDifferencesARAP():
 	eps = 1e-4
-	iV, iT, iU = featherize(1,1,.1)
+	iV, iT, iU = rectangle_mesh(2,2,.1)
+
 	# iV, iT, iU = torus_mesh(5,4,3,.1)
 	its = 100
 	to_fix = get_min_max(iV, a=1)
 	# print(to_fix)
-	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
+	mesh = Mesh((iV,iT, iU), ito_fix=to_fix)
 	mesh.fixed = mesh.fixed_max_axis(1)
 	# print(mesh.fixed)
+	# print(mesh.V)
+	# exit()
 	
 	arap = ARAP(mesh)	
 	mesh.getGlobalF()
@@ -247,9 +250,9 @@ def FiniteDifferencesARAP():
 				mesh.red_s[j] -= eps
 
 				Egs[i].append((Eij - Ei - Ej + E0)/(eps*eps))
-		print(real)
-		print("\n")
-		print(np.array(Egs))
+		# print(real)
+		# print("\n")
+		# print(np.array(Egs))
 		print("Egs ", np.linalg.norm(np.array(Egs) - real))
 
 	def check_dgds_drds():
@@ -316,7 +319,7 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgds()
 	check_dgds_drds()
 
-# FiniteDifferencesARAP()
+FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-5
@@ -403,4 +406,4 @@ def FiniteDifferencesElasticity():
 	check_muscleForce()
 	# test()
 
-FiniteDifferencesElasticity()
+# FiniteDifferencesElasticity()
