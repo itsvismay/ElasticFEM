@@ -388,7 +388,7 @@ class Mesh:
 			for i in range(len(self.T)):
 				p_block.append(sub_P)
 
-			self.P = sparse.block_diag(p_block)
+			self.P = sparse.block_diag(p_block).tocsc()
 
 		return self.P
 
@@ -555,7 +555,6 @@ class ARAP:
 
 		self.USUtPAx_E = []
 
-
 	def energy(self, _g, _R, _S, _U):
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(_g))
 		FPAx = _R.dot(_U.dot(_S.dot(_U.T.dot(self.PAx))))
@@ -681,21 +680,21 @@ class ARAP:
 		# 				Erg[i,j] = sp.multiply(sample[i,:,:]).sum()
 
 		# else:
-		# 	sample = self.sparseErg_first(-1*PA, USUtPAx)
+		# 	sample = self.Erg_first(-1*PA, USUtPAx)
 		# 	for i in range(self.Erg.shape[0]):
 		# 		for j in range(self.Erg.shape[1]):
 		# 			self.Erg[i,j] = sample[i].multiply(DR[j]).sum()
-
+			
 		a2 = datetime.datetime.now()
 		###############ERR
 		# negPAg_USUtPAx = np.multiply.outer( -1*PAg, USUtPAx)
-		# DDR = self.sparseDDRdrdr()
+		# DDR = self.sparseDDRdrdr_diag()
 		# for i in range(self.Err.shape[0]):
-		# 	for j in range(self.Err.shape[1]):
-		# 		spD = DDR[i][j]
-		# 		if spD.nnz>0:
-		# 			self.Err[i,j] = spD.multiply(negPAg_USUtPAx).sum()
-		
+		# 	spD = DDR[i]
+		# 	if spD.nnz>0:
+		# 		self.Err[i,i] = spD.multiply(negPAg_USUtPAx).sum()
+		# print(self.Err)
+
 		a3 = datetime.datetime.now()
 		###############EGS
 		# PAtRU = PA.T.dot(self.mesh.GR.dot(self.mesh.GU))
@@ -711,10 +710,11 @@ class ARAP:
 		# 	d_gEgdS = self.sparseEgs_first(-1*PAtRU, UtPAx)
 		# 	for i in range(self.Egs.shape[0]):
 		# 		for j in range(self.Egs.shape[1]):
-		# 			self.Egs[i,j] = d_gEgdS[i].multiply(DS[j]).sum()
-		
+		# 			self.Egs[i,j] = DS[j].multiply(d_gEgdS[i]).sum()
+			
 		a4 = datetime.datetime.now()
 		###############ERS
+		
 		if not useSparse:
 			print("Ers NOT SPARSE")
 			first = np.multiply.outer(-PAg, self.mesh.GU.toarray())
@@ -730,10 +730,11 @@ class ARAP:
 					self.Ers[i,j] = spS.multiply(second[:,:,i]).sum()
 		else:
 			# first = self.Ers_first(PAg)
-			# for i in range(self.Ers_mid.shape[0]):
-			# 	for j in range(self.Ers_mid.shape[1]):
-			# 		self.Ers_mid[i,j] = DR[j].multiply(first[i]).sum()
-
+			# for j in range(self.Ers_mid.shape[1]):
+			# 	spR = DR[j]
+			# 	for i in range(self.Ers_mid.shape[0]):
+			# 		if spR.nnz>0:
+			# 			self.Ers_mid[i,j] = spR.multiply(first[i]).sum()
 			odd, even = self.sparseErs_first(PAg)
 			for i in range(self.Ers_mid.shape[1]):
 				spR = DR[i]
@@ -746,45 +747,79 @@ class ARAP:
 				col_i[2*np.arange(self.Ers_mid.shape[0]/2)+1] = even_i
 				self.Ers_mid[:, i]   = col_i[:,0]
 
-			second = self.sparseErs_second(UtPAx, self.Ers_mid)
+			second = self.Ers_second(UtPAx, self.Ers_mid)
 			for i in range(self.Ers.shape[0]):
 				if second[i].nnz>0:
 					for j in range(self.Ers.shape[1]):
 						self.Ers[i,j] = second[i].multiply(DS[j]).sum()
 
-			print(self.Ers)
 		a5 = datetime.datetime.now()
 		
 		# print("TIME: ", (a2-a1).microseconds, (a3-a2).microseconds, (a4-a3).microseconds, (a5-a4).microseconds)
 		print("			Hessians")
 		return self.AtPtPA, self.Erg, self.Err, self.Egs, self.Ers
 
-	def sparseErg_first(self, nPAT, USUtPAx):
+	def Erg_first(self, nPAT, USUtPAx):
 		first = []
-		spUSUtPAx = sparse.csc_matrix(USUtPAx.T)
-		
+		spUSUtPAx = sparse.csr_matrix(USUtPAx.T)
 		for c in range(nPAT.shape[1]):
 			PATc = nPAT.getcol(c)
 			sp = PATc.dot(spUSUtPAx)
 			first.append(sp)
 
+		return first
+
+	def sparseErg_first(self, nPAT, USUtPAx):
+		first = []
+		cdd = np.zeros(len(USUtPAx))
+		cdl = np.zeros(len(USUtPAx)-1)
+		cdu = np.zeros(len(USUtPAx)-1)
+		print(nPAT.shape[1])
+		for c in range(nPAT.shape[1]):
+			PATc = nPAT.getcol(c)
+			dd = PATc[:,0].T.multiply(USUtPAx)
+			du = PATc[:-1,0].T.multiply(USUtPAx[1:])
+			dl = PATc[1:,0].T.multiply(USUtPAx[:-1])
+			cdd[:] = dd
+			cdl[:] = dl 
+			cdu[:] = du
+			sp = sparse.diags([cdl, cdd, cdu],[-1,0,1]).tocsc()
+			first.append(sp)
 
 		return first
 
-	def sparseEgs_first(self, PAtRU, UtPAx):
+	def Egs_first(self, PAtRU, UtPAx):
 		first = []
 		spUtPAx = sparse.csc_matrix(UtPAx.T)
-		PAtRU_T = PAtRU.tocsr()
+		spPAtRU = PAtRU.tocsr()
 
-		for r in range(PAtRU_T.shape[0]):
-			mat_r = PAtRU.getrow(r)
+		for r in range(spPAtRU.shape[0]):
+			mat_r = spPAtRU.getrow(r)
 			sp = mat_r.T.dot(spUtPAx)
 			first.append(sp)
 
 		return first
 
-	def sparseErs_first(self, nPAg):
+	def sparseEgs_first(self, PAtRU, UtPAx):
+		first = []
+		cdd = np.zeros(len(UtPAx))
+		cdl = np.zeros(len(UtPAx)-1)
+		cdu = np.zeros(len(UtPAx)-1)
+		for r in range(PAtRU.shape[0]):
+			matr = PAtRU.getrow(r)
+			dd = matr.multiply(UtPAx)
+			du = matr[0,:-1].multiply(UtPAx[1:])
+			dl = matr[0,1:].multiply(UtPAx[:-1])
+			cdd[:] = dd
+			cdl[:] = dl 
+			cdu[:] = du
+			sp = sparse.diags([cdl, cdd, cdu],[-1,0,1]).tocsc()
+			first.append(sp)
 
+		return first
+
+	def sparseErs_first(self, nPAg):
+		# a = datetime.datetime.now()
 		odd_blocks = []
 		even_blocks = []
 		for t in range(len(self.mesh.T)):
@@ -792,17 +827,18 @@ class ARAP:
 			odd_blocks.append(np.multiply.outer(u[:,0], nPAg[6*t + 0:6*t + 2]))
 			odd_blocks.append(np.multiply.outer(u[:,0], nPAg[6*t + 2:6*t + 4]))
 			odd_blocks.append(np.multiply.outer(u[:,0], nPAg[6*t + 4:6*t + 6]))
-			
+
 			even_blocks.append(np.multiply.outer(u[:,1], nPAg[6*t + 0:6*t + 2]))
 			even_blocks.append(np.multiply.outer(u[:,1], nPAg[6*t + 2:6*t + 4]))
 			even_blocks.append(np.multiply.outer(u[:,1], nPAg[6*t + 4:6*t + 6]))
-
+		# b = datetime.datetime.now()
 		odd = sparse.block_diag(odd_blocks).tocsc()
 		even = sparse.block_diag(even_blocks).tocsc()
-
+		# c = datetime.datetime.now()
+		# print("TIME: ", (b-a).microseconds, (c-b).microseconds)
 		return odd, even
 
-	def sparseErs_second(self, UtPAx, mid):
+	def Ers_second(self, UtPAx, mid):
 		second = []
 		spUtPAx = sparse.csc_matrix(UtPAx.T)
 		spmid = sparse.csc_matrix(mid)
@@ -810,7 +846,6 @@ class ARAP:
 			midc = spmid.getcol(c)
 			sp = midc.dot(spUtPAx)
 			second.append(sp)
-
 
 		return second
 
@@ -890,22 +925,19 @@ class ARAP:
 
 		return DR
 
-	def sparseDDRdrdr(self):
-		D2R = [[] for i in range(len(self.mesh.red_r))]
+	def sparseDDRdrdr_diag(self):
+		diagD2R = []
 
 		for t in range(len(self.mesh.red_r)):
 			B = self.mesh.RotationBLOCK[t]
-			for r in range(len(self.mesh.red_r)):
-				if(t==r):
-					c, s = np.cos(self.mesh.red_r[t]), np.sin(self.mesh.red_r[t])
-					ddR_e = np.array(((-c,s), (-s, -c)))
-					blocked = sparse.kron(sparse.eye(3*len(self.mesh.r_cluster_element_map[t])), ddR_e)
-					placeHolder = B.dot(blocked.dot(B.T))
-				else:
-					placeHolder = sparse.csc_matrix(np.zeros((6*len(self.mesh.T), 6*len(self.mesh.T))))
-
-				D2R[t].append(placeHolder)
-		return D2R
+			
+			c, s = np.cos(self.mesh.red_r[t]), np.sin(self.mesh.red_r[t])
+			ddR_e = np.array(((-c,s), (-s, -c)))
+			blocked = sparse.kron(sparse.eye(3*len(self.mesh.r_cluster_element_map[t])), ddR_e)
+			placeHolder = B.dot(blocked.dot(B.T))
+				
+			diagD2R.append(placeHolder)
+		return diagD2R
 
 	def d2Rdr2(self):
 		_d2Rdr2 = []
@@ -1543,11 +1575,11 @@ def headless():
 	arap = ARAP(imesh=mesh)
 	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
 	time_integrator.move_g()
+	arap.iterate()
 
 	pr = cProfile.Profile()
 	pr.enable()
 	
-	# print(len(mesh.T))
 	print(len(mesh.T))
 	arap.Hessians()
 
