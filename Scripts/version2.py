@@ -237,15 +237,15 @@ class Mesh:
 		self.sW = None
 		self.setupStrainSkinnings()
 
+		t_size = len(self.T)
 		self.GF = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
 		self.GR = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
-		self.GS = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
-		self.GU = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
+		self.GS = sparse.diags([np.ones(6*t_size-1), np.ones(6*t_size), np.ones(6*t_size-1)],[-1,0,1]).tocsc()
+		self.GU = sparse.diags([np.ones(6*t_size-1), np.ones(6*t_size), np.ones(6*t_size-1)],[-1,0,1]).tocsc()
 		#set initial strains
 		for i in range(len(self.T)):
 			self.q[3*i + 1] = 1
 			self.q[3*i + 2] = 1
-
 
 		self.getGlobalF(updateR = True, updateS = True, updateU=True)
 
@@ -259,8 +259,8 @@ class Mesh:
 
 		t_set = Set([i for i in range(len(self.T))])
 
-		# self.s_handles_ind =[i for i in range(len(self.T)) if i%50==0]
-		self.s_handles_ind = [1]
+		self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
+		# self.s_handles_ind = [1,5]
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
 		centroids = self.getC().dot(self.getA().dot(self.x0))
@@ -277,7 +277,7 @@ class Mesh:
 		print("Setting up rotation clusters")
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
-		nrc = 4 #len(self.T)
+		nrc = len(self.T)
 		self.red_r = np.zeros(nrc)
 		self.r_element_cluster_map = np.zeros(len(self.T), dtype = int)
 		
@@ -287,22 +287,22 @@ class Mesh:
 		miny = np.amin(self.V, axis=0)[1]
 		maxy = np.amax(self.V, axis=0)[1]
 		for i in range(len(self.T)):
-				# self.r_element_cluster_map[i] = i
-				# self.r_cluster_element_map[i].append(i)
-			if(centroids[6*i]<=(maxx + minx)/2.0):
-				if(centroids[6*i+1]<=(maxy + miny)/2.0):
-					self.r_element_cluster_map[i] = 0
-					self.r_cluster_element_map[0].append(i)
-				else:
-					self.r_element_cluster_map[i] = 1
-					self.r_cluster_element_map[1].append(i)
-			else:
-				if(centroids[6*i+1]<=(maxy + miny)/2.0):
-					self.r_element_cluster_map[i] = 2
-					self.r_cluster_element_map[2].append(i)
-				else:
-					self.r_element_cluster_map[i] = 3
-					self.r_cluster_element_map[3].append(i)
+				self.r_element_cluster_map[i] = i
+				self.r_cluster_element_map[i].append(i)
+			# if(centroids[6*i]<=(maxx + minx)/2.0):
+			# 	if(centroids[6*i+1]<=(maxy + miny)/2.0):
+			# 		self.r_element_cluster_map[i] = 0
+			# 		self.r_cluster_element_map[0].append(i)
+			# 	else:
+			# 		self.r_element_cluster_map[i] = 1
+			# 		self.r_cluster_element_map[1].append(i)
+			# else:
+			# 	if(centroids[6*i+1]<=(maxy + miny)/2.0):
+			# 		self.r_element_cluster_map[i] = 2
+			# 		self.r_cluster_element_map[2].append(i)
+			# 	else:
+			# 		self.r_element_cluster_map[i] = 3
+			# 		self.r_cluster_element_map[3].append(i)
 		
 		self.RotationBLOCK = []
 		for i in range(len(self.red_r)):
@@ -459,15 +459,15 @@ class Mesh:
 
 		for i in range(len(self.T)):
 			if updateS:
-				S_block_diag.append(sparse.kron(sparse.eye(3), self.getS(i)))
+				s = self.getS(i)
+				self.GS[6*i+0:6*i+2, 6*i+0:6*i+2] = s
+				self.GS[6*i+2:6*i+4, 6*i+2:6*i+4] = s 
+				self.GS[6*i+4:6*i+6, 6*i+4:6*i+6] = s 
 			if updateU:
-				U_block_diag.append(sparse.kron(sparse.eye(3),self.getU(i)))
-		
-		if updateS:
-			self.GS = sparse.block_diag(S_block_diag)
-
-		if updateU:
-			self.GU = sparse.block_diag(U_block_diag)
+				u = self.getU(i)
+				self.GU[6*i+0:6*i+2, 6*i+0:6*i+2] = u
+				self.GU[6*i+2:6*i+4, 6*i+2:6*i+4] = u
+				self.GU[6*i+4:6*i+6, 6*i+4:6*i+6] = u
 		
 		if(updateR or updateS or updateU):
 			self.GF = self.GR.dot(self.GU.dot(self.GS.dot(self.GU.T)))
@@ -521,6 +521,7 @@ class ARAP:
 	#class vars
 
 	def __init__(self, imesh):
+		print("Init ARAP")
 		self.mesh = imesh
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix()
 		#these are the fixed vertices which stay constant
@@ -533,7 +534,7 @@ class ARAP:
 		
 
 		self.DSDs = None
-		self.sparseDSds()
+		# self.sparseDSds()
 
 		#LU inverse
 		col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
@@ -546,14 +547,19 @@ class ARAP:
 		r_size = len(self.mesh.red_r)
 		g_size = len(self.mesh.g)
 		s_size = len(self.mesh.red_s)
+		t_size = len(self.mesh.T)
+
 
 		self.Erg = np.zeros((g_size, r_size))
 		self.Err = np.zeros((r_size, r_size))
 		self.Egs = np.zeros((g_size, s_size))
 		self.Ers = np.zeros((r_size, s_size))
 		self.Ers_mid = np.zeros(( 6*len(self.mesh.T), r_size ))	
+		self.Ers_first_odd = sparse.diags([np.ones(6*t_size-1), np.ones(6*t_size), np.ones(6*t_size-1)],[-1,0,1]).tocsc()
+		self.Ers_first_even = sparse.diags([np.ones(6*t_size-1), np.ones(6*t_size), np.ones(6*t_size-1)],[-1,0,1]).tocsc()
 
 		self.USUtPAx_E = []
+		print("Done with ARAP init")
 
 	def energy(self, _g, _R, _S, _U):
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(_g))
@@ -680,11 +686,11 @@ class ARAP:
 		# 				Erg[i,j] = sp.multiply(sample[i,:,:]).sum()
 
 		# else:
-		# 	sample = self.Erg_first(-1*PA, USUtPAx)
-		# 	for i in range(self.Erg.shape[0]):
-		# 		for j in range(self.Erg.shape[1]):
-		# 			self.Erg[i,j] = sample[i].multiply(DR[j]).sum()
-			
+		# 	sample = self.sparseErg_first(-1*PA, USUtPAx)
+		# 	for j in range(self.Erg.shape[1]):
+		# 		for i in range(self.Erg.shape[0]):
+		# 			self.Erg[i,j] = DR[j].multiply(sample[i]).sum()
+
 		a2 = datetime.datetime.now()
 		###############ERR
 		# negPAg_USUtPAx = np.multiply.outer( -1*PAg, USUtPAx)
@@ -693,9 +699,8 @@ class ARAP:
 		# 	spD = DDR[i]
 		# 	if spD.nnz>0:
 		# 		self.Err[i,i] = spD.multiply(negPAg_USUtPAx).sum()
-		# print(self.Err)
 
-		a3 = datetime.datetime.now()
+		# a3 = datetime.datetime.now()
 		###############EGS
 		# PAtRU = PA.T.dot(self.mesh.GR.dot(self.mesh.GU))
 		# if not useSparse:
@@ -729,12 +734,7 @@ class ARAP:
 				for i in range(self.Ers.shape[0]):
 					self.Ers[i,j] = spS.multiply(second[:,:,i]).sum()
 		else:
-			# first = self.Ers_first(PAg)
-			# for j in range(self.Ers_mid.shape[1]):
-			# 	spR = DR[j]
-			# 	for i in range(self.Ers_mid.shape[0]):
-			# 		if spR.nnz>0:
-			# 			self.Ers_mid[i,j] = spR.multiply(first[i]).sum()
+
 			odd, even = self.sparseErs_first(PAg)
 			for i in range(self.Ers_mid.shape[1]):
 				spR = DR[i]
@@ -746,13 +746,15 @@ class ARAP:
 				col_i[2*np.arange(self.Ers_mid.shape[0]/2)] = odd_i
 				col_i[2*np.arange(self.Ers_mid.shape[0]/2)+1] = even_i
 				self.Ers_mid[:, i]   = col_i[:,0]
-
-			second = self.Ers_second(UtPAx, self.Ers_mid)
-			for i in range(self.Ers.shape[0]):
-				if second[i].nnz>0:
-					for j in range(self.Ers.shape[1]):
-						self.Ers[i,j] = second[i].multiply(DS[j]).sum()
-
+			# print(self.Ers_mid)
+			# second = self.Ers_second(UtPAx, self.Ers_mid)
+	
+			# for i in range(self.Ers.shape[0]):
+			# 	if second[i].nnz>0:
+			# 		for j in range(self.Ers.shape[1]):
+				
+			# 			self.Ers[i,j] = second[i].multiply(DS[j]).sum()
+			# print(self.Ers)
 		a5 = datetime.datetime.now()
 		
 		# print("TIME: ", (a2-a1).microseconds, (a3-a2).microseconds, (a4-a3).microseconds, (a5-a4).microseconds)
@@ -819,24 +821,17 @@ class ARAP:
 		return first
 
 	def sparseErs_first(self, nPAg):
-		# a = datetime.datetime.now()
-		odd_blocks = []
-		even_blocks = []
 		for t in range(len(self.mesh.T)):
 			u = self.mesh.getU(t)
-			odd_blocks.append(np.multiply.outer(u[:,0], nPAg[6*t + 0:6*t + 2]))
-			odd_blocks.append(np.multiply.outer(u[:,0], nPAg[6*t + 2:6*t + 4]))
-			odd_blocks.append(np.multiply.outer(u[:,0], nPAg[6*t + 4:6*t + 6]))
+			self.Ers_first_odd[6*t + 0:6*t + 2, 6*t + 0:6*t + 2] = np.multiply.outer(u[:,0], nPAg[6*t + 0:6*t + 2])
+			self.Ers_first_odd[6*t + 2:6*t + 4, 6*t + 2:6*t + 4] = np.multiply.outer(u[:,0], nPAg[6*t + 2:6*t + 4])
+			self.Ers_first_odd[6*t + 4:6*t + 6, 6*t + 4:6*t + 6] = np.multiply.outer(u[:,0], nPAg[6*t + 4:6*t + 6])
 
-			even_blocks.append(np.multiply.outer(u[:,1], nPAg[6*t + 0:6*t + 2]))
-			even_blocks.append(np.multiply.outer(u[:,1], nPAg[6*t + 2:6*t + 4]))
-			even_blocks.append(np.multiply.outer(u[:,1], nPAg[6*t + 4:6*t + 6]))
-		# b = datetime.datetime.now()
-		odd = sparse.block_diag(odd_blocks).tocsc()
-		even = sparse.block_diag(even_blocks).tocsc()
-		# c = datetime.datetime.now()
-		# print("TIME: ", (b-a).microseconds, (c-b).microseconds)
-		return odd, even
+			self.Ers_first_even[6*t + 0:6*t + 2, 6*t + 0:6*t + 2] = np.multiply.outer(u[:,1], nPAg[6*t + 0:6*t + 2])
+			self.Ers_first_even[6*t + 2:6*t + 4, 6*t + 2:6*t + 4] = np.multiply.outer(u[:,1], nPAg[6*t + 2:6*t + 4])
+			self.Ers_first_even[6*t + 4:6*t + 6, 6*t + 4:6*t + 6] = np.multiply.outer(u[:,1], nPAg[6*t + 4:6*t + 6])
+
+		return self.Ers_first_odd, self.Ers_first_even
 
 	def Ers_second(self, UtPAx, mid):
 		second = []
@@ -1566,23 +1561,33 @@ def display():
 import re
 import cProfile, pstats, StringIO
 def headless():
-	VTU, to_fix = feather_muscle2_test_setup(p1 = 60, p2 = 30)
-	# VTU, to_fix = feather_muscle1_test_setup(x = 2, y = 2)
-	print(len(VTU[0]), len(VTU[1]))
-	mesh = Mesh(VTU,ito_fix=to_fix)
+	# VTU, to_fix = feather_muscle2_test_setup(p1 = 100, p2 = 50)
+	# VTU, to_fix = feather_muscle2_test_setup(p1 = 200, p2 = 100)
+	# VTU, to_fix = feather_muscle2_test_setup(p1 = 300, p2 = 150)
+	# VTU, to_fix = feather_muscle2_test_setup(p1 = 400, p2 = 200)
+	# VTU, to_fix = feather_muscle2_test_setup(p1 = 500, p2 = 250)
+	# VTU, to_fix = feather_muscle2_test_setup(p1 = 600, p2 = 300)
+	# VTU, to_fix = feather_muscle1_test_setup(x = 30, y = 1)
+	# print(len(VTU[0]), len(VTU[1]))
+	# mesh = Mesh(VTU,ito_fix=to_fix)
 
-	neoh =NeohookeanElastic(imesh=mesh )
-	arap = ARAP(imesh=mesh)
-	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
-	time_integrator.move_g()
-	arap.iterate()
+	# neoh =NeohookeanElastic(imesh=mesh )
+	# arap = ARAP(imesh=mesh)
+	# time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
+	# time_integrator.move_g()
+	# arap.iterate()
 
 	pr = cProfile.Profile()
 	pr.enable()
 	
-	print(len(mesh.T))
-	arap.Hessians()
+	# blocks = [np.array([[1,1],[1,1]]) for i in range (4000)]
+	# sp = sparse.block_diag(blocks, format="csc")
+	dd = [1 for i in range(4000)]
+	du = [1 for i in range(4000-1)]
+	dl = [1 for i in range(4000-1)]
+	sp = sparse.diags([dl, dd, du],[-1,0,1]).tocsc()
 
+	
 	pr.disable()
 	s = StringIO.StringIO()
 	sortby = 'cumulative'
