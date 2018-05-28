@@ -3,9 +3,8 @@ from version2 import rectangle_mesh, torus_mesh, featherize, get_min_max, Neohoo
 
 def FiniteDifferencesARAP():
 	eps = 1e-4
-	iV, iT, iU = rectangle_mesh(2,2,.1)
+	iV, iT, iU = rectangle_mesh(1,1,angle = 0, step = .1)
 
-	# iV, iT, iU = torus_mesh(5,4,3,.1)
 	its = 100
 	to_fix = get_min_max(iV, a=1)
 	# print(to_fix)
@@ -17,9 +16,10 @@ def FiniteDifferencesARAP():
 	
 	arap = ARAP(mesh)	
 	mesh.getGlobalF()
-
+	# print(mesh.GF)
 	E0 = arap.energy(_g=mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 	print("Default Energy ", E0)
+
 	
 	def check_dEdg():
 		dEdg = []
@@ -35,8 +35,6 @@ def FiniteDifferencesARAP():
 
 	def check_dEds():
 		realdEdS, realdEds = arap.dEds()
-		print(realdEds)
-
 		dEds = []
 		for i in range(len(mesh.red_s)):
 			mesh.red_s[i] += eps
@@ -45,7 +43,8 @@ def FiniteDifferencesARAP():
 			dEds.append((Ei - E0)/eps)
 			mesh.red_s[i] -= eps
 
-		print(dEds)
+		print(realdEds)
+		print(np.array(dEds))
 		print("Es ", np.sum(np.array(dEds)-realdEds))
 
 	def check_dEdS():
@@ -71,7 +70,7 @@ def FiniteDifferencesARAP():
 			mesh.red_r[i] += 0.5*eps
 
 			dEdr.append((Eleft - Eright)/eps)
-		print(realdEdr)
+
 		print("Er ", np.sum(np.array(dEdr) - realdEdr))
 
 	def check_Hessian_dEdgdg():
@@ -157,7 +156,8 @@ def FiniteDifferencesARAP():
 				mesh.red_r[i] -= eps
 
 				Err[i].append((Eij - Ei - Ej + E0)/(eps*eps))
-		# print(real)
+		print(real)
+		print(np.array(Err))
 		print("Err ", np.sum(np.array(Err) - real))
 	
 	def check_Hessian_dEdrds():
@@ -319,11 +319,11 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgds()
 	# check_dgds_drds()
 
-FiniteDifferencesARAP()
+# FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-5
-	iV, iT, iU = rectangle_mesh(2,2,.1)
+	iV, iT, iU = rectangle_mesh(1,1,.1)
 	# iV, iT, iU = torus_mesh(5,4,3,.1)
 	its = 100
 	to_fix = get_min_max(iV, a=1)
@@ -384,7 +384,7 @@ def FiniteDifferencesElasticity():
 	def check_muscleForce():
 		e0 = ne.MuscleEnergy(_rs = mesh.red_s)
 		real = -ne.MuscleForce(_rs = mesh.red_s)
-		print("e0", e0)
+		# print("e0", e0)
 		dEds = []
 		for i in range(len(mesh.red_s)):
 			mesh.red_s[i] += 0.5*eps
@@ -397,13 +397,13 @@ def FiniteDifferencesElasticity():
 
 			dEds.append((left - right)/(eps))
 
-		print("real", real)
-		print("fake", dEds)
+		# print("real", real)
+		# print("fake", dEds)
 		print("Diff", np.sum(real - np.array(dEds)))
 
 	# check_PrinStretchForce()
 	# check_gravityForce()
-	check_muscleForce()
+	# check_muscleForce()
 	# test()
 
-# FiniteDifferencesElasticity()
+FiniteDifferencesElasticity()
