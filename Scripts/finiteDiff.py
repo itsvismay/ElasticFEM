@@ -1,37 +1,40 @@
 import numpy as np
-from version2 import rectangle_mesh, torus_mesh, featherize, get_min_max, NeohookeanElastic, ARAP, Mesh
+from version2 import rectangle_mesh, torus_mesh, featherize,get_min, get_max, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
 	eps = 1e-4
-	iV, iT, iU = rectangle_mesh(1,1,angle = 0, step = .1)
+	iV, iT, iU = rectangle_mesh(2,2,angle = 0, step = .1)
 
 	its = 100
-	to_fix = get_min_max(iV, a=1)
-	# print(to_fix)
+	to_fix = get_max(iV, a=1)
+	print(to_fix)
 	mesh = Mesh((iV,iT, iU), ito_fix=to_fix)
-	mesh.fixed = mesh.fixed_max_axis(1)
-	# print(mesh.fixed)
-	# print(mesh.V)
-	# exit()
 	
 	arap = ARAP(mesh)	
 	mesh.getGlobalF()
-	# print(mesh.GF)
-	E0 = arap.energy(_g=mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+	# print(mesh.G.dot(mesh.z))
+	# print(mesh.G.shape)
+	
+	E0 = arap.energy(_z=mesh.z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 	print("Default Energy ", E0)
 
 	
 	def check_dEdg():
-		dEdg = []
-		dg = np.zeros(len(mesh.g)) + mesh.g
-		for i in range(len(mesh.g)):
-			dg[i] += eps
-			mesh.getGlobalF()
-			Ei = arap.energy(_g=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
-			dEdg.append((Ei - E0)/eps)
-			dg[i] -= eps
+		real = arap.dEdg()
+		dEdz = []
+		z = np.zeros(len(mesh.z)) + mesh.z
+		for i in range(len(mesh.z)):
+			z[i] += 0.5*eps
+			Eleft = arap.energy(_z=z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+			z[i] -= 0.5*eps
+			z[i] -= 0.5*eps
+			Eright = arap.energy(_z=z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+			z[i] += 0.5*eps
+			dEdz.append((Eleft - Eright)/eps)
 
-		print("Eg ", np.linalg.norm(arap.dEdg() - np.array(dEdg)))
+		# print(np.array(dEdz))
+		# print(real)
+		print("Eg ", np.linalg.norm(real - np.array(dEdz)))
 
 	def check_dEds():
 		realdEdS, realdEds = arap.dEds()
@@ -308,7 +311,7 @@ def FiniteDifferencesARAP():
 		# print("grad",  np.linalg.norm(arap.dEdg()), np.linalg.norm(arap.dEdr()[1]))
 
 
-	# check_dEdg()
+	check_dEdg()
 	# check_dEds()
 	# check_dEdr()
 
@@ -319,7 +322,7 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgds()
 	# check_dgds_drds()
 
-# FiniteDifferencesARAP()
+FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-5
@@ -406,4 +409,4 @@ def FiniteDifferencesElasticity():
 	# check_muscleForce()
 	# test()
 
-FiniteDifferencesElasticity()
+# FiniteDifferencesElasticity()
