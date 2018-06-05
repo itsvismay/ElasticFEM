@@ -276,7 +276,7 @@ class Mesh:
 		t_set = Set([i for i in range(len(self.T))])
 
 		# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
-		self.s_handles_ind = [1,3]
+		self.s_handles_ind = [1]
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
 		centroids = self.getC().dot(self.getA().dot(self.x0))
@@ -1167,7 +1167,7 @@ class NeohookeanElastic:
 		Eg = 0
 		
 		Ax = self.mesh.getA().dot(self.mesh.x0)
-		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.g))
+		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.G.dot(self.mesh.z) + self.mesh.x0))
 
 		for t in range(len(self.mesh.T)):
 			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
@@ -1180,16 +1180,16 @@ class NeohookeanElastic:
 		gt = -rho*area*np.dot(grav, cadgds)
 		return gt
 
-	def GravityForce(self, dgds):
+	def GravityForce(self, dzds):
 		fg = np.zeros(len(self.mesh.red_s))		
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 				
-		CAdgds = self.mesh.getC().dot(self.mesh.getA().dot(dgds))
+		CAdzds = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.G.dot(dzds)))
 
 		for t in range(len(self.mesh.T)):
 			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
 			gv = self.mesh.getU(t).dot(self.grav)
-			fg += self.GravityElementForce(self.rho, area, gv, CAdgds[6*t:6*t+2, :], t)
+			fg += self.GravityElementForce(self.rho, area, gv, CAdzds[6*t:6*t+2, :], t)
 
 		return fg
 
@@ -1200,6 +1200,8 @@ class NeohookeanElastic:
 		t_0 = np.dot(wo, rs)
 		t_1 = np.dot(wx, rs)
 		t_2 = np.dot(wy, rs)
+
+		
 
 		if(t_1<=0 or t_2<=0 or t_1*t_2-t_0*t_0<=0):
 			return 1e40
@@ -1246,12 +1248,13 @@ class NeohookeanElastic:
 		sx = wx.dot(rs)
 		sy = wy.dot(rs)
 		so = wo.dot(rs)
+		# print(sx, sy, so)
 		if(sx<=0 or sy<=0 or sx*sy-so*so<=0):
 			return 1e40
-		term1 = m_C*(math.pow((sx*sy - so*so), -2.0/6)*(sx + sy) - 2)
+		term1 = m_C*(math.pow(math.sqrt(sx*sy - so*so), -2.0/3)*(sx + sy) - 2)
 		term2 = m_D*math.pow((math.pow(sx*sy -so*so, 1/2.0) - 1), 2)
 		v2 = area*(term1 + term2)
-
+		# print(math.pow(math.sqrt(sx*sy - so*so), -2.0/3), (sx + sy), v2)
 		return v2
 
 	def WikipediaEnergy(self,_rs):

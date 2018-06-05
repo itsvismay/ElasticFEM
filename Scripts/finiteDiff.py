@@ -323,23 +323,21 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgds()
 	check_dgds_drds()
 
-FiniteDifferencesARAP()
+# FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-5
-	iV, iT, iU = rectangle_mesh(1,1,.1)
-	# iV, iT, iU = torus_mesh(5,4,3,.1)
+	eps = 1e-4
+	iV, iT, iU = rectangle_mesh(2,2, angle=0, step=.1)
+
 	its = 100
-	to_fix = get_min_max(iV, a=1)
-	# print(to_fix)
-	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
-	mesh.fixed = mesh.fixed_max_axis(1)
+	to_fix = get_max(iV, a=1)
+	print(to_fix)
+	mesh = Mesh((iV,iT, iU), ito_fix=to_fix)
 	# print(mesh.fixed)
 	
 	arap = ARAP(mesh)	
 	mesh.getGlobalF()
 	ne = NeohookeanElastic(imesh = mesh)
-	
 
 	def check_PrinStretchForce():
 		e0 = ne.WikipediaEnergy(_rs = mesh.red_s)
@@ -366,7 +364,7 @@ def FiniteDifferencesElasticity():
 		print("E0", e0)
 		arap.iterate()
 		
-		real = -1*ne.GravityForce(dgds=arap.Jacobian()[1])
+		real = -1*ne.GravityForce(dzds=arap.Jacobian()[1])
 
 		dEgds = []
 		for i in range(len(mesh.red_s)):
@@ -401,13 +399,13 @@ def FiniteDifferencesElasticity():
 
 			dEds.append((left - right)/(eps))
 
-		# print("real", real)
-		# print("fake", dEds)
+		print("real", real)
+		print("fake", dEds)
 		print("Diff", np.sum(real - np.array(dEds)))
 
-	# check_PrinStretchForce()
+	check_PrinStretchForce()
 	# check_gravityForce()
 	# check_muscleForce()
 	# test()
 
-# FiniteDifferencesElasticity()
+FiniteDifferencesElasticity()
