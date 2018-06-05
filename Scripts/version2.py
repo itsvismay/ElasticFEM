@@ -14,7 +14,7 @@ import cProfile
 from scipy import sparse
 sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
-np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.8f}'.format(x)})
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.4f}'.format(x)})
 
 temp_png = os.path.join(os.getcwd(),"out.png")
 
@@ -275,8 +275,8 @@ class Mesh:
 
 		t_set = Set([i for i in range(len(self.T))])
 
-		self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
-		# self.s_handles_ind = [1,3]
+		# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
+		self.s_handles_ind = [1,3]
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
 		centroids = self.getC().dot(self.getA().dot(self.x0))
@@ -502,7 +502,7 @@ class Mesh:
 		
 	def getDiscontinuousVT(self):
 		C = self.getC()
-		CAg = C.dot(self.getA().dot(self.g))
+		CAg = C.dot(self.getA().dot(self.G.dot(self.z) + self.x0))
 		Ax = self.getA().dot(self.x0)
 		new = self.GF.dot(self.getP().dot(Ax)) + CAg
 
@@ -606,11 +606,11 @@ class ARAP:
 		self.sparseDSds()
 
 		#LU inverse
-		col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
-		col1 = sparse.vstack((self.AtPtPA, C))
-		KKT = sparse.hstack((col1, col2))
-
-		self.CholFac = scipy.sparse.linalg.splu(KKT.tocsc())
+		# col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
+		# col1 = sparse.vstack((self.AtPtPA, C))
+		# KKT = sparse.hstack((col1, col2))
+		KKT = self.mesh.G.T.dot(self.AtPtPA.dot(self.mesh.G))
+		self.CholFac = scipy.linalg.lu_factor(KKT)
 
 
 		r_size = len(self.mesh.red_r)
@@ -662,7 +662,11 @@ class ARAP:
 		d = datetime.datetime.now()
 		#NEW KKT SOLVE
 		if kkt:
-			C = self.ANTI_BLOCK.T
+			# print(self.ANTI_BLOCK.shape)
+			# print(self.mesh.G.shape)
+			# print(C)
+			# print(self.ANTI_BLOCK.T).toarray()
+			C = self.ANTI_BLOCK.T.dot(self.mesh.G)
 			g_size = C.shape[1]
 			gb_size = C.shape[0]
 			r_size = R.shape[1]
@@ -679,19 +683,20 @@ class ARAP:
 					col4 = sparse.vstack(( np.vstack((np.zeros((g_size, rb_size)), R.T)), np.vstack((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
 					jacKKT = sparse.hstack((col1, col2, col3, col4))
 				else:
-					col1 = sparse.vstack((lhs_left, C))
+					# col1 = sparse.vstack((lhs_left, C))
 					# print("col", col1.shape, col1.nnz)
-					col2 = sparse.vstack((lhs_right, sparse.csc_matrix((gb_size, r_size))))
+					# col2 = sparse.vstack((lhs_right, sparse.csc_matrix((gb_size, r_size))))
 					# print("col", col2.shape, col2.nnz)
-					col3 = sparse.vstack(( C.T, 
-						sparse.vstack((sparse.csc_matrix((r_size, gb_size)), 
-									sparse.csc_matrix((gb_size, gb_size))))))
+					# col3 = sparse.vstack(( C.T, 
+						# sparse.vstack((sparse.csc_matrix((r_size, gb_size)), 
+									# sparse.csc_matrix((gb_size, gb_size))))))
 					# print("col", col3.shape, col3.nnz)
-					jacKKT = sparse.hstack((col1, col2, col3))
+					jacKKT = sparse.hstack((lhs_left, lhs_right))
 
 				# print(jacKKT.toarray())
 				# print("\n\n")
-				KKT_constrains = np.vstack((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
+				# KKT_constrains = np.vstack((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
+				KKT_constrains = rhs
 				# print(KKT_constrains)
 				# exit()
 				# print(sparse.issparse(jacKKT), sparse.issparse(KKT_constrains), jacKKT.shape, jacKKT.nnz)
@@ -732,52 +737,55 @@ class ARAP:
 	def Hessians(self, useSparse=True):	
 		# print("			Hessians")
 		PA = self.mesh.getP().dot(self.mesh.getA())
-		PAg = PA.dot(self.mesh.g)
+		PAG = sparse.csc_matrix(PA.dot(self.mesh.G))
+		PAGz = PAG.dot(self.mesh.z)
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
 		USUtPAx = USUt.dot(self.PAx)
 		UtPAx = self.mesh.GU.T.dot(self.PAx)
 		r_size = len(self.mesh.red_r)
-		g_size = len(self.mesh.g)
+		g_size = len(self.mesh.z)
 		s_size = len(self.mesh.red_s)
 		DR = self.sparseDRdr()
 		DS = self.sparseDSds()
 		
+		Ezz = self.mesh.G.T.dot(self.AtPtPA.dot(self.mesh.G))
 
 		# a1 = datetime.datetime.now()
 		###############ERG
-		sample = self.sparseErg_first(-1*PA, USUtPAx)
+		sample = self.sparseErg_first(-1*PAG, USUtPAx)
 		for j in range(self.Erg.shape[1]):
 			for i in range(self.Erg.shape[0]):
 				self.Erg[i,j] = DR[j].multiply(sample[i]).sum()
 
 		# a2 = datetime.datetime.now()
 		###############ERR
-		negPAg_USUtPAx = np.multiply.outer( -1*PAg, USUtPAx)
+		PAGz_PAx = PAGz + self.PAx
+		negPAGz_USUtPAx = np.multiply.outer( -1*PAGz_PAx, USUtPAx)
 		DDR = self.sparseDDRdrdr_diag()
 		for i in range(self.Err.shape[0]):
 			spD = DDR[i]
 			if spD.nnz>0:
-				self.Err[i,i] = spD.multiply(negPAg_USUtPAx).sum()
+				self.Err[i,i] = spD.multiply(negPAGz_USUtPAx).sum()
 
 		# a3 = datetime.datetime.now()
 		###############EGS
-		PAtRU = PA.T.dot(self.mesh.GR.dot(self.mesh.GU))
+		PAGtRU = PAG.T.dot(self.mesh.GR.dot(self.mesh.GU))
 	
-		d_gEgdS = self.sparseEgs_first(-1*PAtRU, UtPAx)
+		d_gEgdS = self.sparseEgs_first(-1*PAGtRU, UtPAx)
 		for i in range(self.Egs.shape[0]):
 			for j in range(self.Egs.shape[1]):
 				self.Egs[i,j] = DS[j].multiply(d_gEgdS[i]).sum()
 			
 		# a4 = datetime.datetime.now()
 		###############ERS
-		odd, even = self.sparseErs_first(PAg)
+		odd, even = self.sparseErs_first(PAGz_PAx)
 		for i in range(self.Ers_mid.shape[1]):
 			spR = DR[i]
 			odd_spR = spR.multiply(odd).sum(axis = 0) #6T x 6T (each 2 cols get summed to Ers_mid i,j)
 			even_spR = spR.multiply(even).sum(axis = 0)#6T x 6T (each 2 cols get summed to Ers_mid i+1,j)
 			odd_i = odd_spR.reshape((odd_spR.shape[1]/2, 2)).sum(axis=1)
 			even_i = even_spR.reshape((even_spR.shape[1]/2, 2)).sum(axis=1)
-			col_i = np.zeros((len(PAg),1))
+			col_i = np.zeros((len(PAGz),1))
 			col_i[2*np.arange(self.Ers_mid.shape[0]/2)] = odd_i
 			col_i[2*np.arange(self.Ers_mid.shape[0]/2)+1] = even_i
 			self.Ers_mid[:, i]   = col_i[:,0]
@@ -791,22 +799,21 @@ class ARAP:
 		# a5 = datetime.datetime.now()
 		# print("TIME: ", (a2-a1).microseconds, (a3-a2).microseconds, (a4-a3).microseconds, (a5-a4).microseconds)
 		# print("			Hessians")
-		return self.AtPtPA, self.Erg, self.Err, self.Egs, self.Ers
+		return Ezz, self.Erg, self.Err, self.Egs, self.Ers
 
 	def sparseErg_first(self, nPAT, USUtPAx):
 		first = []
 		cdd = np.zeros(len(USUtPAx))
 		cdl = np.zeros(len(USUtPAx)-1)
 		cdu = np.zeros(len(USUtPAx)-1)
-		print(nPAT.shape[1])
 		for c in range(nPAT.shape[1]):
 			PATc = nPAT.getcol(c)
 			dd = PATc[:,0].T.multiply(USUtPAx)
 			du = PATc[:-1,0].T.multiply(USUtPAx[1:])
 			dl = PATc[1:,0].T.multiply(USUtPAx[:-1])
-			cdd[:] = dd
-			cdl[:] = dl 
-			cdu[:] = du
+			cdd[:] = dd.toarray()
+			cdl[:] = dl.toarray()
+			cdu[:] = du.toarray()
 			sp = sparse.diags([cdl, cdd, cdu],[-1,0,1]).tocsc()
 			first.append(sp)
 
@@ -822,9 +829,9 @@ class ARAP:
 			dd = matr.multiply(UtPAx)
 			du = matr[0,:-1].multiply(UtPAx[1:])
 			dl = matr[0,1:].multiply(UtPAx[:-1])
-			cdd[:] = dd
-			cdl[:] = dl 
-			cdu[:] = du
+			cdd[:] = dd.toarray()
+			cdl[:] = dl.toarray()
+			cdu[:] = du.toarray()
 			sp = sparse.diags([cdl, cdd, cdu],[-1,0,1])
 			first.append(sp)
 
@@ -860,29 +867,29 @@ class ARAP:
 
 	def Gradients(self):
 		PA = self.mesh.getP().dot(self.mesh.getA())
-		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
+		PAGz = PA.dot(self.mesh.G.dot(self.mesh.z))
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
 		# _dRdr = self.dRdr()
 		# _dSds = self.dSds()#rank 3 tensor
 		DR = self.sparseDRdr()
 		DS = self.sparseDSds()
 
-		dEdR = -1*np.multiply.outer(PAg, USUt.dot(self.PAx))
+		dEdR = -1*np.multiply.outer((PAGz + self.PAx), USUt.dot(self.PAx))
 		# dEdr = np.tensordot(dEdR, _dRdr, axes = ([0,1],[0,1]))
 		dEdr = np.zeros(len(self.mesh.red_r))
 		for i in range(len(dEdr)):
 			dEdr[i] = DR[i].multiply(dEdR).sum()
 	
 
-
+		PAG = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G))
 		FPAx = self.mesh.GF.dot(self.PAx)
-		AtPtPAg = self.AtPtPA.dot(self.mesh.g)
-		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
-		dEdg = AtPtPAg - AtPtFPAx
+		t1 = PAG.T.dot(PAG.dot(self.mesh.z))
+		t2 = PAG.T.dot(self.PAx) - PAG.T.dot(FPAx)
+		dEdg = t1 - t2
 
 		UtPAx = self.mesh.GU.T.dot(self.PAx)
 		RU = self.mesh.GR.dot(self.mesh.GU)
-		dEdS =  np.multiply.outer(self.mesh.GS.dot(UtPAx), UtPAx) - np.multiply.outer(RU.T.dot(PAg), UtPAx)
+		dEdS =  np.multiply.outer(self.mesh.GS.dot(UtPAx), UtPAx) - np.multiply.outer(RU.T.dot(PA.dot(self.mesh.G.dot(self.mesh.z)) + self.PAx), UtPAx)
 		# dEds = np.tensordot(dEdS, _dSds, axes = ([0,1], [0,1]))
 		dEds = np.zeros(len(self.mesh.red_s))
 		for i in range(len(dEds)):
@@ -1047,12 +1054,12 @@ class ARAP:
 		return self.Hessians()[4]
 
 	def itR(self):
-		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g))
-		Ax = self.mesh.getA().dot(self.mesh.x0)
+		PA_Gzx = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G.dot(self.mesh.z) + self.mesh.x0))
 
 		for i in range(len(self.mesh.red_r)):
 			# a1 = datetime.datetime.now()
-			one = self.mesh.RotationBLOCK[i].T.dot(PAg)
+
+			one = self.mesh.RotationBLOCK[i].T.dot(PA_Gzx)
 			two = self.USUtPAx_E[i]
 
 			m_PAg = np.reshape(one, (len(one)/2,2))
@@ -1086,14 +1093,18 @@ class ARAP:
 		return 1
 	
 	def itT(self):
-		Abtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
+		# Abtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
 		
 		FPAx = self.mesh.GF.dot(self.PAx)
-		AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
-		
-		gd = np.concatenate((AtPtFPAx, Abtg))
-		gu = self.CholFac.solve(gd)
-		self.mesh.g = gu[0:AtPtFPAx.size]
+		PAG = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G))
+
+		GtAtPtFPAx = PAG.T.dot(FPAx)
+		GtAtPtPAx = PAG.T.dot(self.PAx)
+		# gd = np.concatenate((AtPtFPAx, Abtg))
+		gb = GtAtPtFPAx - GtAtPtPAx
+		gu = scipy.linalg.lu_solve(self.CholFac, gb)
+
+		self.mesh.z = gu
 
 		return 1
 
@@ -1412,7 +1423,7 @@ class TimeIntegrator:
 		
 def display():
 	# VTU, to_fix = feather_muscle2_test_setup(p1 = 100, p2 = 50)
-	VTU = rectangle_mesh(1,1,.1)
+	VTU = rectangle_mesh(2,2,angle=0, step=.1)
 	# # VTU = torus_mesh(5, 4, 3, .1)
 	to_fix = get_min(VTU[0],1)
 
@@ -1473,9 +1484,11 @@ def display():
 			# J_elastic = neoh.Forces(irs = mesh.red_s, idgds=dgds)
 			# print("Grad n ", J_elastic)
 		if(viewer.core.is_animating):
-			time_integrator.static_solve()
+			# time_integrator.static_solve()
 			# time_integrator.move_g()
-			# arap.iterate()
+			print(time_integrator.time)
+			arap.iterate()
+			time_integrator.time +=1
 			# arap.Hessians()
 			# print("TETS: ", len(mesh.T))
 			# print(neoh.WikipediaForce(_rs=mesh.red_s))
@@ -1501,13 +1514,14 @@ def display():
 
 
 		FIXED = []
+		disp_g = mesh.G.dot(mesh.z) + mesh.x0
 		for i in range(len(mesh.fixed)):
-			FIXED.append(mesh.g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
+			FIXED.append(disp_g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
 
 		viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
 
 			
-		CAg = mesh.getC().dot(mesh.getA().dot(mesh.g))
+		CAg = mesh.getC().dot(mesh.getA().dot(mesh.G.dot(mesh.z) + mesh.x0))
 		#Skinning handles
 		# for i in range(len(mesh.s_handles_ind)):
 		# 	C = np.matrix([CAg[6*mesh.s_handles_ind[i]:6*mesh.s_handles_ind[i]+2],CAg[6*mesh.s_handles_ind[i]:6*mesh.s_handles_ind[i]+2]])
@@ -1671,6 +1685,5 @@ def headless():
 	ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
 	ps.print_stats()
 	print(s.getvalue())
-
 # headless()
 
