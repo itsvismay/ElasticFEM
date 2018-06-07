@@ -218,8 +218,9 @@ def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 10, p2 = 5):
 
 class Mesh:
 
-	def __init__(self, iVTU, ito_fix=[], ito_mov=[]):
+	def __init__(self, iVTU, ito_fix=[], ito_mov=[], red_g= True):
 		#object vars
+		self.reduced_g = red_g
 		self.youngs = 60000
 		self.poissons = 0.49
 		self.fixed = ito_fix
@@ -239,15 +240,18 @@ class Mesh:
 		self.BLOCK = None
 		self.ANTI_BLOCK = None
 		self.Mass = None
-		self.G = None
-		self.Eigvals = None
 		# self.Stiffness = self.getStiffnessMatrix()
 		# print(len(self.g))
 		# exit()
-		self.z = np.zeros((len(self.g)-2*len(self.fixed)-1)/2)
-
-		self.setupModalAnalysis(modes=len(self.z))
-
+		self.G = None
+		self.Eigvals = None
+		if self.reduced_g:
+			self.z = np.zeros((len(self.g)-2*len(self.fixed)-1)/2)
+			print("MODES: ", len(self.z), len(self.V))
+			self.setupModalAnalysis(modes=len(self.z))
+		else:
+			self.G = sparse.eye(2*len(self.V))
+			self.z = np.zeros(len(self.g))
 
 		#Rotation clusterings
 		self.red_r = None
@@ -529,7 +533,7 @@ class Mesh:
 		C = self.getC()
 		# print(self.z)
 		# print(self.G.dot(self.z))
-		CAg = C.dot(self.getA().dot(self.G.dot(self.z) + self.g))
+		CAg = C.dot(self.getA().dot(self.getg()))
 		Ax = self.getA().dot(self.x0)
 		new = self.GF.dot(self.getP().dot(Ax)) + CAg
 
@@ -547,7 +551,7 @@ class Mesh:
 		return RecV, RecT
 
 	def getContinuousVT(self):
-		x = self.G.dot(self.z) + self.g
+		x = self.getg()
 		RecV = np.zeros((len(self.V), 2))
 		for i in range(len(x)/2):
 			RecV[i, 0] = x[2*i]
@@ -617,7 +621,10 @@ class Mesh:
 		return Be
 
 	def getg(self, reduced = True):
-		return self.G.dot(self.z) + self.g
+		if self.reduced_g:
+			return self.G.dot(self.z) + self.g
+		else:
+			return self.g
 
 class ARAP:
 	#class vars
@@ -630,33 +637,35 @@ class ARAP:
 		A = self.mesh.getA()
 		P = self.mesh.getP()
 		B = self.BLOCK
-		# C = self.ANTI_BLOCK.T.dot(self.mesh.G)
+		C = self.ANTI_BLOCK.T
 		self.PAx = P.dot(A.dot(self.mesh.x0))
-		self.GtAtPtPAG = self.mesh.G.T.dot(A.T.dot(P.T.dot(P.dot(A.dot(self.mesh.G)))))
+		self.Egg = None
 
 		self.DSDs = None
 		self.sparseDSds()
 
 		#LU inverse
-		# print(C)
-		# print(self.ANTI_BLOCK.T.dot(self.mesh.x0))
-		# col1 = sparse.vstack((self.GtAtPtPAG, C))
-		# col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
-		# KKT = sparse.hstack((col1, col2))
-		KKT = self.GtAtPtPAG.toarray()
-		self.CholFac = scipy.linalg.lu_factor(KKT)
-		# exit()
+		if self.mesh.reduced_g:
+			self.Egg = self.mesh.G.T.dot(A.T.dot(P.T.dot(P.dot(A.dot(self.mesh.G)))))
+			KKT = self.Egg.toarray()
+			self.CholFac = scipy.linalg.lu_factor(KKT)
+		else:
+			self.Egg = A.T.dot(P.T.dot(P.dot(A)))
+			col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
+			col1 = sparse.vstack((self.Egg, C))
+			KKT = sparse.hstack((col1, col2))
 
+			self.CholFac = scipy.sparse.linalg.splu(KKT.tocsc())
 
 		r_size = len(self.mesh.red_r)
-		g_size = len(self.mesh.Eigvals)
+		z_size = len(self.mesh.z)
 		s_size = len(self.mesh.red_s)
 		t_size = len(self.mesh.T)
 
 
-		self.Erg = np.zeros((g_size, r_size))
+		self.Erg = np.zeros((r_size, z_size))
 		self.Err = np.zeros((r_size, r_size))
-		self.Egs = np.zeros((g_size, s_size))
+		self.Egs = np.zeros((z_size, s_size))
 		self.Ers = np.zeros((r_size, s_size))
 		self.Ers_mid = np.zeros(( 6*len(self.mesh.T), r_size ))
 		self.Ers_first_odd = sparse.diags([np.ones(6*t_size-1), np.ones(6*t_size), np.ones(6*t_size-1)],[-1,0,1]).tocsc()
@@ -702,20 +711,20 @@ class ARAP:
 			# print(C)
 			# print(self.ANTI_BLOCK.T).toarray()
 			C = self.ANTI_BLOCK.T.dot(self.mesh.G)
-			g_size = C.shape[1]
+			r_size = C.shape[1]
 			gb_size = C.shape[0]
 			r_size = R.shape[1]
 			rb_size = R.shape[0]
 
 			if useSparse:
 				if rb_size>0:
-					col1 = sparse.vstack((lhs_left, np.vstack((C.toarray(), np.zeros((rb_size, g_size))))))
+					col1 = sparse.vstack((lhs_left, np.vstack((C.toarray(), np.zeros((rb_size, r_size))))))
 					# print("col", col1.shape, col1.nnz)
 					col2 = sparse.vstack((lhs_right, np.vstack((np.zeros((gb_size, r_size)), R))))
 					# print("col", col2.shape, col2.nnz)
 					col3 = sparse.vstack(( C.T, sparse.vstack((sparse.csc_matrix((r_size, gb_size)), np.vstack((np.zeros((gb_size, gb_size)), np.zeros((rb_size, gb_size))))))) )
 					# print("col", col3.shape, col3.nnz)
-					col4 = sparse.vstack(( np.vstack((np.zeros((g_size, rb_size)), R.T)), np.vstack((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
+					col4 = sparse.vstack(( np.vstack((np.zeros((r_size, rb_size)), R.T)), np.vstack((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
 					jacKKT = sparse.hstack((col1, col2, col3, col4))
 				else:
 					# col1 = sparse.vstack((lhs_left, C))
@@ -739,13 +748,13 @@ class ARAP:
 				Jac_s = jacChol.solve(KKT_constrains)
 
 			else:
-				col1 = np.concatenate((lhs_left.toarray(), np.concatenate((C.toarray(), np.zeros((rb_size, g_size))))))
+				col1 = np.concatenate((lhs_left.toarray(), np.concatenate((C.toarray(), np.zeros((rb_size, r_size))))))
 				# print("col", col1.shape)
 				col2 = np.concatenate((lhs_right, np.concatenate((np.zeros((gb_size, r_size)), R))))
 				# print("col", col2.shape)
 				col3 = np.concatenate((C.T.toarray(), np.concatenate((np.zeros((r_size, gb_size)), np.concatenate((np.zeros((gb_size, gb_size)), np.zeros((rb_size, gb_size))))))) )
 				# print("col", col3.shape)
-				col4 = np.concatenate(( np.concatenate((np.zeros((g_size, rb_size)), R.T)),
+				col4 = np.concatenate(( np.concatenate((np.zeros((r_size, rb_size)), R.T)),
 					np.concatenate((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
 				# print("col", col4.shape)
 				jacKKT = np.hstack((col1, col2, col3, col4))
@@ -778,12 +787,12 @@ class ARAP:
 		USUtPAx = USUt.dot(self.PAx)
 		UtPAx = self.mesh.GU.T.dot(self.PAx)
 		r_size = len(self.mesh.red_r)
-		g_size = len(self.mesh.z)
+		z_size = len(self.mesh.z)
 		s_size = len(self.mesh.red_s)
 		DR = self.sparseDRdr()
 		DS = self.sparseDSds()
 
-		Ezz = self.GtAtPtPAG
+		Ezz = self.Egg
 
 		# a1 = datetime.datetime.now()
 		###############ERG
@@ -902,7 +911,6 @@ class ARAP:
 
 	def Gradients(self):
 		PA = self.mesh.getP().dot(self.mesh.getA())
-		PAGz = PA.dot(self.mesh.G.dot(self.mesh.z))
 		PAg0 = PA.dot(self.mesh.g)
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
 		# _dRdr = self.dRdr()
@@ -910,22 +918,21 @@ class ARAP:
 		DR = self.sparseDRdr()
 		DS = self.sparseDSds()
 
-		dEdR = -1*np.multiply.outer((PAGz + PAg0), USUt.dot(self.PAx))
+		dEdR = -1*np.multiply.outer((PA.dot(self.mesh.getg())), USUt.dot(self.PAx))
 		# dEdr = np.tensordot(dEdR, _dRdr, axes = ([0,1],[0,1]))
 		dEdr = np.zeros(len(self.mesh.red_r))
 		for i in range(len(dEdr)):
 			dEdr[i] = DR[i].multiply(dEdR).sum()
 
 
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.getg()))
 		PAG = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G))
 		FPAx = self.mesh.GF.dot(self.PAx)
-		t1 = PAG.T.dot(PAG.dot(self.mesh.z))
-		t2 = PAG.T.dot(self.PAx) - PAG.T.dot(FPAx)
-		dEdg = t1 - t2
+		dEdg = PAG.T.dot(PAg - FPAx)
 
 		UtPAx = self.mesh.GU.T.dot(self.PAx)
 		RU = self.mesh.GR.dot(self.mesh.GU)
-		dEdS =  np.multiply.outer(self.mesh.GS.dot(UtPAx), UtPAx) - np.multiply.outer(RU.T.dot(PA.dot(self.mesh.G.dot(self.mesh.z)) + self.PAx), UtPAx)
+		dEdS =  np.multiply.outer(self.mesh.GS.dot(UtPAx), UtPAx) - np.multiply.outer(RU.T.dot(PA.dot(self.mesh.getg())), UtPAx)
 		# dEds = np.tensordot(dEdS, _dSds, axes = ([0,1], [0,1]))
 		dEds = np.zeros(len(self.mesh.red_s))
 		for i in range(len(dEds)):
@@ -1063,12 +1070,10 @@ class ARAP:
 		return None, r
 
 	def dEdg(self):
+		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.getg()))
 		PAG = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G))
 		FPAx = self.mesh.GF.dot(self.PAx)
-		t1 = PAG.T.dot(PAG.dot(self.mesh.z))
-		t2 = PAG.T.dot(self.PAx) - PAG.T.dot(FPAx)
-		dEdg = t1 - t2
-		return dEdg
+		return PAG.T.dot(PAg - FPAx)
 
 	def dEds(self):
 		g, r, s = self.Gradients()
@@ -1090,7 +1095,7 @@ class ARAP:
 		return self.Hessians()[4]
 
 	def itR(self):
-		PA_Gzx = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G.dot(self.mesh.z) + self.mesh.g))
+		PA_Gzx = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.getg()))
 
 		for i in range(len(self.mesh.red_r)):
 			# a1 = datetime.datetime.now()
@@ -1129,19 +1134,27 @@ class ARAP:
 		return 1
 
 	def itT(self):
-		# Abtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
 
-		FPAx = self.mesh.GF.dot(self.PAx)
-		PAG = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G))
+		if self.mesh.reduced_g:
+			FPAx = self.mesh.GF.dot(self.PAx)
+			PAG = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G))
 
-		GtAtPtFPAx = PAG.T.dot(FPAx)
-		GtAtPtPAx = PAG.T.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g)))
-		gb = GtAtPtFPAx - GtAtPtPAx
+			GtAtPtFPAx = PAG.T.dot(FPAx)
+			GtAtPtPAx = PAG.T.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.g)))
+			gb = GtAtPtFPAx - GtAtPtPAx
 
-		# gd = np.concatenate((gb, np.zeros(len(self.mesh.fixed))))
-		# gu = self.CholFac.solve(gd)
-		gu = scipy.linalg.lu_solve(self.CholFac, gb)
-		self.mesh.z = gu
+			# gd = np.concatenate((gb, np.zeros(len(self.mesh.fixed))))
+			# gu = self.CholFac.solve(gd)
+			gu = scipy.linalg.lu_solve(self.CholFac, gb)
+			self.mesh.z = gu
+		else:
+			Abtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
+			FPAx = self.mesh.GF.dot(self.PAx)
+			AtPtFPAx = self.mesh.getA().T.dot(self.mesh.getP().T.dot(FPAx))
+			
+			gd = np.concatenate((AtPtFPAx, Abtg))
+			gu = self.CholFac.solve(gd)
+			self.mesh.g = gu[0:AtPtFPAx.size]
 
 		return 1
 
@@ -1406,7 +1419,7 @@ class TimeIntegrator:
 			self.adder *= -1
 
 		for i in range(len(self.mov)):
-			self.mesh.g[2*self.mov[i] +1] += self.adder
+			self.mesh.g[2*self.mov[i] +1] -= self.adder
 
 
 	def solve(self):
@@ -1446,8 +1459,6 @@ class TimeIntegrator:
 			J_arap, dgds, drds = self.arap.Jacobian()
 
 			J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
-
-
 			return  alpha2*J_elastic + alpha1*J_arap
 
 
@@ -1465,11 +1476,11 @@ class TimeIntegrator:
 
 def display():
 	# VTU, to_fix = feather_muscle2_test_setup(p1 = 100, p2 = 50)
-	VTU = rectangle_mesh(30,30,angle=0, step=.1)
+	VTU = rectangle_mesh(40,40,angle=0, step=.1)
 	# # VTU = torus_mesh(5, 4, 3, .1)
 	to_fix = get_min_max(VTU[0],a=1)
 	to_mov = get_min(VTU[0], a=1)
-	mesh = Mesh(VTU,ito_fix=to_fix, ito_mov=to_mov)
+	mesh = Mesh(VTU,ito_fix=to_fix, ito_mov=to_mov, red_g = False)
 
 	neoh =NeohookeanElastic(imesh=mesh )
 	arap = ARAP(imesh=mesh)
@@ -1556,21 +1567,14 @@ def display():
 
 
 		FIXED = []
-		disp_g = mesh.G.dot(mesh.z) + mesh.g
+		disp_g = mesh.getg()
 		for i in range(len(mesh.fixed)):
 			FIXED.append(disp_g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
 
 		viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
 
 
-		CAg = mesh.getC().dot(mesh.getA().dot(mesh.G.dot(mesh.z) + mesh.g))
-		#Skinning handles
-		# for i in range(len(mesh.s_handles_ind)):
-		# 	C = np.matrix([CAg[6*mesh.s_handles_ind[i]:6*mesh.s_handles_ind[i]+2],CAg[6*mesh.s_handles_ind[i]:6*mesh.s_handles_ind[i]+2]])
-		# 	U = 0.02*mesh.getU(i).transpose()+C
-		# 	viewer.data.add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
-			# viewer.data.add_points(igl.eigen.MatrixXd(np.array([CAg[6*mesh.s_handles_ind[i]:6*mesh.s_handles_ind[i]+2]])), black)
-
+		CAg = mesh.getC().dot(mesh.getA().dot(mesh.getg()))
 		#centroids and rotation clusters
 		for i in range(len(mesh.T)):
 			S = mesh.getS(i)
@@ -1583,27 +1587,13 @@ def display():
 				viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 				viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), red)
 			viewer.data().add_points(igl.eigen.MatrixXd(np.array([CAg[6*i:6*i+2]])), igl.eigen.MatrixXd([[0,.2*mesh.r_element_cluster_map[i],1-0.2*mesh.r_element_cluster_map[i]]]))
-			# print(np.array([CAg[6*i:6*i+2]]))
-		# print(np.array(cag))
-		# print(igl.eigen.MatrixXd(np.array(cag)))
 
 		#Write image
 		if(viewer.core.is_animating):
 			viewer.core.draw_buffer(viewer.data(), False, tempR, tempG, tempB, tempA)
 			igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
 
-		# pass
 
-
-		# Clustered Rotations
-		# colors  = []
-		# e_ind = 0
-		# tot_e = len(mesh.T)
-		# for e in mesh.r_element_cluster_map:
-		# 	colors.append([1, 1, mesh.r_element_cluster_map[e_ind]])
-		# 	e_ind += 1
-		# Colors = igl.eigen.MatrixXd(colors)
-		# viewer.data.set_colors(Colors);
 
 		return True
 
