@@ -2,15 +2,15 @@ import numpy as np
 from version2 import rectangle_mesh, torus_mesh, featherize,get_min, get_max, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
-	eps = 1e-5
-	iV, iT, iU = rectangle_mesh(2,2,angle = 0, step = .1)
+	eps = 1e-6
+	iV, iT, iU = rectangle_mesh(3,3,angle = 0, step = .1)
 
 	its = 100
 	to_fix = get_min_max(iV, a=1)
 	to_mov = get_min(iV, a =1)
 	print(to_fix)
 	print(to_mov)
-	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov)
+	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=False)
 	
 	arap = ARAP(mesh)	
 	mesh.getGlobalF()
@@ -266,18 +266,24 @@ def FiniteDifferencesARAP():
 
 		dgds = []
 		drds = []
+
 		z0 = np.zeros(len(mesh.z)) + mesh.z
+		g0 = np.zeros(len(mesh.g)) + mesh.g
 		r0 = np.array(mesh.red_r) 
 		q0 = np.zeros(len(mesh.q)) + mesh.q
 		for i in range(len(mesh.red_s)):
 			mesh.z = np.zeros(len(mesh.z)) + z0
+			mesh.g = np.zeros(len(mesh.g)) + g0
 
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
 
 			arap.iterate()
 			drds_left = np.array(mesh.red_r)
-			dgds_left =mesh.z + np.zeros(len(mesh.z))
+			if(mesh.reduced_g):
+				dgds_left =mesh.z + np.zeros(len(mesh.z))
+			else:
+				dgds_left =mesh.g + np.zeros(len(mesh.g))
 
 			mesh.red_s[i] -= 0.5*eps
 			mesh.getGlobalF()
@@ -287,7 +293,11 @@ def FiniteDifferencesARAP():
 			mesh.getGlobalF()
 			arap.iterate()
 			drds_right = np.array(mesh.red_r)
-			dgds_right =mesh.z + np.zeros(len(mesh.z))
+			if(mesh.reduced_g):
+				dgds_right =mesh.z + np.zeros(len(mesh.z))
+			else:
+				dgds_right =mesh.g + np.zeros(len(mesh.g))
+
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
 			arap.iterate()
@@ -321,15 +331,15 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
-	# check_Hessian_dEdrds()
 	# check_Hessian_dEdgds()
+	# check_Hessian_dEdrds()
 	check_dgds_drds()
 
 FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-4
-	iV, iT, iU = rectangle_mesh(2,2, angle=0, step=.1)
+	iV, iT, iU = rectangle_mesh(3,3, angle=0, step=.1)
 
 	its = 100
 	to_fix = get_max(iV, a=1)
