@@ -335,16 +335,18 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrds()
 	check_dgds_drds()
 
-FiniteDifferencesARAP()
+# FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-4
-	iV, iT, iU = rectangle_mesh(3,3, angle=0, step=.1)
+	eps = 1e-6
+	iV, iT, iU = rectangle_mesh(3,3,angle = 0, step = .1)
 
 	its = 100
-	to_fix = get_max(iV, a=1)
+	to_fix = get_min_max(iV, a=1)
+	to_mov = get_min(iV, a =1)
 	print(to_fix)
-	mesh = Mesh((iV,iT, iU), ito_fix=to_fix)
+	print(to_mov)
+	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=False)
 	# print(mesh.fixed)
 	
 	arap = ARAP(mesh)	

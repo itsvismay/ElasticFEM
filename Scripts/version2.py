@@ -136,7 +136,6 @@ def featherize(x, y, step=1):
 	return V, T, u
 
 def get_min_max(iV,a, eps=1e-1):
-	eps = eps
 	mov = []
 	miny = np.amin(iV, axis=0)[a]
 	maxy = np.amax(iV, axis=0)[a]
@@ -149,8 +148,7 @@ def get_min_max(iV,a, eps=1e-1):
 
 	return mov
 
-def get_min(iV, a):
-	eps = 1e-1
+def get_min(iV, a, eps=1e-1):
 	mov = []
 	miny = np.amin(iV, axis=0)[a]
 	for i in range(len(iV)):
@@ -159,8 +157,7 @@ def get_min(iV, a):
 
 	return mov
 
-def get_max(iV, a):
-	eps = 1e-1
+def get_max(iV, a, eps=1e-1):
 	mov = []
 	maxy = np.amax(iV, axis=0)[a]
 	for i in range(len(iV)):
@@ -1256,7 +1253,7 @@ class NeohookeanElastic:
 		self.rho = 10
 
 		self.muscle_fiber_mag_target = 1000
-		self.muscle_fibre_mag = 0
+		self.muscle_fibre_mag = 100
 
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)
@@ -1418,14 +1415,14 @@ class NeohookeanElastic:
 		e2 = self.WikipediaEnergy(_rs=irs)
 		e1 = -1*self.GravityEnergy()
 		e3 = self.MuscleEnergy(_rs=irs)
+		print("e3 ", e1, e2, e3)
 		return e1 + e2 + e3
 
 	def Forces(self, irs, idgds):
 		f2 = self.WikipediaForce(_rs=irs)
-		f1 =  self.GravityForce(idgds)
-		if idgds is None:
-			return f2 + f3
+		f1 =  -1*self.GravityForce(idgds)
 		f3 = self.MuscleForce(_rs=irs)
+		print("f3 ", f3)
 		return f1 + f2 + f3
 
 class TimeIntegrator:
@@ -1478,7 +1475,7 @@ class TimeIntegrator:
 		print("Static Solve")
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 
-		alpha1 =1e8
+		alpha1 =1
 		alpha2 =1
 
 		def energy(s):
@@ -1524,11 +1521,11 @@ class TimeIntegrator:
 		print("static solve")
 
 def display():
-	VTU, to_fix = feather_muscle2_test_setup(p1 = 50, p2 = 25)
-	# VTU = rectangle_mesh(3, 3,angle=0, step=.1)
+	# VTU, to_fix = feather_muscle2_test_setup(p1 = 50, p2 = 25)
+	VTU = rectangle_mesh(3, 8,angle=np.pi/2, step=.1)
 	# # VTU = torus_mesh(5, 4, 3, .1)
-	to_fix = get_min_max(VTU[0],a=0)
-	to_mov = get_min(VTU[0], a=0)
+	to_fix = get_max(VTU[0],a=1, eps=1e-2)
+	to_mov = []# get_min(VTU[0], a=1)
 	mesh = Mesh(VTU,ito_fix=to_fix, ito_mov=to_mov, red_g = False)
 
 	neoh =NeohookeanElastic(imesh=mesh )
@@ -1561,9 +1558,9 @@ def display():
 		viewer.data().clear()
 	
 		if(viewer.core.is_animating or aaa==65):
-			time_integrator.move_g()
+			# time_integrator.move_g()
 			# arap.iterate()
-			# time_integrator.iterate()
+			time_integrator.iterate()
 			time_integrator.static_solve()
 			time_integrator.time +=1
 
