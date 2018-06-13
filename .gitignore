@@ -1,5 +1,6 @@
 /build/*
 /Scripts/frames/*
+/Scripts/snapshots/*
 # Prerequisites
 *.d
 
