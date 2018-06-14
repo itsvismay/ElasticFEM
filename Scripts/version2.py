@@ -27,24 +27,11 @@ def general_eig_solve(A, B=None, modes=5):
 	if(A.shape[0]<= modes):
 		print("Too many modes")
 		exit()
-	# eigvals, eigvecs = scipy.sparse.linalg.eigsh(A,k = modes, M = B, which="SM")
-	# eigvals, eigvecs = scipy.sparse.linalg.eigsh(A, k = modes, M = B, which="SM")
-	# ev = igl.eigen.MatrixXd()
-	# igl.readDMAT("matlabmodes.dmat", ev)
-	# eigvecs = e2p(ev)
 	A1 = A.toarray()
 	B1 = B.toarray()
-	eigvals, eigvecs = scipy.linalg.eigh(A1, b=B1)
-	# print(eigvals)
-	# exit()
-	# print(ev[0:10, 0:10])
-	# exit()
-	igl.writeDMAT("A.dmat", igl.eigen.MatrixXd(A1), True)
-	igl.writeDMAT("B.dmat", igl.eigen.MatrixXd(B1), True)
-	igl.writeDMAT("vecs.dmat", igl.eigen.MatrixXd(eigvecs), True)
-	eigvals = eigvals[0:modes]
-	eigvecs = eigvecs[:, 0:modes]
-	# print(np.sum(A.dot(eigvecs) - B.dot(eigvecs.dot(np.diag(eigvals)))))
+	e, ev = scipy.linalg.eigh(A1, b=B1)
+	eigvals = e[0:modes]
+	eigvecs = ev[:, 0:modes]
 	print("-Done with Eig Solve")
 	return eigvals, eigvecs
 
@@ -114,7 +101,6 @@ def rectangle_mesh(x, y, angle=0, step=1):
 	# for i in range(100):
 	# 	V.append([random.uniform(0,step*x), random.uniform(0, step*y)])
 	T = Delaunay(V).simplices
-
 	return V, T, np.array([angle for i in range(len(T))])
 
 def torus_mesh(r1, r2, r3, step):
@@ -507,21 +493,9 @@ class Mesh:
 			col1[2*not_moving+1, 1] = 1
 			col2[2*mov, 0] = 1
 			col2[2*mov+1, 1] = 1
-			self.N = sparse.hstack((B,col1, col2))
+			self.N = (sparse.hstack((B,col1, col2)), sparse.hstack((B, 0.25*col1, 0.25*col2)))
 
 		return self.N
-	def getsmalln(self):
-
-		b = np.delete(np.eye(len(self.V)), self.fixed, axis =1)
-
-		not_moving = np.array(list(set(self.fixed) - set(self.mov)))
-		mov = np.array(self.mov)
-		col1 = np.zeros((b.shape[0],2))
-		col1[not_moving, 0] = 1
-		col1[mov, 1] = 1
-		print(b.shape, col1.shape)
-		n = np.hstack((b, col1))
-		return sparse.csc_matrix(n)
 
 	def getU(self, ind):
 		alpha = self.u[ind]
@@ -622,6 +596,8 @@ class Mesh:
 			density = 1.0
 			for i in range(len(self.T)):
 				e = self.T[i]
+				print(e.dtype)
+				print(self.V[e[0]])
 				undef_area = density*get_area(self.V[e[0]], self.V[e[1]], self.V[e[2]])
 				mass_diag[2*e[0]+0] += undef_area/3.0
 				mass_diag[2*e[0]+1] += undef_area/3.0
@@ -678,9 +654,10 @@ class Mesh:
 
 	def getg(self, reduced = True):
 		if self.reduced_g:
-			# print(self.BLOCK.T.shape, self.G.shape, self.z.shape, self.g.shape)
-			# exit()
-			return self.BLOCK.dot(self.BLOCK.T.dot(self.G.dot(self.z))) + self.g
+			# print(self.g)
+			gn = self.BLOCK.dot(self.BLOCK.T.dot(self.G.dot(self.z)))
+			# print(gn)
+			return gn + self.g
 		else:
 			return self.g
 
@@ -691,7 +668,7 @@ class ARAP:
 		print("Init ARAP")
 		self.mesh = imesh
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix()
-		self.CotE, self.CotEv= None, None
+
 		#these are the fixed vertices which stay constant
 		A = self.mesh.getA()
 		P = self.mesh.getP()
@@ -706,42 +683,32 @@ class ARAP:
 
 		#Modal Analysis
 		if self.mesh.reduced_g:
-			# ev = snapshot_basis(filen)
-			# self.mesh.G = sparse.csc_matrix(self.BLOCK.dot(self.BLOCK.T.dot(ev)))
-			# self.mesh.Eigvals = np.zeros(ev.shape[1])
-			# self.mesh.z = np.zeros(ev.shape[1])
-
-			N = self.mesh.getN()
-			num_modes = 20 #if AtPtPA.shape[0]/10< 70
+			N,n = self.mesh.getN()
+			num_modes = 3 #if AtPtPA.shape[0]/10< 70
 			self.mesh.z = np.zeros(num_modes)
 			print("MODES: ", len(self.mesh.z), len(self.mesh.V))
-			# self.mesh.setupModalAnalysis(modes=len(self.mesh.z))
+			# print(AtPtPA[0:20,0:10].toarray())
+			# L = igl.eigen.SparseMatrixd()
+			# igl.cotmatrix(igl.eigen.MatrixXd(self.mesh.V), igl.eigen.MatrixXi(self.mesh.T), L)
+			# l = e2p(L).tocsc()
+			# print(l[0:20,0:10].toarray())
+			# exit()
 			M = self.mesh.getMassMatrix()
-			# M = N.T.dot(M.dot(N))
-			K = AtPtPA
-			K = N.T.dot(AtPtPA.dot(N))
-			L = igl.eigen.SparseMatrixd();
-			igl.cotmatrix(igl.eigen.MatrixXd(self.mesh.V), igl.eigen.MatrixXi(self.mesh.T), L)
-			l = -1*e2p(L)
-			Mass = igl.eigen.SparseMatrixd();
-			igl.massmatrix(igl.eigen.MatrixXd(self.mesh.V), igl.eigen.MatrixXi(self.mesh.T), igl.MASSMATRIX_TYPE_DEFAULT, Mass)
-			m = e2p(Mass)
-			n = self.mesh.getsmalln()
-			nln = n.T.dot(l.dot(n))
-			nmn = n.T.dot(m.dot(n))
-			ce, cev = general_eig_solve(A = nln, B = nmn, modes = len(self.mesh.z)+2)
-			self.CotE = ce
-			self.CotEv = n.dot(cev)
-			l = sparse.kron(l, np.eye(2))
-			l = N.T.dot(l.dot(N))
-			m = sparse.kron(m, np.eye(2))
-			m = N.T.dot(m.dot(N))
-			eig, ev = general_eig_solve(A=l, B = m, modes=len(self.mesh.z)+2)
+			M = N.T.dot(M.dot(N))
+			K = AtPtPA #self.mesh.getStiffnessMatrix()
+			K = N.T.dot(K.dot(N))
+			eig, ev = general_eig_solve(A=K, B = M, modes=len(self.mesh.z)+2)
 			ev *= np.logical_or(1e-10>ev , ev<-1e-10)
+			print(ev)
 			eig = eig[2:]
 			ev = ev[:,2:]
-			
 			self.mesh.G = sparse.csc_matrix(N.dot(ev))
+			y = np.zeros(ev.shape[0])
+			y[-4] = 1
+			# # print(N.dot(y))
+			# print(self.mesh.G[:,2].toarray())
+			# print(self.mesh.g)
+			# exit()
 			
 			self.mesh.G.eliminate_zeros()
 			self.mesh.Eigvals = eig
@@ -1249,7 +1216,8 @@ class ARAP:
 
 			gu = scipy.linalg.lu_solve(self.CholFac, gb)
 			self.mesh.z = gu
-			print(self.mesh.z)
+			# print(self.Egg.dot(self.mesh.z) - gb)
+			# print(self.mesh.z)
 			print("			red")
 		else:
 			Abtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
@@ -1579,212 +1547,310 @@ class TimeIntegrator:
 		print(res)
 		print("static solve")
 
-def display():
-	# VTU, to_fix = feather_muscle2_test_setup(p1 = 200, p2 = 100)
-	VTU = rectangle_mesh(10, 10,angle=0, step=.1)
-	# # VTU = torus_mesh(5, 4, 3, .1)
-	to_fix = get_min_max(VTU[0],a=1, eps=1e-1)
-	to_mov = get_min(VTU[0], a=1, eps=1e-1)
-	mesh = Mesh(VTU,ito_fix=to_fix, ito_mov=to_mov, red_g = True)
-
-	neoh =NeohookeanElastic(imesh=mesh )
-	arap = ARAP(imesh=mesh, filen="snapshots/")
-	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
-
-	viewer = igl.glfw.Viewer()
-
-	tempR = igl.eigen.MatrixXuc(1280, 800)
-	tempG = igl.eigen.MatrixXuc(1280, 800)
-	tempB = igl.eigen.MatrixXuc(1280, 800)
-	tempA = igl.eigen.MatrixXuc(1280, 800)
-
-	def mouse_down(viewer, aaa, bbb):
-		bc = igl.eigen.MatrixXd()
-		RV, RT = mesh.getContinuousVT()
-		# Cast a ray in the view direction starting from the mouse position
-		fid = igl.eigen.MatrixXi(np.array([-1]))
-		coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
-		hit = igl.unproject_onto_mesh(coord, viewer.core.view * viewer.core.model,
-		viewer.core.proj, viewer.core.viewport, igl.eigen.MatrixXd(RV), igl.eigen.MatrixXi(RT), fid, bc)
-		if hit:
-			# paint hit red
-			print(fid)
-			return True
-
-		return False
-
-	def key_down(viewer,aaa, bbb):
-		viewer.data().clear()
-	
-		if(viewer.core.is_animating or aaa==65):
-			time_integrator.move_g()
-			arap.iterate()
-			# time_integrator.iterate()
-			# time_integrator.static_solve()
-			time_integrator.time +=1
-
-			
-		DV, DT = mesh.getDiscontinuousVT()
-		RV, RT = mesh.getContinuousVT()
-		V2 = igl.eigen.MatrixXd(RV)
-		T2 = igl.eigen.MatrixXi(RT)
-		viewer.data().set_mesh(V2, T2)
-
-		red = igl.eigen.MatrixXd([[1,0,0]])
-		purple = igl.eigen.MatrixXd([[1,0,1]])
-		green = igl.eigen.MatrixXd([[0,1,0]])
-		black = igl.eigen.MatrixXd([[0,0,0]])
-
-
-		for e in DT:
-			P = DV[e]
-			DP = np.array([P[1], P[2], P[0]])
-			viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
-
-
-		FIXED = []
-		disp_g = mesh.getg()
-		for i in range(len(mesh.fixed)):
-			FIXED.append(disp_g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
-
-		viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
-
-
-		CAg = mesh.getC().dot(mesh.getA().dot(mesh.getg()))
-		#centroids and rotation clusters
-		for i in range(len(mesh.T)):
-			S = mesh.getS(i)
-			C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-			U = 0.01*mesh.getU(i).transpose()+C
-			if(np.linalg.norm(mesh.sW[2*i,:])>=1):
-				viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
-				viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), green)
-			else:
-				viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
-				viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), red)
-			viewer.data().add_points(igl.eigen.MatrixXd(np.array([CAg[6*i:6*i+2]])), igl.eigen.MatrixXd([[0,.2*mesh.r_element_cluster_map[i],1-0.2*mesh.r_element_cluster_map[i]]]))
-
-		#snapshot
-		if(aaa==65 and not mesh.reduced_g):
-			displacements = disp_g - mesh.x0
-			igl.writeDMAT("snapshots/"+str(time_integrator.time)+".dmat", igl.eigen.MatrixXd(displacements), False)
-
-		#Write image
-		if(aaa==65):
-			viewer.core.draw_buffer(viewer.data(), False, tempR, tempG, tempB, tempA)
-			igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
-
-
-
-		return True
-
-	# for clicks in range(40):
-	key_down(viewer, 'b', 123)
-	viewer.callback_key_down = key_down
-	viewer.callback_mouse_down = mouse_down
-	viewer.core.is_animating = False
-	viewer.launch()
-# display()
-
-def WiggleModes(mode = 4):
-	# VTU, to_fix = feather_muscle2_test_setup(p1 = 100, p2 = 50)
-	# VTU, to_fix = feather_muscle2_test_setup(p1 = 200, p2 = 100)
-	VTU = rectangle_mesh(10, 30,angle=0, step=.1)
-	# # VTU = torus_mesh(5, 4, 3, .1)
-	to_fix = get_min_max(VTU[0],a=1, eps=1e-2)
-	to_mov = get_min(VTU[0], a=1, eps=1e-2)
-	mesh = Mesh(VTU,ito_fix=to_fix, ito_mov=to_mov, red_g = True)
-
-	neoh =NeohookeanElastic(imesh=mesh )
-	arap = ARAP(imesh=mesh, filen="snapshots/")
-	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
-
-	viewer = igl.glfw.Viewer()
-
-	tempR = igl.eigen.MatrixXuc(1280, 800)
-	tempG = igl.eigen.MatrixXuc(1280, 800)
-	tempB = igl.eigen.MatrixXuc(1280, 800)
-	tempA = igl.eigen.MatrixXuc(1280, 800)
-
-	# print(mesh.Eigvals)
-	# exit()
-	def key_down(viewer):
-		viewer.data().clear()
-		rmode_i = np.zeros((len(mesh.V),1))
-
-		if(viewer.core.is_animating):
-			# mode_i = mesh.G[:,mode+time_integrator.add_on]*0.1*np.sin(math.sqrt(mesh.Eigvals[mode+time_integrator.add_on])*time_integrator.time)
-			rmode_i[:,0] += arap.CotEv[:,mode+time_integrator.add_on]*np.sin(math.sqrt(arap.CotE[mode+time_integrator.add_on])*time_integrator.time)
-			# for e in range(len(mesh.g)):
-			# 	mesh.g[e] = mesh.x0[e] + mode_i[e,0]
-			time_integrator.time +=1
-			if(time_integrator.time%10==0):
-				time_integrator.add_on += 1
-			# print(time_integrator.time, mesh.Eigvals[mode+time_integrator.add_on])
-
-
-		RV, RT = mesh.getContinuousVT()
-		print(RV.shape, rmode_i.shape)
-		RV = np.concatenate((RV, rmode_i), axis =1)
-		V2 = igl.eigen.MatrixXd(RV)
-		T2 = igl.eigen.MatrixXi(RT)
-		viewer.data().set_mesh(V2, T2)
-
-		red = igl.eigen.MatrixXd([[1,0,0]])
-		purple = igl.eigen.MatrixXd([[1,0,1]])
-		green = igl.eigen.MatrixXd([[0,1,0]])
-		black = igl.eigen.MatrixXd([[0,0,0]])
-
-
-		FIXED = []
-
-		for i in range(len(mesh.fixed)):
-			FIXED.append(mesh.g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
-		viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
-
-		
-
-		#Write image
-		if(viewer.core.is_animating):
-			viewer.core.draw_buffer(viewer.data(), False, tempR, tempG, tempB, tempA)
-			igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
-
-		return True
-
-	# for clicks in range(40):
-	# key_down(viewer, 'b', 123)
-	viewer.callback_post_draw = key_down
-	viewer.core.is_animating = False
-	viewer.launch()
-WiggleModes(mode=0)
-
 import re
 import cProfile, pstats, StringIO
-def headless():
-	# VTU, to_fix = feather_muscle2_test_setup(p1 = 100, p2 = 50)
-	# VTU, to_fix = feather_muscle2_test_setup(p1 = 200, p2 = 100)
-	# VTU, to_fix = feather_muscle2_test_setup(p1 = 300, p2 = 150)
-	# VTU, to_fix = feather_muscle2_test_setup(p1 = 400, p2 = 200)
-	# VTU, to_fix = feather_muscle2_test_setup(p1 = 500, p2 = 250)
-	# VTU, to_fix = feather_muscle2_test_setup(p1 = 600, p2 = 300)
-	to_mov = get_min(VTU[0], a=0, eps=1e-2)
-	# VTU, to_fix = feather_muscle1_test_setup(x = 2, y = 2)
-	print(len(VTU[0]), len(VTU[1]))
-	mesh = Mesh(VTU,ito_fix=to_fix, ito_mov=to_mov, red_g = True)
+class Display:
+	def __init__(self):
+		self.last_mouse = None
+		self.mode = 0
 
-	neoh =NeohookeanElastic(imesh=mesh )
-	arap = ARAP(imesh=mesh, filen="snapshots/600x300/")
-	time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
+	def display(self):
+		# VTU, to_fix = feather_muscle2_test_setup(p1 = 200, p2 = 100)
+		VTU = rectangle_mesh(10, 30,angle=0, step=.1)
+		# # VTU = torus_mesh(5, 4, 3, .1)
+		to_fix = get_min_max(VTU[0],a=1, eps=1e-1)
+		to_mov = get_min(VTU[0], a=1, eps=1e-1)
+		mesh = Mesh(VTU,ito_fix=to_fix, ito_mov=to_mov, red_g = True)
 
-	pr = cProfile.Profile()
-	pr.enable()
+		neoh =NeohookeanElastic(imesh=mesh )
+		arap = ARAP(imesh=mesh, filen="snapshots/")
+		time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
 
-	arap.Hessians()
+		viewer = igl.glfw.Viewer()
 
-	pr.disable()
-	s = StringIO.StringIO()
-	sortby = 'cumulative'
-	ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-	ps.print_stats()
-	print(s.getvalue())
-# headless()
+		tempR = igl.eigen.MatrixXuc(1280, 800)
+		tempG = igl.eigen.MatrixXuc(1280, 800)
+		tempB = igl.eigen.MatrixXuc(1280, 800)
+		tempA = igl.eigen.MatrixXuc(1280, 800)
+
+		def mouse_up(viewer, btn, bbb):
+			if btn==1:
+				coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
+				print("up", coord)
+				up = e2p(coord)
+				print("vec", up - self.last_mouse)
+			for i in range(len(time_integrator.mov)):
+				# mesh.g[2*time_integrator.mov[i]]   -= time_integrator.adder
+				mesh.g[2*time_integrator.mov[i]+1] -= time_integrator.adder
+			return False
+
+		def mouse_down(viewer, btn, bbb):
+			if btn==1:
+				coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
+				self.last_mouse = e2p(coord)
+
+			return False
+
+		def key_down(viewer,aaa, bbb):
+			viewer.data().clear()
+		
+			if(viewer.core.is_animating or aaa==65):
+				# time_integrator.move_g()
+				arap.iterate()
+				# time_integrator.iterate()
+				# time_integrator.static_solve()
+				time_integrator.time +=1
+
+				
+			DV, DT = mesh.getDiscontinuousVT()
+			RV, RT = mesh.getContinuousVT()
+			V2 = igl.eigen.MatrixXd(RV)
+			T2 = igl.eigen.MatrixXi(RT)
+			viewer.data().set_mesh(V2, T2)
+
+			red = igl.eigen.MatrixXd([[1,0,0]])
+			purple = igl.eigen.MatrixXd([[1,0,1]])
+			green = igl.eigen.MatrixXd([[0,1,0]])
+			black = igl.eigen.MatrixXd([[0,0,0]])
+
+
+			for e in DT:
+				P = DV[e]
+				DP = np.array([P[1], P[2], P[0]])
+				viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
+
+
+			FIXED = []
+			disp_g = mesh.getg()
+			for i in range(len(mesh.fixed)):
+				FIXED.append(disp_g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
+
+			viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
+
+
+			CAg = mesh.getC().dot(mesh.getA().dot(mesh.getg()))
+			#centroids and rotation clusters
+			for i in range(len(mesh.T)):
+				S = mesh.getS(i)
+				C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
+				U = 0.01*mesh.getU(i).transpose()+C
+				if(np.linalg.norm(mesh.sW[2*i,:])>=1):
+					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
+					viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), green)
+				else:
+					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
+					viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), red)
+				viewer.data().add_points(igl.eigen.MatrixXd(np.array([CAg[6*i:6*i+2]])), igl.eigen.MatrixXd([[0,.2*mesh.r_element_cluster_map[i],1-0.2*mesh.r_element_cluster_map[i]]]))
+
+			#snapshot
+			if(aaa==65 and not mesh.reduced_g):
+				displacements = disp_g - mesh.x0
+				igl.writeDMAT("snapshots/"+str(time_integrator.time)+".dmat", igl.eigen.MatrixXd(displacements), False)
+
+			#Write image
+			if(aaa==65):
+				viewer.core.draw_buffer(viewer.data(), False, tempR, tempG, tempB, tempA)
+				igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
+
+
+
+			return True
+
+		# for clicks in range(40):
+		key_down(viewer, 'b', 123)
+		viewer.callback_key_down = key_down
+		viewer.callback_mouse_down = mouse_down
+		viewer.callback_mouse_up = mouse_up
+		viewer.core.is_animating = False
+		viewer.launch()
+	
+	def WiggleModes(self):
+		# VTU, to_fix = feather_muscle2_test_setup(p1 = 100, p2 = 50)
+		# VTU, to_fix = feather_muscle2_test_setup(p1 = 200, p2 = 100)
+		VTU = rectangle_mesh(10, 30,angle=0, step=.1)
+		# # VTU = torus_mesh(5, 4, 3, .1)
+		to_fix = get_min_max(VTU[0],a=1, eps=1e-2)
+		to_mov = get_min(VTU[0], a=1, eps=1e-2)
+		mesh = Mesh(VTU,ito_fix=to_fix, ito_mov=to_mov, red_g = True)
+
+		neoh =NeohookeanElastic(imesh=mesh )
+		arap = ARAP(imesh=mesh, filen="snapshots/")
+		time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
+
+		viewer = igl.glfw.Viewer()
+
+		tempR = igl.eigen.MatrixXuc(1280, 800)
+		tempG = igl.eigen.MatrixXuc(1280, 800)
+		tempB = igl.eigen.MatrixXuc(1280, 800)
+		tempA = igl.eigen.MatrixXuc(1280, 800)
+
+		def key_down(viewer, aaa, bbb):
+			#1,2 number keys are toggles
+			if aaa==49:
+				self.mode -=1
+			if aaa==50:
+				self.mode +=1
+			return True
+
+		def post_draw(viewer):
+			viewer.data().clear()
+			rmode_i = np.zeros((len(mesh.V),1))
+
+			if(viewer.core.is_animating):
+				mode_i = mesh.G[:,self.mode]*0.1*np.sin(math.sqrt(mesh.Eigvals[self.mode])*time_integrator.time)
+				for e in range(len(mesh.g)):
+					mesh.g[e] = mesh.x0[e] + mode_i[e,0]
+				time_integrator.time +=1
+				if(time_integrator.time%10==0):
+					time_integrator.add_on += 1
+				print(time_integrator.time, mesh.Eigvals[self.mode])
+
+
+			RV, RT = mesh.getContinuousVT()
+			RV = np.concatenate((RV, rmode_i), axis =1)
+			V2 = igl.eigen.MatrixXd(RV)
+			T2 = igl.eigen.MatrixXi(RT)
+			viewer.data().set_mesh(V2, T2)
+
+			red = igl.eigen.MatrixXd([[1,0,0]])
+			purple = igl.eigen.MatrixXd([[1,0,1]])
+			green = igl.eigen.MatrixXd([[0,1,0]])
+			black = igl.eigen.MatrixXd([[0,0,0]])
+
+
+			FIXED = []
+
+			for i in range(len(mesh.fixed)):
+				FIXED.append(mesh.g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
+			viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
+
+			
+
+			#Write image
+			if(viewer.core.is_animating):
+				viewer.core.draw_buffer(viewer.data(), False, tempR, tempG, tempB, tempA)
+				igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(time_integrator.time)+".png")
+
+			return True
+
+		# for clicks in range(40):
+		# key_down(viewer, 'b', 123)
+		viewer.callback_post_draw = post_draw
+		viewer.callback_key_down = key_down
+		viewer.core.is_animating = False
+		viewer.launch()
+
+	def headless(self):
+		# VTU, to_fix = feather_muscle2_test_setup(p1 = 100, p2 = 50)
+		# VTU, to_fix = feather_muscle2_test_setup(p1 = 200, p2 = 100)
+		# VTU, to_fix = feather_muscle2_test_setup(p1 = 300, p2 = 150)
+		# VTU, to_fix = feather_muscle2_test_setup(p1 = 400, p2 = 200)
+		# VTU, to_fix = feather_muscle2_test_setup(p1 = 500, p2 = 250)
+		# VTU, to_fix = feather_muscle2_test_setup(p1 = 600, p2 = 300)
+		to_mov = get_min(VTU[0], a=0, eps=1e-2)
+		# VTU, to_fix = feather_muscle1_test_setup(x = 2, y = 2)
+		print(len(VTU[0]), len(VTU[1]))
+		mesh = Mesh(VTU,ito_fix=to_fix, ito_mov=to_mov, red_g = True)
+
+		neoh =NeohookeanElastic(imesh=mesh )
+		arap = ARAP(imesh=mesh, filen="snapshots/600x300/")
+		time_integrator = TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neoh)
+
+		pr = cProfile.Profile()
+		pr.enable()
+
+		arap.Hessians()
+
+		pr.disable()
+		s = StringIO.StringIO()
+		sortby = 'cumulative'
+		ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+		ps.print_stats()
+		print(s.getvalue())
+
+	def checkModes(self):
+		V =  [[-1,    -5],
+			  [-1,     0],
+			  [-1,     5],
+			  [0,    -5],
+			  [0,     0],
+			  [0,     5],
+			  [1,    -5],
+			  [1,     0],
+			  [1,     5]]
+		T = np.array([[0, 3,1],
+					[4, 7,5],
+					[1, 4,2],
+					[2, 4,5],
+					[3, 4,1],
+					[3, 6,4],
+					[5, 7,8],
+					[4, 6,7]], dtype='int32')
+
+		# T = Delaunay(V).simplices
+		# print(T.shape)
+		# exit()
+		V = np.array(V)
+		VTU = (V,T, None)
+		# VTU = rectangle_mesh(1,1)
+		to_fix = get_min_max(VTU[0],a=1, eps=1e-1)
+		to_mov = get_min(VTU[0], a=1, eps=1e-1)
+		mesh = Mesh(VTU,ito_fix=to_fix, ito_mov=to_mov, red_g = True)
+
+		A = mesh.getA()
+		P = mesh.getP()
+		N,n = mesh.getN()
+		H = A.T.dot(P.T.dot(P.dot(A)))
+		M = mesh.getMassMatrix()
+		B, AB = mesh.createBlockingMatrix()
+
+		num_modes = 3
+		Ud, UV = general_eig_solve(A=H, B=M, modes=num_modes+2)
+		Yd, YV = general_eig_solve(A=(N.T.dot(H.dot(N))), B = (N.T.dot(M.dot(N))), modes=num_modes +2)
+		ev *= np.logical_or(1e-10>ev , ev<-1e-10)
+		print(ev)
+		eig = eig[2:]
+		ev = ev[:,2:]
+
+
+		viewer = igl.glfw.Viewer()
+
+
+		def key_down(viewer,aaa, bbb):
+			viewer.data().clear()
+		
+			if(viewer.core.is_animating or aaa==65):
+				
+
+
+				
+			RV, RT = mesh.getContinuousVT()
+			V2 = igl.eigen.MatrixXd(RV)
+			T2 = igl.eigen.MatrixXi(RT)
+			viewer.data().set_mesh(V2, T2)
+
+			red = igl.eigen.MatrixXd([[1,0,0]])
+			purple = igl.eigen.MatrixXd([[1,0,1]])
+			green = igl.eigen.MatrixXd([[0,1,0]])
+			black = igl.eigen.MatrixXd([[0,0,0]])
+
+
+
+			FIXED = []
+			disp_g = mesh.getg()
+			for i in range(len(mesh.fixed)):
+				FIXED.append(disp_g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
+
+			viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
+
+			return True
+
+		# for clicks in range(40):
+		key_down(viewer, 'b', 123)
+		viewer.callback_key_down = key_down
+		viewer.launch()
+
+d = Display()
+# d.display()
+# d.WiggleModes()
+d.checkModes()

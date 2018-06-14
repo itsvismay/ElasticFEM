@@ -1,9 +1,9 @@
 import numpy as np
-from version2 import rectangle_mesh, torus_mesh, featherize,get_min, get_max, get_min_max, NeohookeanElastic, ARAP, Mesh
+from version2 import triangle_mesh, rectangle_mesh, torus_mesh, featherize,get_min, get_max, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
 	eps = 1e-6
-	iV, iT, iU = rectangle_mesh(3,3,angle = 0, step = .1)
+	iV, iT, iU = rectangle_mesh(5,5,angle = 0, step = .1)
 
 	its = 100
 	to_fix = get_min_max(iV, a=1)
@@ -12,7 +12,7 @@ def FiniteDifferencesARAP():
 	print(to_mov)
 	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=False)
 	
-	arap = ARAP(mesh)	
+	arap = ARAP(mesh, filen="/crap")	
 	mesh.getGlobalF()
 	# print(mesh.G.dot(mesh.z))
 	# print(mesh.G.shape)
@@ -328,12 +328,12 @@ def FiniteDifferencesARAP():
 	# check_dEds()
 	# check_dEdr()
 
-	# check_Hessian_dEdgdg()
+	check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
 	# check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
-	check_dgds_drds()
+	# check_dgds_drds()
 
 # FiniteDifferencesARAP()
 
@@ -423,3 +423,16 @@ def FiniteDifferencesElasticity():
 	# test()
 
 # FiniteDifferencesElasticity()
+
+def testPA():
+	eps = 1e-6
+	iV, iT, iU = rectangle_mesh(1,1,angle = 0, step = .1)
+	# iV, iT, iU = triangle_mesh()
+
+	mesh = Mesh((iV,iT, iU), ito_fix=[], ito_mov=[], red_g=True)
+
+	print(mesh.getP().toarray())
+	# print(mesh.getA().toarray())
+	print(mesh.getA().dot(mesh.x0))
+
+# testPA()
