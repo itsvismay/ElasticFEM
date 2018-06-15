@@ -1,48 +1,55 @@
 import numpy as np
-from version2 import rectangle_mesh, torus_mesh, featherize, get_min_max, NeohookeanElastic, ARAP, Mesh
+from version2 import triangle_mesh, rectangle_mesh, torus_mesh, featherize,get_min, get_max, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
-	eps = 1e-4
-	iV, iT, iU = featherize(1,1,.1)
-	# iV, iT, iU = torus_mesh(5,4,3,.1)
+	eps = 1e-6
+	iV, iT, iU = rectangle_mesh(2,2,angle = 0, step = .1)
+
 	its = 100
 	to_fix = get_min_max(iV, a=1)
-	# print(to_fix)
-	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
-	mesh.fixed = mesh.fixed_max_axis(1)
-	# print(mesh.fixed)
+	to_mov = get_min(iV, a =1)
+	print(to_fix)
+	print(to_mov)
+	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=True)
 	
-	arap = ARAP(mesh)	
+	arap = ARAP(mesh, filen="/crap")	
 	mesh.getGlobalF()
-
-	E0 = arap.energy(_g=mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+	# print(mesh.G.dot(mesh.z))
+	# print(mesh.G.shape)
+	
+	E0 = arap.energy(_z=mesh.z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 	print("Default Energy ", E0)
+
 	
 	def check_dEdg():
-		dEdg = []
-		dg = np.zeros(len(mesh.g)) + mesh.g
-		for i in range(len(mesh.g)):
-			dg[i] += eps
-			mesh.getGlobalF()
-			Ei = arap.energy(_g=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
-			dEdg.append((Ei - E0)/eps)
-			dg[i] -= eps
+		real = arap.dEdg()
+		dEdz = []
+		z = np.zeros(len(mesh.z)) + mesh.z
+		for i in range(len(mesh.z)):
+			z[i] += 0.5*eps
+			Eleft = arap.energy(_z=z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+			z[i] -= 0.5*eps
+			z[i] -= 0.5*eps
+			Eright = arap.energy(_z=z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+			z[i] += 0.5*eps
+			dEdz.append((Eleft - Eright)/eps)
 
-		print("Eg ", np.linalg.norm(arap.dEdg() - np.array(dEdg)))
+		# print(np.array(dEdz))
+		# print(real)
+		print("Eg ", np.linalg.norm(real - np.array(dEdz)))
 
 	def check_dEds():
 		realdEdS, realdEds = arap.dEds()
-		print(realdEds)
-
 		dEds = []
 		for i in range(len(mesh.red_s)):
 			mesh.red_s[i] += eps
 			mesh.getGlobalF()
-			Ei = arap.energy(_g =mesh.g, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+			Ei = arap.energy(_z =mesh.z, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 			dEds.append((Ei - E0)/eps)
 			mesh.red_s[i] -= eps
 
-		print(dEds)
+		print(realdEds)
+		print(np.array(dEds))
 		print("Es ", np.sum(np.array(dEds)-realdEds))
 
 	def check_dEdS():
@@ -59,38 +66,38 @@ def FiniteDifferencesARAP():
 		for i in range(len(mesh.red_r)):
 			mesh.red_r[i] += 0.5*eps
 			mesh.getGlobalF()
-			Eleft = arap.energy(_g =mesh.g, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+			Eleft = arap.energy(_z =mesh.z, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 			mesh.red_r[i] -= 0.5*eps
 
 			mesh.red_r[i] -= 0.5*eps
 			mesh.getGlobalF()
-			Eright = arap.energy(_g =mesh.g, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+			Eright = arap.energy(_z =mesh.z, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 			mesh.red_r[i] += 0.5*eps
 
 			dEdr.append((Eleft - Eright)/eps)
-		print(realdEdr)
+
 		print("Er ", np.sum(np.array(dEdr) - realdEdr))
 
 	def check_Hessian_dEdgdg():
 		real = arap.Hess_Egg()
 
 		Egg = []
-		dg = np.zeros(len(mesh.g)) + mesh.g
-		for i in range(len(mesh.g)):
+		dg = np.zeros(len(mesh.z)) + mesh.z
+		for i in range(len(mesh.z)):
 			Egg.append([])
-			for j in range(len(mesh.g)):
+			for j in range(len(mesh.z)):
 				dg[i] += eps
 				dg[j] += eps
-				Eij = arap.energy(_g=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Eij = arap.energy(_z=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				dg[i] -= eps
 				dg[j] -= eps
 
 				dg[i] += eps
-				Ei = arap.energy(_g=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Ei = arap.energy(_z=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				dg[i] -= eps
 
 				dg[j] += eps
-				Ej = arap.energy(_g=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Ej = arap.energy(_z=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				dg[j] -= eps
 
 				Egg[i].append((Eij - Ei - Ej + E0)/(eps*eps))
@@ -103,25 +110,25 @@ def FiniteDifferencesARAP():
 		real = arap.Hess_Erg()
 
 		Erg = []
-		dg = np.zeros(len(mesh.g)) + mesh.g
-		for i in range(len(mesh.g)):
+		dg = np.zeros(len(mesh.z)) + mesh.z
+		for i in range(len(mesh.z)):
 			Erg.append([])
 			for j in range(len(mesh.red_r)):
 				dg[i] += eps
 				mesh.red_r[j] += eps
 				mesh.getGlobalF()
-				Eij = arap.energy(_g =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Eij = arap.energy(_z =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				mesh.red_r[j] -= eps
 				dg[i] -= eps
 
 				dg[i] += eps
 				mesh.getGlobalF()
-				Ei = arap.energy(_g=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Ei = arap.energy(_z =dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				dg[i] -= eps
 
 				mesh.red_r[j] += eps
 				mesh.getGlobalF()
-				Ej = arap.energy(_g =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Ej = arap.energy(_z =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				mesh.red_r[j] -= eps
 
 
@@ -139,22 +146,23 @@ def FiniteDifferencesARAP():
 				mesh.red_r[i] += eps
 				mesh.red_r[j] += eps
 				mesh.getGlobalF()
-				Eij = arap.energy(_g =mesh.g, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Eij = arap.energy(_z =mesh.z, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				mesh.red_r[i] -= eps
 				mesh.red_r[j] -= eps
 
 				mesh.red_r[j] += eps
 				mesh.getGlobalF()
-				Ej = arap.energy(_g =mesh.g, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Ej = arap.energy(_z =mesh.z, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				mesh.red_r[j] -= eps
 
 				mesh.red_r[i] += eps
 				mesh.getGlobalF()
-				Ei = arap.energy(_g =mesh.g, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Ei = arap.energy(_z =mesh.z, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				mesh.red_r[i] -= eps
 
 				Err[i].append((Eij - Ei - Ej + E0)/(eps*eps))
-		# print(real)
+		print(real)
+		print(np.array(Err))
 		print("Err ", np.sum(np.array(Err) - real))
 	
 	def check_Hessian_dEdrds():
@@ -167,18 +175,18 @@ def FiniteDifferencesARAP():
 				mesh.red_r[i] += eps
 				mesh.red_s[j] += eps
 				mesh.getGlobalF()
-				Eij = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Eij = arap.energy(_z =mesh.z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				mesh.red_s[j] -= eps
 				mesh.red_r[i] -= eps
 
 				mesh.red_r[i] += eps
 				mesh.getGlobalF()
-				Ei = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Ei = arap.energy(_z =mesh.z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				mesh.red_r[i] -= eps
 
 				mesh.red_s[j] += eps
 				mesh.getGlobalF()
-				Ej = arap.energy(_g =mesh.g, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Ej = arap.energy(_z =mesh.z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				mesh.red_s[j] -= eps
 				mesh.getGlobalF()
 
@@ -225,31 +233,32 @@ def FiniteDifferencesARAP():
 		real = arap.Hess_Egs()
 
 		Egs = []
-		dg = np.zeros(len(mesh.g)) + mesh.g
-		for i in range(len(mesh.g)):
+		dg = np.zeros(len(mesh.z)) + mesh.z
+		for i in range(len(mesh.z)):
 			Egs.append([])
 			for j in range(len(mesh.red_s)):
 				dg[i] += eps
 				mesh.red_s[j] += eps
 				mesh.getGlobalF()
-				Eij = arap.energy(_g =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Eij = arap.energy(_z =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				mesh.red_s[j] -= eps
 				dg[i] -= eps
 
 				dg[i] += eps
 				mesh.getGlobalF()
-				Ei = arap.energy(_g=dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Ei = arap.energy(_z =dg, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				dg[i] -= eps
 
 				mesh.red_s[j] += eps
 				mesh.getGlobalF()
-				Ej = arap.energy(_g =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
+				Ej = arap.energy(_z =dg, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 				mesh.red_s[j] -= eps
 
 				Egs[i].append((Eij - Ei - Ej + E0)/(eps*eps))
-		print(real)
-		print("\n")
-		print(np.array(Egs))
+		
+		# print(real)
+		# print("\n")
+		# print(np.array(Egs))
 		print("Egs ", np.linalg.norm(np.array(Egs) - real))
 
 	def check_dgds_drds():
@@ -257,10 +266,13 @@ def FiniteDifferencesARAP():
 
 		dgds = []
 		drds = []
+
+		z0 = np.zeros(len(mesh.z)) + mesh.z
 		g0 = np.zeros(len(mesh.g)) + mesh.g
 		r0 = np.array(mesh.red_r) 
 		q0 = np.zeros(len(mesh.q)) + mesh.q
 		for i in range(len(mesh.red_s)):
+			mesh.z = np.zeros(len(mesh.z)) + z0
 			mesh.g = np.zeros(len(mesh.g)) + g0
 
 			mesh.red_s[i] += 0.5*eps
@@ -268,7 +280,10 @@ def FiniteDifferencesARAP():
 
 			arap.iterate()
 			drds_left = np.array(mesh.red_r)
-			dgds_left =mesh.g + np.zeros(len(mesh.g))
+			if(mesh.reduced_g):
+				dgds_left =mesh.z + np.zeros(len(mesh.z))
+			else:
+				dgds_left =mesh.g + np.zeros(len(mesh.g))
 
 			mesh.red_s[i] -= 0.5*eps
 			mesh.getGlobalF()
@@ -278,7 +293,11 @@ def FiniteDifferencesARAP():
 			mesh.getGlobalF()
 			arap.iterate()
 			drds_right = np.array(mesh.red_r)
-			dgds_right =mesh.g + np.zeros(len(mesh.g))
+			if(mesh.reduced_g):
+				dgds_right =mesh.z + np.zeros(len(mesh.z))
+			else:
+				dgds_right =mesh.g + np.zeros(len(mesh.g))
+
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
 			arap.iterate()
@@ -312,27 +331,27 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
-	# check_Hessian_dEdrds()
 	# check_Hessian_dEdgds()
+	# check_Hessian_dEdrds()
 	check_dgds_drds()
 
-# FiniteDifferencesARAP()
+FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-5
-	iV, iT, iU = rectangle_mesh(2,2,.1)
-	# iV, iT, iU = torus_mesh(5,4,3,.1)
+	eps = 1e-6
+	iV, iT, iU = rectangle_mesh(3,3,angle = 0, step = .1)
+
 	its = 100
 	to_fix = get_min_max(iV, a=1)
-	# print(to_fix)
-	mesh = Mesh((iV,iT, iU),ito_fix=to_fix)
-	mesh.fixed = mesh.fixed_max_axis(1)
+	to_mov = get_min(iV, a =1)
+	print(to_fix)
+	print(to_mov)
+	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=False)
 	# print(mesh.fixed)
 	
 	arap = ARAP(mesh)	
 	mesh.getGlobalF()
 	ne = NeohookeanElastic(imesh = mesh)
-	
 
 	def check_PrinStretchForce():
 		e0 = ne.WikipediaEnergy(_rs = mesh.red_s)
@@ -359,7 +378,7 @@ def FiniteDifferencesElasticity():
 		print("E0", e0)
 		arap.iterate()
 		
-		real = -1*ne.GravityForce(dgds=arap.Jacobian()[1])
+		real = -1*ne.GravityForce(dzds=arap.Jacobian()[1])
 
 		dEgds = []
 		for i in range(len(mesh.red_s)):
@@ -381,7 +400,7 @@ def FiniteDifferencesElasticity():
 	def check_muscleForce():
 		e0 = ne.MuscleEnergy(_rs = mesh.red_s)
 		real = -ne.MuscleForce(_rs = mesh.red_s)
-		print("e0", e0)
+		# print("e0", e0)
 		dEds = []
 		for i in range(len(mesh.red_s)):
 			mesh.red_s[i] += 0.5*eps
@@ -400,7 +419,20 @@ def FiniteDifferencesElasticity():
 
 	# check_PrinStretchForce()
 	# check_gravityForce()
-	check_muscleForce()
+	# check_muscleForce()
 	# test()
 
-FiniteDifferencesElasticity()
+# FiniteDifferencesElasticity()
+
+def testPA():
+	eps = 1e-6
+	iV, iT, iU = rectangle_mesh(1,1,angle = 0, step = .1)
+	# iV, iT, iU = triangle_mesh()
+
+	mesh = Mesh((iV,iT, iU), ito_fix=[], ito_mov=[], red_g=True)
+
+	print(mesh.getP().toarray())
+	# print(mesh.getA().toarray())
+	print(mesh.getA().dot(mesh.x0))
+
+# testPA()
