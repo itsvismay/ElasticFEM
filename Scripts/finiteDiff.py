@@ -3,7 +3,7 @@ from version2 import triangle_mesh, rectangle_mesh, torus_mesh, featherize,get_m
 
 def FiniteDifferencesARAP():
 	eps = 1e-6
-	iV, iT, iU = rectangle_mesh(2,2,angle = 0, step = .1)
+	iV, iT, iU = rectangle_mesh(5,5,angle = 0, step = .1)
 
 	its = 100
 	to_fix = get_min_max(iV, a=1)
@@ -309,11 +309,11 @@ def FiniteDifferencesARAP():
 				
 
 		print("FD")
-		print(np.array(dgds).T)
+		print(np.array(dgds))
 		print(np.array(drds).T)
 		print("")
 		print("real")
-		print(real1)
+		print(real1.T)
 		print(real2)
 		print("DIFF")
 		# print("T: ", len(mesh.T))
@@ -333,7 +333,7 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrdr()
 	# check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
-	check_dgds_drds()
+	# check_dgds_drds()
 
 FiniteDifferencesARAP()
 
@@ -346,7 +346,7 @@ def FiniteDifferencesElasticity():
 	to_mov = get_min(iV, a =1)
 	print(to_fix)
 	print(to_mov)
-	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=False)
+	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=True)
 	# print(mesh.fixed)
 	
 	arap = ARAP(mesh)	
@@ -382,7 +382,10 @@ def FiniteDifferencesElasticity():
 
 		dEgds = []
 		for i in range(len(mesh.red_s)):
-			mesh.g = np.zeros(len(mesh.g)) + mesh.x0
+			if mesh.reduced_g==False:
+				mesh.g = np.zeros(len(mesh.g))
+			else:
+				mesh.z = np.zeros(len(mesh.z))
 			
 			mesh.red_s[i] += eps
 			mesh.getGlobalF(updateR=False, updateS=True)
@@ -419,20 +422,6 @@ def FiniteDifferencesElasticity():
 
 	# check_PrinStretchForce()
 	# check_gravityForce()
-	# check_muscleForce()
-	# test()
+	check_muscleForce()
 
-# FiniteDifferencesElasticity()
-
-def testPA():
-	eps = 1e-6
-	iV, iT, iU = rectangle_mesh(1,1,angle = 0, step = .1)
-	# iV, iT, iU = triangle_mesh()
-
-	mesh = Mesh((iV,iT, iU), ito_fix=[], ito_mov=[], red_g=True)
-
-	print(mesh.getP().toarray())
-	# print(mesh.getA().toarray())
-	print(mesh.getA().dot(mesh.x0))
-
-# testPA()
+FiniteDifferencesElasticity()
