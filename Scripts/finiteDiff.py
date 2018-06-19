@@ -3,7 +3,7 @@ from version2 import triangle_mesh, rectangle_mesh, torus_mesh, featherize,get_m
 
 def FiniteDifferencesARAP():
 	eps = 1e-6
-	iV, iT, iU = rectangle_mesh(5,5,angle = 0, step = .1)
+	iV, iT, iU = rectangle_mesh(2,1,angle = 0, step = .1)
 
 	its = 100
 	to_fix = get_min_max(iV, a=1)
@@ -11,7 +11,7 @@ def FiniteDifferencesARAP():
 	print(to_fix)
 	print(to_mov)
 	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=True)
-	
+	mesh.red_r[0] += 0.1
 	arap = ARAP(mesh, filen="/crap")	
 	mesh.getGlobalF()
 	# print(mesh.G.dot(mesh.z))
@@ -76,6 +76,8 @@ def FiniteDifferencesARAP():
 
 			dEdr.append((Eleft - Eright)/eps)
 
+		print(realdEdr)
+		print(np.array(dEdr))
 		print("Er ", np.sum(np.array(dEdr) - realdEdr))
 
 	def check_Hessian_dEdgdg():
@@ -326,7 +328,7 @@ def FiniteDifferencesARAP():
 
 	# check_dEdg()
 	# check_dEds()
-	# check_dEdr()
+	check_dEdr()
 
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
@@ -422,6 +424,6 @@ def FiniteDifferencesElasticity():
 
 	# check_PrinStretchForce()
 	# check_gravityForce()
-	check_muscleForce()
+	# check_muscleForce()
 
-FiniteDifferencesElasticity()
+# FiniteDifferencesElasticity()
