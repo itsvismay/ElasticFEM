@@ -136,6 +136,7 @@ def FiniteDifferencesARAP():
 
 				Erg[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 
+		# print(real)
 		print("Erg ",np.sum(np.array(Erg) - real))
 
 	def check_Hessian_dEdrdr():
@@ -327,8 +328,8 @@ def FiniteDifferencesARAP():
 
 
 	# check_dEdg()
-	# check_dEds()
-	check_dEdr()
+	check_dEds()
+	# check_dEdr()
 
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()

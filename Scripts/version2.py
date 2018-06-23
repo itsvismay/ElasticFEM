@@ -284,11 +284,13 @@ class Mesh:
 		self.RotationBLOCK = None
 		self.setupRotClusters()
 
+
 		# self.readInRotClusters()
 		#S skinnings
 		self.red_s = None
 		self.sW = None
 		self.setupStrainSkinnings()
+
 
 		t_size = len(self.T)
 		self.GF = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
@@ -771,7 +773,6 @@ class ARAP:
 		s_size = len(self.mesh.red_s)
 		t_size = len(self.mesh.T)
 
-
 		self.Erg = np.zeros((z_size, r_size))
 		self.Err = np.zeros((r_size, r_size))
 		self.Egs = np.zeros((z_size, s_size))
@@ -785,7 +786,11 @@ class ARAP:
 		self.USUtPAx_E = []
 
 		self.constErTerms = []
+		self.constErTerms = []
+		self.constErsTerms = []
 		self.setupConstErTerms()
+		self.setupConstEsTerms()
+		self.setupConstErsTerms()
 		print("Done with ARAP init")
 
 	def energy(self, _z, _R, _S, _U):
@@ -890,20 +895,21 @@ class ARAP:
 		Ezz = self.Egg
 		
 		###############ERG
-		sample = self.sparseErg_first(-1*self.PAG, USUtPAx)
-		for j in range(self.Erg.shape[1]):
-			for i in range(self.Erg.shape[0]):
-				self.Erg[i,j] = DR[j].multiply(sample[i]).sum()
+		# sample = self.sparseErg_first(-1*self.PAG, USUtPAx)
+		# for j in range(self.Erg.shape[1]):
+		# 	for i in range(self.Erg.shape[0]):
+		# 		self.Erg[i,j] = DR[j].multiply(sample[i]).sum()
+		self.Erg = self.constTimeErz()
 
 
 		###############ERR
-		negPAg_USUtPAx = self.sparseOuterProdDiags(-1*PAg, USUtPAx)
-		DDR = self.sparseDDRdrdr_diag()
-		for i in range(self.Err.shape[0]):
-			spD = DDR[i]
-			if spD.nnz>0:
-				self.Err[i,i] = spD.multiply(negPAg_USUtPAx).sum()
-
+		# negPAg_USUtPAx = self.sparseOuterProdDiags(-1*PAg, USUtPAx)
+		# DDR = self.sparseDDRdrdr_diag()
+		# for i in range(self.Err.shape[0]):
+		# 	spD = DDR[i]
+		# 	if spD.nnz>0:
+		# 		self.Err[i,i] = spD.multiply(negPAg_USUtPAx).sum()
+		self.Err = self.constTimeErr()
 		
 		###############EGS
 		PAGtRU = self.PAG.T.dot(self.mesh.GR.dot(self.mesh.GU))
@@ -926,6 +932,7 @@ class ARAP:
 			col_i[2*np.arange(self.Ers_mid.shape[0]/2)+1] = even_i
 			self.Ers_mid[:, i]   = col_i[:,0]
 
+		print(self.constTimeErs_mid())
 		second = self.sparseErs_second(UtPAx, self.Ers_mid)
 
 		for i in range(self.Ers.shape[0]):
@@ -1054,17 +1061,74 @@ class ARAP:
 		for r in range(len(self.mesh.red_r)):
 			B = self.mesh.RotationBLOCK[r]
 			BU = B.T.dot(PAxUUtW)
-			Usum = BU.sum(axis=0)
-			diffM = sparse.kron(np.eye(BU.shape[0]/2), np.array([-1, 1]))
-			UdiffM = diffM.dot(BU).sum(axis = 0)
-
 			BPAG = B.T.dot(-1*self.PAG)
-			Psum = BPAG.sum(axis=0)
-			PdiffM = diffM.dot(BPAG).sum(axis = 0)
 			BPAx0 = B.T.dot(-1*self.PAx)
-			X0sum = BPAx0.sum() 
-			X0diffM = diffM.dot(BPAx0).sum()
-			self.constErTerms.append((BU, BPAG, BPAx0, Usum, UdiffM, Psum, PdiffM, X0sum, X0diffM))
+
+			self.constErTerms.append((BU, BPAG, BPAx0))
+
+	def setupConstErsTerms(self):
+		# wr_cols = []
+		# c_vec = []
+		# for i in range(len(self.mesh.red_r)):
+		# 	c1, c2 = np.cos(self.mesh.red_r[i]), -np.sin(self.mesh.red_r[i])
+		# 	c_vec.append(c1)
+		# 	c_vec.append(c2)
+		# 	ce_map = np.array(self.mesh.r_cluster_element_map[i])
+		# 	wr_c1 = np.zeros(2*len(self.mesh.T))
+		# 	wr_c2 = np.zeros(2*len(self.mesh.T))
+		# 	wr_c1[2*ce_map] = 1
+		# 	wr_c2[2*ce_map+1] = 1
+		# 	wr_cols.append(wr_c1)
+		# 	wr_cols.append(wr_c2)
+
+		# Wr = np.vstack(wr_cols).T
+		def getOddEvenUMatrix(BUB):
+			oddU = np.zeros((2, BUB.shape[0]))
+			evenU = np.zeros((2, BUB.shape[0]))
+			for i in range(BUB.shape[0]):
+				u11 = self.mesh.GU[i,i]
+				u12 = self.mesh.GU[i, i+1]
+				u21 = self.mesh.GU[i+1,i]
+				u22 = self.mesh.GU[i+1, i+1]
+				oddU[0,i] = u11
+				oddU[1,i] = u12
+				oddU[0,i+1] = u11
+				oddU[1,i+1] = u12
+
+
+		for i in range(len(self.mesh.red_r)):
+			B = self.RotationBLOCK[i]
+			BPAG = B.T.dot(self.PAG)
+			c, s = np.cos(self.mesh.red_r[i]), np.sin(self.mesh.red_r[i])
+			c1, c2 = -s, -c
+			BtUB = B.T.dot(self.mesh.GU.dot(B))
+
+
+		exit()
+		
+
+	def constTimeErr(self):
+		rDDR = self.redSparseDDRdrdr()
+		Err = np.zeros((len(self.mesh.red_r), len(self.mesh.red_r)))
+		for i in range(len(self.mesh.red_r)):
+			BUSUtPAx0 = self.constErTerms[i][0].dot(self.mesh.red_s)
+			BPAGz = self.constErTerms[i][1].dot(self.mesh.z)
+			BPAx0 = self.constErTerms[i][2]
+			res = BUSUtPAx0.T.dot(rDDR[i].dot(BPAGz+BPAx0))
+			Err[i,i] = res
+		return Err	
+
+	def constTimeErz(self):
+		Erz = np.zeros((len(self.mesh.z), len(self.mesh.red_r)))
+
+		rDR = self.redSparseDRdr()
+		for i in range(len(self.mesh.red_r)):
+			BUSUtPAx0 = self.constErTerms[i][0].dot(self.mesh.red_s)
+			BPAG = self.constErTerms[i][1]
+			res = BPAG.T.dot(rDR[i][0].dot(BUSUtPAx0))
+			Erz[:,i] = res
+
+		return Erz
 
 	def constTimeEr(self):
 		dEdr = np.zeros(len(self.mesh.red_r))
@@ -1074,20 +1138,50 @@ class ARAP:
 			BPAGz = self.constErTerms[i][1].dot(self.mesh.z)
 			BPAx0 = self.constErTerms[i][2]
 			res = BUSUtPAx0.T.dot(rDR[i][0].dot(BPAGz+BPAx0))
-			c1 = rDR[i][1][0,0]
-			c2 = rDR[i][1][0,1]
-			Xsum = self.constErTerms[i][7]
-			Xdiff = self.constErTerms[i][8]
-			Usum = c1*self.constErTerms[i][3].dot(self.mesh.red_s)
-			Udiff = c2*self.constErTerms[i][4].dot(self.mesh.red_s)
-			Psum = c1*(self.constErTerms[i][5].dot(self.mesh.z) +Xsum)
-			Pdiff = c2*(self.constErTerms[i][6].dot(self.mesh.z) + Xdiff)
-			
-			res2 = ((Usum+Psum)/c1) + ((Udiff+Pdiff)/c2)
-			print(c1, res, res2)
 			dEdr[i] = res
 
 		return dEdr
+
+	def setupConstEsTerms(self):
+		UU = sparse.lil_matrix((4*len(self.mesh.T), 3*len(self.mesh.T)))
+		for t in range(len(self.mesh.T)):
+			u = self.mesh.getU(t)
+			u1, u2 = u[0,0], u[0,1]
+			UU[4*t+0, 3*t+0] = u1
+			UU[4*t+0, 3*t+2] = u2
+			UU[4*t+1, 3*t+0] =-u2
+			UU[4*t+1, 3*t+2] = u1
+
+			UU[4*t+2, 3*t+1] = u2
+			UU[4*t+2, 3*t+2] = u1
+			UU[4*t+3, 3*t+1] = u1
+			UU[4*t+3, 3*t+2] =-u2
+
+		UUW = UU.dot(self.mesh.sW)
+
+		MPAx = sparse.lil_matrix((6*len(self.mesh.T), 4*len(self.mesh.T)))
+		for t in range(len(self.mesh.T)):
+			x1, x2, x3 = self.PAx[6*t+0], self.PAx[6*t+1], self.PAx[6*t+2]
+			x4, x5, x6 = self.PAx[6*t+3], self.PAx[6*t+4], self.PAx[6*t+5]
+
+			MPAx[6*t+0, 4*t+0]=x1
+			MPAx[6*t+0, 4*t+1]=x2
+			MPAx[6*t+1, 4*t+2]=x1
+			MPAx[6*t+1, 4*t+3]=x2
+
+			MPAx[6*t+2, 4*t+0]=x3
+			MPAx[6*t+2, 4*t+1]=x4
+			MPAx[6*t+3, 4*t+2]=x3
+			MPAx[6*t+3, 4*t+3]=x4
+			
+			MPAx[6*t+4, 4*t+0]=x5
+			MPAx[6*t+4, 4*t+1]=x6
+			MPAx[6*t+5, 4*t+2]=x5
+			MPAx[6*t+5, 4*t+3]=x6
+
+		MPAxUUW = MPAx.tocsc().dot(UUW)
+		UtPAx = self.mesh.GU.T.dot(self.PAx)
+		
 
 	def Gradients(self):
 		PAg = self.PA.dot(self.mesh.getg())
@@ -1095,11 +1189,11 @@ class ARAP:
 		DR = self.sparseDRdr()
 		DS = self.sparseDSds()
 
-		dEdR = -1*self.sparseOuterProdDiags(PAg, USUt.dot(self.PAx))
-		dEdr = np.zeros(len(self.mesh.red_r))
-		for i in range(len(dEdr)):
-			dEdr[i] = DR[i].multiply(dEdR).sum()
-		print(self.constTimeEr())
+		# dEdR = -1*self.sparseOuterProdDiags(PAg, USUt.dot(self.PAx))
+		# dEdr = np.zeros(len(self.mesh.red_r))
+		# for i in range(len(dEdr)):
+		# 	dEdr[i] = DR[i].multiply(dEdR).sum()
+		dEdr = self.constTimeEr()
 
 		FPAx = self.mesh.GF.dot(self.PAx)
 		dEdg = self.PAG.T.dot(PAg - FPAx)
@@ -1151,6 +1245,18 @@ class ARAP:
 			placeHolder = B.dot(blocked.dot(B.T))
 
 			diagD2R.append(placeHolder)
+		return diagD2R
+
+	def redSparseDDRdrdr(self):
+		diagD2R = []
+
+		for t in range(len(self.mesh.red_r)):
+			B = self.mesh.RotationBLOCK[t]
+			c, s = np.cos(self.mesh.red_r[t]), np.sin(self.mesh.red_r[t])
+			ddR_e = np.array(((-c,s), (-s, -c)))
+			blocked = sparse.kron(sparse.eye(3*len(self.mesh.r_cluster_element_map[t])), ddR_e)
+
+			diagD2R.append(blocked)
 		return diagD2R
 
 	def sparseDSds(self):
@@ -1802,7 +1908,7 @@ class Display:
 
 	def headless(self):
 		times = []
-		for i in range (1, 6):
+		for i in range (1, 7):
 			VTU = rectangle_mesh(20*i, 10*i, angle=np.pi/4, step=.1)
 			tr, tl, br, bl = get_corners(VTU[0], top=True, eps =1e-2)
 			to_fix = [tr, tl, br, bl]
@@ -1816,18 +1922,18 @@ class Display:
 			mesh.getGlobalF(False, True, False)
 			print(arap.dEdr())
 
-			# pr = cProfile.Profile()
-			# pr.enable()
+			pr = cProfile.Profile()
+			pr.enable()
 
-			# # time_integrator.move_g()
-			# print(arap.constTimeEr())
+			# time_integrator.move_g()
+			print(arap.constTimeEr())
 
-			# pr.disable()
-			# s = StringIO.StringIO()
-			# sortby = 'cumulative'
-			# ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-			# ps.print_stats(1)
-			# print(s.getvalue())
+			pr.disable()
+			s = StringIO.StringIO()
+			sortby = 'cumulative'
+			ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+			ps.print_stats(1)
+			print(s.getvalue())
 
 			timer = timeit.Timer(arap.constTimeEr)
 			timefor1 = timer.timeit(1)
