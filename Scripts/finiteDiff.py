@@ -3,7 +3,7 @@ from version2 import triangle_mesh, rectangle_mesh, torus_mesh, featherize,get_m
 
 def FiniteDifferencesARAP():
 	eps = 1e-6
-	iV, iT, iU = rectangle_mesh(2,1,angle = 0, step = .1)
+	iV, iT, iU = rectangle_mesh(20,10,angle = np.pi/4, step = .1)
 
 	its = 100
 	to_fix = get_min_max(iV, a=1)
@@ -11,7 +11,7 @@ def FiniteDifferencesARAP():
 	print(to_fix)
 	print(to_mov)
 	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=True)
-	mesh.red_r[0] += 0.1
+	# mesh.red_r[0] += 0.1
 	arap = ARAP(mesh, filen="/crap")	
 	mesh.getGlobalF()
 	# print(mesh.G.dot(mesh.z))
@@ -328,14 +328,14 @@ def FiniteDifferencesARAP():
 
 
 	# check_dEdg()
-	check_dEds()
+	# check_dEds()
 	# check_dEdr()
 
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
 	# check_Hessian_dEdgds()
-	# check_Hessian_dEdrds()
+	check_Hessian_dEdrds()
 	# check_dgds_drds()
 
 FiniteDifferencesARAP()

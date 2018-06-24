@@ -719,9 +719,10 @@ class ARAP:
 			K = AtPtPA 
 			num_modes = 3 #if AtPtPA.shape[0]/10< 70
 			eig, ev = general_eig_solve(A=K, B = M, modes=num_modes+2)
-			ev *= np.logical_or(1e-10>ev , ev<-1e-10)
+			print(ev.shape)
+			ev *= np.logical_or(1e-10<ev , ev<-1e-10)
 			eig = eig[2:]
-			ev = ev[:,2:]
+			ev = sparse.csc_matrix(ev[:,2:])
 			# ev = B.dot(ev)
 			############handle modes KKT solve#####
 			col1 = sparse.vstack((K, C))
@@ -729,6 +730,7 @@ class ARAP:
 			KKT = sparse.hstack((col1, col2))
 			eHconstrains = sparse.vstack((sparse.csc_matrix((K.shape[0], C.shape[0])), sparse.eye(C.shape[0])))
 			eH = sparse.linalg.spsolve(KKT.tocsc(), eHconstrains.tocsc())[0:K.shape[0]]
+			# eH *= np.logical_or(1e-10>eH , eH<-1e-10)
 			# eHFac =  scipy.sparse.linalg.splu(KKT.tocsc())
 			# eH = eHFac.solve(eHconstrains.toarray())[0:K.shape[0]]
 			#######################################
@@ -787,7 +789,8 @@ class ARAP:
 
 		self.constErTerms = []
 		self.constErTerms = []
-		self.constErsTerms = []
+		self.constErs_midTerms = []
+		self.constErs_Terms = []
 		self.setupConstErTerms()
 		self.setupConstEsTerms()
 		self.setupConstErsTerms()
@@ -920,24 +923,28 @@ class ARAP:
 
 		
 		###############ERS
-		odd, even = self.sparseErs_first(PAg)
-		for i in range(self.Ers_mid.shape[1]):
-			spR = DR[i]
-			odd_spR = spR.multiply(odd).sum(axis = 0) #6T x 6T (each 2 cols get summed to Ers_mid i,j)
-			even_spR = spR.multiply(even).sum(axis = 0)#6T x 6T (each 2 cols get summed to Ers_mid i+1,j)
-			odd_i = odd_spR.reshape((odd_spR.shape[1]/2, 2)).sum(axis=1)
-			even_i = even_spR.reshape((even_spR.shape[1]/2, 2)).sum(axis=1)
-			col_i = np.zeros((len(PAg),1))
-			col_i[2*np.arange(self.Ers_mid.shape[0]/2)] = odd_i
-			col_i[2*np.arange(self.Ers_mid.shape[0]/2)+1] = even_i
-			self.Ers_mid[:, i]   = col_i[:,0]
+		# odd, even = self.sparseErs_first(PAg)
+		# for i in range(self.Ers_mid.shape[1]):
+		# 	B = self.mesh.RotationBLOCK[i]
+		# 	spR = DR[i]
+		# 	odd_spR = spR.multiply(odd).sum(axis = 0) #6T x 6T (each 2 cols get summed to Ers_mid i,j)
+		# 	even_spR = spR.multiply(even).sum(axis = 0)#6T x 6T (each 2 cols get summed to Ers_mid i+1,j)
+		# 	odd_i = odd_spR.reshape((odd_spR.shape[1]/2, 2)).sum(axis=1)
+		# 	even_i = even_spR.reshape((even_spR.shape[1]/2, 2)).sum(axis=1)
+		# 	col_i = np.zeros((len(PAg),1))
+		# 	col_i[2*np.arange(self.Ers_mid.shape[0]/2)] = odd_i
+		# 	col_i[2*np.arange(self.Ers_mid.shape[0]/2)+1] = even_i
+		
+		# 	self.Ers_mid[:, i]   = col_i[:,0]
 
-		print(self.constTimeErs_mid())
-		second = self.sparseErs_second(UtPAx, self.Ers_mid)
-
-		for i in range(self.Ers.shape[0]):
-				for j in range(self.Ers.shape[1]):
-					self.Ers[i,j] = DS[j].multiply(second[i]).sum()
+		# second = self.sparseErs_second(UtPAx, self.Ers_mid)
+		# for i in range(self.Ers.shape[0]):
+		# 		for j in range(self.Ers.shape[1]):
+		# 			self.Ers[i,j] = DS[j].multiply(second[i]).sum()
+		
+		mid = self.constTimeErs_mid()
+		self.Ers = self.constTimeErs_second(mid)
+	
 
 		
 		# print("TIME: ", (a2-a1).microseconds, (a3-a2).microseconds, (a4-a3).microseconds, (a5-a4).microseconds)
@@ -1083,29 +1090,77 @@ class ARAP:
 
 		# Wr = np.vstack(wr_cols).T
 		def getOddEvenUMatrix(BUB):
-			oddU = np.zeros((2, BUB.shape[0]))
-			evenU = np.zeros((2, BUB.shape[0]))
-			for i in range(BUB.shape[0]):
-				u11 = self.mesh.GU[i,i]
-				u12 = self.mesh.GU[i, i+1]
-				u21 = self.mesh.GU[i+1,i]
-				u22 = self.mesh.GU[i+1, i+1]
-				oddU[0,i] = u11
-				oddU[1,i] = u12
-				oddU[0,i+1] = u11
-				oddU[1,i+1] = u12
+			oddU = np.zeros((BUB.shape[0], 2))
+			evenU = np.zeros((BUB.shape[0], 2))
+			for i in range(BUB.shape[0]/2):
+				u11 = self.mesh.GU[2*i, 2*i]
+				u12 = self.mesh.GU[2*i, 2*i+1]
+				u21 = self.mesh.GU[2*i+1, 2*i]
+				u22 = self.mesh.GU[2*i+1, 2*i+1]
+				oddU[2*i, 0] = u11
+				oddU[2*i, 1] = u12
+				oddU[2*i+1, 0] = u12
+				oddU[2*i+1, 1] = u11
 
+				evenU[2*i, 0] = u21
+				evenU[2*i, 1] = -u22
+				evenU[2*i+1, 0] = u22
+				evenU[2*i+1, 1] = -u21
+				
+			return oddU, evenU
+		
 
 		for i in range(len(self.mesh.red_r)):
-			B = self.RotationBLOCK[i]
-			BPAG = B.T.dot(self.PAG)
-			c, s = np.cos(self.mesh.red_r[i]), np.sin(self.mesh.red_r[i])
-			c1, c2 = -s, -c
+			B = self.mesh.RotationBLOCK[i]
+			BPAG = B.T.dot(self.PAG) 
+			BPAx = B.T.dot(self.PAx)
+			c = np.array([-np.sin(self.mesh.red_r[i]), -np.cos(self.mesh.red_r[i])])
 			BtUB = B.T.dot(self.mesh.GU.dot(B))
+			oddU, evenU = getOddEvenUMatrix(BtUB)
 
-
-		exit()
+			spdiag_oddcU = sparse.diags(oddU.dot(c)).tocsc()
+			spdiag_evencU = sparse.diags(evenU.dot(c)).tocsc()
+			oddcUPAG = spdiag_oddcU*BPAG
+			evencUPAG = spdiag_evencU*BPAG
+			oddcUPAx = spdiag_oddcU.dot(BPAx)
+			evencUPAx = spdiag_evencU.dot(BPAx)
+			self.constErs_midTerms.append((B.dot(oddcUPAG), B.dot(evencUPAG), B.dot(oddcUPAx), B.dot(evencUPAx) ))
 		
+		UtPAx = self.mesh.GU.T.dot(self.PAx)
+		UtPAxDS = np.zeros((len(UtPAx), len(self.mesh.red_s)))
+		for t in range(len(self.mesh.red_s)/3):
+				sWx = self.mesh.sW[:,3*t]
+				sWy = self.mesh.sW[:,3*t+1]
+				sWo = self.mesh.sW[:,3*t+2]
+
+				#for each handle, figure out the weight on other elements
+				diag_x = np.kron(sWx[3*np.arange(len(sWx)/3)], np.array([1,0,1,0,1,0]))
+				diag_y = np.kron(sWy[3*np.arange(len(sWy)/3)+1], np.array([0,1,0,1,0,1]))
+				diag_o = np.kron(sWo[3*np.arange(len(sWo)/3)+2], np.array([1,0,1,0,1,0]))
+				UtPAxDS[:,3*t+0] += np.multiply(diag_x, UtPAx)
+				UtPAxDS[:,3*t+1] += np.multiply(diag_y, UtPAx)
+				UtPAxDS[1:,3*t+2] += np.multiply(diag_o[:-1], UtPAx[:-1]) 
+				UtPAxDS[:-1, 3*t+2] += np.multiply(diag_o[:-1], UtPAx[1:])
+		self.constErs_Terms.append(UtPAxDS)
+
+	def constTimeErs_mid(self):
+		Ers_mid = np.zeros(self.Ers_mid.shape)
+		for i in range(Ers_mid.shape[1]):
+			cUPAG = self.constErs_midTerms[i]
+			odd_spR = cUPAG[0].dot(self.mesh.z) + cUPAG[2]
+			even_spR = cUPAG[1].dot(self.mesh.z) + cUPAG[3]
+			odd_i = odd_spR.reshape((odd_spR.shape[0]/2, 2)).sum(axis=1)
+			even_i = even_spR.reshape((even_spR.shape[0]/2, 2)).sum(axis=1)
+
+			col_i = np.zeros(Ers_mid.shape[0])
+			col_i[2*np.arange(Ers_mid.shape[0]/2)] = odd_i
+			col_i[2*np.arange(Ers_mid.shape[0]/2)+1] = even_i
+			Ers_mid[:, i]   = col_i
+
+		return Ers_mid
+	def constTimeErs_second(self, mid):
+		Ers = mid.T.dot(self.constErs_Terms[0])
+		return Ers
 
 	def constTimeErr(self):
 		rDDR = self.redSparseDDRdrdr()
