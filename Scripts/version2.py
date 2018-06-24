@@ -717,7 +717,7 @@ class ARAP:
 			# N,n = self.mesh.getN()
 			M = self.mesh.getMassMatrix()
 			K = AtPtPA 
-			num_modes = 100 #if AtPtPA.shape[0]/10< 70
+			num_modes = 3 #if AtPtPA.shape[0]/10< 70
 			eig, ev = general_eig_solve(A=K, B = M, modes=num_modes+2)
 			print(ev.shape)
 			ev *= np.logical_or(1e-10<ev , ev<-1e-10)
@@ -1142,21 +1142,30 @@ class ARAP:
 		self.constEgsTerms.append((leftColP.dot(self.PAG), rightColP.dot(self.PAG), leftColU.dot(UU.dot(Wr)), rightColU.dot(UU.dot(Wr))))
 
 	def constTimeEgs(self):
+		aa = datetime.datetime.now()
 		c_vec = []
 		for i in range(len(self.mesh.red_r)):
 			c1, c2 = np.cos(self.mesh.red_r[i]), -np.sin(self.mesh.red_r[i])
 			c_vec.append(c1)
 			c_vec.append(c2)
 		c = np.array(c_vec)
-		leftRU = sparse.diags(self.constEgsTerms[0][2].dot(c_vec)).tocsc()
-		rightRU = sparse.diags(self.constEgsTerms[0][3].dot(c_vec)).tocsc()
+
+		bb = datetime.datetime.now()
+
+		leftRU = self.constEgsTerms[0][2].dot(c_vec)
+		rightRU = self.constEgsTerms[0][3].dot(c_vec)
+		cc = datetime.datetime.now()
 
 		leftPAG = self.constEgsTerms[0][0]
 		rightPAG = self.constEgsTerms[0][1]
-		left = leftRU.dot(leftPAG)
-		right = rightRU.dot(rightPAG)
+		dd = datetime.datetime.now()
+		left = leftPAG.T.multiply(leftRU)
+		right = rightPAG.T.multiply(rightRU)
 		UtRtPAG = left+right
-		Egs = UtRtPAG.T.dot(self.constErs_Terms[0])
+		ee = datetime.datetime.now()
+		Egs = UtRtPAG.dot(self.constErs_Terms[0])
+		ff = datetime.datetime.now()
+		print("TIMES: ", (bb-aa).microseconds, (cc-bb).microseconds, (dd-cc).microseconds, (ee-dd).microseconds, (ff-ee).microseconds)
 		return Egs
 
 
@@ -2015,8 +2024,8 @@ class Display:
 		print("TIMES")
 		print(times)
 
-d = Display()
+# d = Display()
 # d.display()
 # d.WiggleModes()
 # d.checkModes()
-d.headless()
+# d.headless()
