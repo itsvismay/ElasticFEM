@@ -887,10 +887,10 @@ class ARAP:
 
 	def Hessians(self, useSparse=True):
 		print("			Hessians")
-		# PAg = self.PA.dot(self.mesh.getg())
-		# USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
-		# USUtPAx = USUt.dot(self.PAx)
-		# UtPAx = self.mesh.GU.T.dot(self.PAx)
+		PAg = self.PA.dot(self.mesh.getg())
+		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
+		USUtPAx = USUt.dot(self.PAx)
+		UtPAx = self.mesh.GU.T.dot(self.PAx)
 		# r_size = len(self.mesh.red_r)
 		# z_size = len(self.mesh.z)
 		# s_size = len(self.mesh.red_s)
@@ -917,15 +917,16 @@ class ARAP:
 		# self.Err = self.constTimeErr()
 		
 		# ###############EGS
-		# PAGtRU = self.PAG.T.dot(self.mesh.GR.dot(self.mesh.GU))
-		# d_gEgdS = self.sparseEgs_first(-1*PAGtRU, UtPAx)
-		# for i in range(self.Egs.shape[0]):
-		# 	for j in range(self.Egs.shape[1]):
-		# 		self.Egs[i,j] = DS[j].multiply(d_gEgdS[i]).sum()
+		PAGtRU = self.PAG.T.dot(self.mesh.GR.dot(self.mesh.GU))
+		d_gEgdS = self.sparseEgs_first(-1*PAGtRU, UtPAx)
+		for i in range(self.Egs.shape[0]):
+			for j in range(self.Egs.shape[1]):
+				self.Egs[i,j] = DS[j].multiply(d_gEgdS[i]).sum()
 
-		self.Egs = self.constTimeEgs()
-		# print(self.Egs)
-		# exit()
+		print(self.constTimeEgs())
+		print("")
+		print(self.Egs)
+		exit()
 
 		# mid = self.constTimeErs_mid()
 		# self.Ers = self.constTimeErs_second(mid)
@@ -1124,23 +1125,45 @@ class ARAP:
 		Wr = np.vstack(wr_cols).T
 
 		UU = sparse.lil_matrix((2*len(self.mesh.T), 2*len(self.mesh.T)))
+		zsize = len(self.mesh.z)
+		VPAG = sparse.lil_matrix((6*len(self.mesh.T)*len(self.mesh.z), 6*len(self.mesh.T)))
 		for t in range(len(self.mesh.T)):
 			u = self.mesh.getU(t)
-			u1, u2 = u[0,0], -u[0,1]
+			u1, u2 = u[0,0], u[0,1]
 
-			UU[2*t, 2*t]    = u1
-			UU[2*t, 2*t+1]  = -u2
-			UU[2*t+1, 2*t]  = -u2
-			UU[2*t+1, 2*t+1]= -u1 
+			UU[2*t, 2*t]    = -u1
+			UU[2*t, 2*t+1]  = u2
+			UU[2*t+1, 2*t]  = u2
+			UU[2*t+1, 2*t+1]= u1 
 
-		leftColU  = sparse.kron(sparse.eye(len(self.mesh.T)), np.array([[1,0],[0,-1],[1,0],[0,-1],[1,0],[0,-1]])) #sparse.lil_matrix((6*len(self.mesh.T), 2*len(self.mesh.T)))
-		rightColU = sparse.kron(sparse.eye(len(self.mesh.T)), np.array([[0,1],[1,0],[0,1],[1,0],[0,1],[1,0]])) #sparse.lil_matrix((6*len(self.mesh.T), 2*len(self.mesh.T)))
+	
+			VPAG[6*t*zsize:6*t*zsize+zsize, 6*t] = self.PAG[6*t,:].T#col top left
+			VPAG[6*t*zsize:6*t*zsize+zsize, 6*t+1] = self.PAG[6*t+1,:].T#col top left
+			VPAG[6*t*zsize+zsize:6*t*zsize+2*zsize, 6*t] = self.PAG[6*t+1,:].T#col top left
+			VPAG[6*t*zsize+zsize:6*t*zsize+2*zsize, 6*t+1] = -self.PAG[6*t,:].T#col top left
+
+			VPAG[6*t*zsize+2*zsize:6*t*zsize+3*zsize, 6*t+2] = self.PAG[6*t+2,:].T#col top left
+			VPAG[6*t*zsize+2*zsize:6*t*zsize+3*zsize, 6*t+3] = self.PAG[6*t+3,:].T#col top left
+			VPAG[6*t*zsize+3*zsize:6*t*zsize+4*zsize, 6*t+2] = self.PAG[6*t+3,:].T#col top left
+			VPAG[6*t*zsize+3*zsize:6*t*zsize+4*zsize, 6*t+3] =-self.PAG[6*t+2,:].T#col top left
+
+			VPAG[6*t*zsize+4*zsize:6*t*zsize+5*zsize, 6*t+4] = self.PAG[6*t+4,:].T#col top left
+			VPAG[6*t*zsize+4*zsize:6*t*zsize+5*zsize, 6*t+5] = self.PAG[6*t+5,:].T#col top left
+			VPAG[6*t*zsize+5*zsize:6*t*zsize+6*zsize, 6*t+4] = self.PAG[6*t+5,:].T#col top left
+			VPAG[6*t*zsize+5*zsize:6*t*zsize+6*zsize, 6*t+5] =-self.PAG[6*t+4,:].T#col top left
+			
+
+		UWr = UU.dot(Wr)
+		repeat3 = sparse.kron(sparse.eye(len(self.mesh.T)), np.array([[1,0],[0,1], [1,0],[0,1], [1,0],[0,1]]))
+		repeatUWr = repeat3.dot(UWr)
+		PAG_UWr = VPAG.dot(repeatUWr)
+
+		for l in range(len(self.mesh.z)):
+			tokron = np.zeros(len(self.mesh.z))
+			tokron[l] = 1
+			re_arrange_vector = sparse.kron(sparse.eye(6*len(self.mesh.T)), tokron)
+			self.constEgsTerms.append(re_arrange_vector.dot(PAG_UWr))
 		
-		leftColP = sparse.kron(sparse.eye(3*len(self.mesh.T)), np.array([[1,0],[1,0]]))
-		rightColP = sparse.kron(sparse.eye(3*len(self.mesh.T)), np.array([[0,1],[0,1]]))
-
-		self.constEgsTerms.append((leftColP.dot(self.PAG), rightColP.dot(self.PAG), leftColU.dot(UU.dot(Wr)), rightColU.dot(UU.dot(Wr))))
-
 	def constTimeEgs(self):
 		aa = datetime.datetime.now()
 		c_vec = []
@@ -1151,21 +1174,13 @@ class ARAP:
 		c = np.array(c_vec)
 
 		bb = datetime.datetime.now()
-
-		leftRU = self.constEgsTerms[0][2].dot(c_vec)
-		rightRU = self.constEgsTerms[0][3].dot(c_vec)
+		Egs = np.zeros((len(self.mesh.z), len(self.mesh.red_s)))
 		cc = datetime.datetime.now()
+		for i in range(len(self.mesh.z)):
+			UtRtPAGi = self.constEgsTerms[i].dot(c_vec)
+			Egs[i,:] = UtRtPAGi.T.dot(self.constErs_Terms[0])
 
-		leftPAG = self.constEgsTerms[0][0]
-		rightPAG = self.constEgsTerms[0][1]
-		dd = datetime.datetime.now()
-		left = leftPAG.T.multiply(leftRU)
-		right = rightPAG.T.multiply(rightRU)
-		UtRtPAG = left+right
-		ee = datetime.datetime.now()
-		Egs = UtRtPAG.dot(self.constErs_Terms[0])
-		ff = datetime.datetime.now()
-		print("TIMES: ", (bb-aa).microseconds, (cc-bb).microseconds, (dd-cc).microseconds, (ee-dd).microseconds, (ff-ee).microseconds)
+		print("TIMES: ", (bb-aa).microseconds, (cc-bb).microseconds)
 		return Egs
 
 
