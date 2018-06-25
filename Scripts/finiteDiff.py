@@ -276,17 +276,16 @@ def FiniteDifferencesARAP():
 		q0 = np.zeros(len(mesh.q)) + mesh.q
 		for i in range(len(mesh.red_s)):
 			mesh.z = np.zeros(len(mesh.z)) + z0
-			mesh.g = np.zeros(len(mesh.g)) + g0
 
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
 
 			arap.iterate()
 			drds_left = np.array(mesh.red_r)
-			if(mesh.reduced_g):
-				dgds_left =mesh.z + np.zeros(len(mesh.z))
-			else:
-				dgds_left =mesh.g + np.zeros(len(mesh.g))
+			# if(mesh.reduced_g):
+			dgds_left =mesh.z + np.zeros(len(mesh.z))
+			# else:
+			# 	dgds_left =mesh.g + np.zeros(len(mesh.g))
 
 			mesh.red_s[i] -= 0.5*eps
 			mesh.getGlobalF()
@@ -296,10 +295,10 @@ def FiniteDifferencesARAP():
 			mesh.getGlobalF()
 			arap.iterate()
 			drds_right = np.array(mesh.red_r)
-			if(mesh.reduced_g):
-				dgds_right =mesh.z + np.zeros(len(mesh.z))
-			else:
-				dgds_right =mesh.g + np.zeros(len(mesh.g))
+			# if(mesh.reduced_g):
+			dgds_right =mesh.z + np.zeros(len(mesh.z))
+			# else:
+			# 	dgds_right =mesh.g + np.zeros(len(mesh.g))
 
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
@@ -334,7 +333,7 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
-	check_Hessian_dEdgds()
+	# check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
 	# check_dgds_drds()
 
