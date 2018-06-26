@@ -2,7 +2,7 @@ import numpy as np
 from version2 import triangle_mesh, rectangle_mesh, torus_mesh, featherize,get_min, get_max, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
-	eps = 1e-6
+	eps = 1e-2
 	iV, iT, iU = rectangle_mesh(2,1,angle = np.pi/4, step = .1)
 
 	its = 100
@@ -10,7 +10,7 @@ def FiniteDifferencesARAP():
 	to_mov = get_min(iV, a =1)
 	print(to_fix)
 	print(to_mov)
-	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=True)
+	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=False)
 	# mesh.red_r[0] += 0.1
 	arap = ARAP(mesh, filen="/crap")	
 	mesh.getGlobalF()
@@ -34,8 +34,8 @@ def FiniteDifferencesARAP():
 			z[i] += 0.5*eps
 			dEdz.append((Eleft - Eright)/eps)
 
-		# print(np.array(dEdz))
-		# print(real)
+		print(np.array(dEdz))
+		print(real)
 		print("Eg ", np.linalg.norm(real - np.array(dEdz)))
 
 	def check_dEds():
@@ -327,7 +327,7 @@ def FiniteDifferencesARAP():
 
 
 	# check_dEdg()
-	# check_dEds()
+	check_dEds()
 	# check_dEdr()
 
 	# check_Hessian_dEdgdg()
