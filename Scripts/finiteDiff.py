@@ -2,16 +2,16 @@ import numpy as np
 from version2 import triangle_mesh, rectangle_mesh, torus_mesh, featherize,get_min, get_max, get_min_max, NeohookeanElastic, ARAP, Mesh
 
 def FiniteDifferencesARAP():
-	eps = 1e-6
-	iV, iT, iU = rectangle_mesh(2,2,angle = 0, step = .1)
+	eps = 1e-2
+	iV, iT, iU = rectangle_mesh(2,1,angle = np.pi/4, step = .1)
 
 	its = 100
 	to_fix = get_min_max(iV, a=1)
 	to_mov = get_min(iV, a =1)
 	print(to_fix)
 	print(to_mov)
-	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=True)
-	
+	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=False)
+	# mesh.red_r[0] += 0.1
 	arap = ARAP(mesh, filen="/crap")	
 	mesh.getGlobalF()
 	# print(mesh.G.dot(mesh.z))
@@ -34,8 +34,8 @@ def FiniteDifferencesARAP():
 			z[i] += 0.5*eps
 			dEdz.append((Eleft - Eright)/eps)
 
-		# print(np.array(dEdz))
-		# print(real)
+		print(np.array(dEdz))
+		print(real)
 		print("Eg ", np.linalg.norm(real - np.array(dEdz)))
 
 	def check_dEds():
@@ -76,6 +76,8 @@ def FiniteDifferencesARAP():
 
 			dEdr.append((Eleft - Eright)/eps)
 
+		print(realdEdr)
+		print(np.array(dEdr))
 		print("Er ", np.sum(np.array(dEdr) - realdEdr))
 
 	def check_Hessian_dEdgdg():
@@ -134,6 +136,7 @@ def FiniteDifferencesARAP():
 
 				Erg[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 
+		# print(real)
 		print("Erg ",np.sum(np.array(Erg) - real))
 
 	def check_Hessian_dEdrdr():
@@ -273,17 +276,16 @@ def FiniteDifferencesARAP():
 		q0 = np.zeros(len(mesh.q)) + mesh.q
 		for i in range(len(mesh.red_s)):
 			mesh.z = np.zeros(len(mesh.z)) + z0
-			mesh.g = np.zeros(len(mesh.g)) + g0
 
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
 
 			arap.iterate()
 			drds_left = np.array(mesh.red_r)
-			if(mesh.reduced_g):
-				dgds_left =mesh.z + np.zeros(len(mesh.z))
-			else:
-				dgds_left =mesh.g + np.zeros(len(mesh.g))
+			# if(mesh.reduced_g):
+			dgds_left =mesh.z + np.zeros(len(mesh.z))
+			# else:
+			# 	dgds_left =mesh.g + np.zeros(len(mesh.g))
 
 			mesh.red_s[i] -= 0.5*eps
 			mesh.getGlobalF()
@@ -293,10 +295,10 @@ def FiniteDifferencesARAP():
 			mesh.getGlobalF()
 			arap.iterate()
 			drds_right = np.array(mesh.red_r)
-			if(mesh.reduced_g):
-				dgds_right =mesh.z + np.zeros(len(mesh.z))
-			else:
-				dgds_right =mesh.g + np.zeros(len(mesh.g))
+			# if(mesh.reduced_g):
+			dgds_right =mesh.z + np.zeros(len(mesh.z))
+			# else:
+			# 	dgds_right =mesh.g + np.zeros(len(mesh.g))
 
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
@@ -309,11 +311,11 @@ def FiniteDifferencesARAP():
 				
 
 		print("FD")
-		print(np.array(dgds).T)
+		print(np.array(dgds))
 		print(np.array(drds).T)
 		print("")
 		print("real")
-		print(real1)
+		print(real1.T)
 		print(real2)
 		print("DIFF")
 		# print("T: ", len(mesh.T))
@@ -331,9 +333,9 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
-	# check_Hessian_dEdgds()
+	check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
-	check_dgds_drds()
+	# check_dgds_drds()
 
 FiniteDifferencesARAP()
 
@@ -346,7 +348,7 @@ def FiniteDifferencesElasticity():
 	to_mov = get_min(iV, a =1)
 	print(to_fix)
 	print(to_mov)
-	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=False)
+	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=True)
 	# print(mesh.fixed)
 	
 	arap = ARAP(mesh)	
@@ -382,7 +384,10 @@ def FiniteDifferencesElasticity():
 
 		dEgds = []
 		for i in range(len(mesh.red_s)):
-			mesh.g = np.zeros(len(mesh.g)) + mesh.x0
+			if mesh.reduced_g==False:
+				mesh.g = np.zeros(len(mesh.g))
+			else:
+				mesh.z = np.zeros(len(mesh.z))
 			
 			mesh.red_s[i] += eps
 			mesh.getGlobalF(updateR=False, updateS=True)
@@ -420,19 +425,5 @@ def FiniteDifferencesElasticity():
 	# check_PrinStretchForce()
 	# check_gravityForce()
 	# check_muscleForce()
-	# test()
 
 # FiniteDifferencesElasticity()
-
-def testPA():
-	eps = 1e-6
-	iV, iT, iU = rectangle_mesh(1,1,angle = 0, step = .1)
-	# iV, iT, iU = triangle_mesh()
-
-	mesh = Mesh((iV,iT, iU), ito_fix=[], ito_mov=[], red_g=True)
-
-	print(mesh.getP().toarray())
-	# print(mesh.getA().toarray())
-	print(mesh.getA().dot(mesh.x0))
-
-# testPA()
