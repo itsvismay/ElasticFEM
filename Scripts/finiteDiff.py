@@ -327,13 +327,13 @@ def FiniteDifferencesARAP():
 
 
 	# check_dEdg()
-	check_dEds()
+	# check_dEds()
 	# check_dEdr()
 
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
-	# check_Hessian_dEdgds()
+	check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
 	# check_dgds_drds()
 

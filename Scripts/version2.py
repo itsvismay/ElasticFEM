@@ -712,7 +712,7 @@ class ARAP:
 			# N,n = self.mesh.getN()
 			M = self.mesh.getMassMatrix()
 			K = AtPtPA 
-			num_modes = 3 #if AtPtPA.shape[0]/10< 70
+			num_modes = 100 #if AtPtPA.shape[0]/10< 70
 			eig, ev = general_eig_solve(A=K, B = M, modes=num_modes+2)
 			print(ev.shape)
 			ev *= np.logical_or(1e-10<ev , ev<-1e-10)
@@ -885,6 +885,7 @@ class ARAP:
 		# z_size = len(self.mesh.z)
 		# s_size = len(self.mesh.red_s)
 		# DR = self.sparseDRdr()
+		# DS = self.sparseDSds()
 
 		Ezz = self.Egg
 		
@@ -893,7 +894,7 @@ class ARAP:
 		# # for j in range(self.Erg.shape[1]):
 		# # 	for i in range(self.Erg.shape[0]):
 		# # 		self.Erg[i,j] = DR[j].multiply(sample[i]).sum()
-		self.Erg = self.constTimeErz()
+		# self.Erg = self.constTimeErz()
 
 
 		###############ERR
@@ -903,7 +904,7 @@ class ARAP:
 		# 	spD = DDR[i]
 		# 	if spD.nnz>0:
 		# 		self.Err[i,i] = spD.multiply(negPAg_USUtPAx).sum()
-		self.Err = self.constTimeErr()
+		# self.Err = self.constTimeErr()
 		
 		# ###############EGS
 		# PAGtRU = self.PAG.T.dot(self.mesh.GR.dot(self.mesh.GU))
@@ -912,8 +913,7 @@ class ARAP:
 		# 	for j in range(self.Egs.shape[1]):
 		# 		self.Egs[i,j] = DS[j].multiply(d_gEgdS[i]).sum()
 
-		self.Egs = self.constTimeEgs()
-
+		# self.Egs = self.constTimeEgs()
 		mid = self.constTimeErs_mid()
 		self.Ers = self.constTimeErs_second(mid)
 			
@@ -1121,30 +1121,28 @@ class ARAP:
 			UU[2*t+1, 2*t]  = u2
 			UU[2*t+1, 2*t+1]= u1 
 
+		UWr = UU.dot(Wr)
+		repeat3 = sparse.kron(sparse.eye(len(self.mesh.T)), np.array([[1,0],[0,1], [1,0],[0,1], [1,0],[0,1]]))
+		repeatUWr = repeat3.dot(UWr)
 		
+		#This is the tricky part
 		PAQ = self.PAG.toarray()
 		b = np.array([[0,1],[-1,0]])
 		blocks = []
-		for t in range(6*len(self.mesh.T)/2):
-			tophalf = PAQ[2*t:2*t+2,:].T
-			bottomhalf = b.dot(PAQ[2*t:2*t+2,:]).T
-			block = np.vstack((tophalf, bottomhalf))
-			blocks.append(block)
-		VPAG = sparse.block_diag(blocks)
+		_6T_ = 6*len(self.mesh.T)
+		for m in range(len(self.mesh.z)):
+			evens = PAQ[2*np.arange(_6T_/2) , m] #first, third, fifth, etc...
+			diag = np.kron(evens, np.array([1,-1]))
+
+			odds = PAQ[2*np.arange(_6T_/2)+1, m]
+			off_diag = np.kron(odds, np.array([1,0]))
+			
+			PAGm = sparse.diags([off_diag[:-1], diag, off_diag[:-1]], [-1,0,1])
+			PAGmUWrUtPAxdS = PAGm.dot(repeatUWr).T.dot(self.constErs_Terms[0])
+			self.constEgsTerms.append(PAGmUWrUtPAxdS)
 		
-		UWr = UU.dot(Wr)
-		repeat3 = sparse.kron(sparse.eye(len(self.mesh.T)), np.array([[1,0],[0,1], [1,0],[0,1], [1,0],[0,1]]))
-		repeatUWr = repeat3.dot(UU)
-		PAG_UWr = VPAG.dot(repeatUWr)
-		exit()
-		for l in range(len(self.mesh.z)):
-			tokron = np.zeros(len(self.mesh.z))
-			tokron[l] = 1
-			re_arrange_vector = sparse.kron(sparse.eye(6*len(self.mesh.T)), tokron)
-			self.constEgsTerms.append(re_arrange_vector.dot(PAG_UWr))
 		
 	def constTimeEgs(self):
-		aa = datetime.datetime.now()
 		c_vec = []
 		for i in range(len(self.mesh.red_r)):
 			c1, c2 = np.cos(self.mesh.red_r[i]), -np.sin(self.mesh.red_r[i])
@@ -1152,13 +1150,15 @@ class ARAP:
 			c_vec.append(c2)
 		c = np.array(c_vec)
 
-		bb = datetime.datetime.now()
+		aa = datetime.datetime.now()
 		Egs = np.zeros((len(self.mesh.z), len(self.mesh.red_s)))
-		cc = datetime.datetime.now()
+		bb = datetime.datetime.now()
 		for i in range(len(self.mesh.z)):
-			UtRtPAGi = self.constEgsTerms[i].dot(c_vec)
-			Egs[i,:] = UtRtPAGi.T.dot(self.constErs_Terms[0])
+			UtRtPAGi = self.constEgsTerms[i].T.dot(c_vec)
+			Egs[i,:] = UtRtPAGi
 
+		cc = datetime.datetime.now()
+		print("TIME, ", (bb-aa).microseconds, (cc-bb).microseconds)
 		return Egs
 
 	def constTimeErs_mid(self):
@@ -1953,7 +1953,7 @@ class Display:
 
 	def headless(self):
 		times = []
-		for i in range (4, 9):
+		for i in range (1, 9):
 			VTU = rectangle_mesh(20*i, 10*i, angle=np.pi/4, step=.1)
 			tr, tl, br, bl = get_corners(VTU[0], top=True, eps =1e-2)
 			to_fix = [tr, tl, br, bl]
@@ -1988,6 +1988,6 @@ class Display:
 		print(times)
 
 d = Display()
-d.display()
+# d.display()
 # d.WiggleModes()
-# d.headless()
+d.headless()
