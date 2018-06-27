@@ -61,7 +61,7 @@ def feather_muscle1_test_setup(x = 3, y = 2):
 
 	return (V, T, u), to_fix
 
-def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 10, p2 = 5):
+def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 100, p2 = 50):
 	step = 0.1
 	V = []
 	T = []
@@ -112,14 +112,18 @@ def modal_analysis(mesh):
 
 	ev *= np.logical_or(1e-10<ev , ev<-1e-10)
 	eig = eig[2:]
-	ev = sparse.csc_matrix(ev[:,2:])
+	ev = ev[:,2:]
+	print(ev.shape, eig.shape)
+	ev = np.divide(ev, eig*eig)
+	print(ev.shape)
+	ev = sparse.csc_matrix(ev)
 	############handle modes KKT solve#####
 	col1 = sparse.vstack((K, C))
 	col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
 	KKT = sparse.hstack((col1, col2))
 	eHconstrains = sparse.vstack((sparse.csc_matrix((K.shape[0], C.shape[0])), sparse.eye(C.shape[0])))
 	eH = sparse.linalg.spsolve(KKT.tocsc(), eHconstrains.tocsc())[0:K.shape[0]]
-	# eH *= np.logical_or(1e-10>eH , eH<-1e-10)
+	# eH *= np.logical_or(1e-10<eH , eH<-1e-10)
 	# eHFac =  scipy.sparse.linalg.splu(KKT.tocsc())
 	# eH = eHFac.solve(eHconstrains.toarray())[0:K.shape[0]]
 	#######################################
@@ -134,23 +138,22 @@ def modal_analysis(mesh):
 def k_means_rclustering(mesh, mode=0):
 	A = mesh.getA()
 	C = mesh.getC()
-	mesh.z = np.zeros(len(mesh.z))
-	mesh.z[mode] = 1
-	CAG = C.dot(A.dot(mesh.getg()))#scipy wants data in format: observations(elem) x features (modes)
-	Data = np.zeros((len(mesh.T), 2))
+	G = np.add(mesh.G.toarray().T, mesh.x0)
+	#all modes at once
+	CAG = C.dot(A.dot(G.T))#scipy wants data in format: observations(elem) x features (modes)
+
+	Data = np.zeros((len(mesh.T), 2*mesh.G.shape[1]))
 	# print(CAG.shape, Data.shape)
 	for i in range(len(mesh.T)):
-		point = CAG[6*i:6*i+2]
+		point = CAG[6*i:6*i+2, :]
 		Data[i,:] = np.ravel(point)
 
 
-	centroids,_ = kmeans(Data, 4)
+	centroids,_ = kmeans(Data, 8)
 	idx,_ = vq(Data,centroids)
 	print(idx.shape, Data.shape, centroids.shape)
 	print(len(mesh.T))
 	return idx
-
-
 
 class Preprocessing:
 	def __init__(self, _VT):
@@ -199,7 +202,9 @@ class Preprocessing:
 		black = igl.eigen.MatrixXd([[0,0,0]])
 		blue = igl.eigen.MatrixXd([[0,0,1]])
 		white = igl.eigen.MatrixXd([[1,1,1]])
-		
+
+		randc = [[random.uniform(0,1), random.uniform(0,1), random.uniform(0,1)] for i in range(10)]
+
 		viewer = igl.glfw.Viewer()
 		def mouse_up(viewer, btn, bbb):
 			print("up")
@@ -258,12 +263,7 @@ class Preprocessing:
 				c = get_centroid(p1, p2, p3) 
 				color = black
 				if (self.rClusters != []):
-					if (self.rClusters[i]==0):
-						color = purple
-					if (self.rClusters[i]==1):
-						color = blue
-					if (self.rClusters[i]==2):
-						color = white
+					color = igl.eigen.MatrixXd(np.array([randc[self.rClusters[i]]]))
 
 				viewer.data().add_points(igl.eigen.MatrixXd(np.array([c])),  color)
 			
