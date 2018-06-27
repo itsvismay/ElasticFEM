@@ -1,4 +1,5 @@
 #helper functions
+
 import numpy as np
 import scipy
 from scipy.spatial import Delaunay
@@ -79,20 +80,6 @@ def get_area(p1, p2, p3):
 def get_centroid(p1, p2, p3):
 	return (np.array(p1)+np.array(p2)+np.array(p3))/3.0
 
-def rectangle_mesh(x, y, angle=0, step=1):
-	V = []
-	for i in range(0,x+1):
-		for j in range(0,y+1):
-			V.append([step*i, step*j])
-	# V.append([0,0])
-	# V.append([step*x, 0])
-	# V.append([0, step*y])
-	# V.append([step*x, step*y])
-	# for i in range(100):
-	# 	V.append([random.uniform(0,step*x), random.uniform(0, step*y)])
-	T = Delaunay(V).simplices
-	return V, T, np.array([angle for i in range(len(T))])
-
 def torus_mesh(r1, r2, r3, step):
 	V = []
 	T = []
@@ -115,23 +102,6 @@ def triangle_mesh():
 	V = [[0,0], [1,0], [1,1]]
 	T = [[0,1,2]]
 	return V, T, [0]
-
-def featherize(x, y, step=1):
-	V,T,U = rectangle_mesh(x, y, step)
-	# V,T, U = torus_mesh(5, 4, 3, step)
-
-	half_x = step*(x)/2.0
-	half_y = step*(y)/2.0
-	u = []
-	for i in range(len(T)):
-		e = T[i]
-		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
-		if(c[0]<half_x):
-			u.append((np.pi/2) - 0.1)
-		else:
-			u.append((np.pi/2) + 0.1)
-
-	return V, T, u
 
 def get_min_max(iV,a, eps=1e-1):
 	mov = []
@@ -177,58 +147,3 @@ def get_corners(iV, top=True, eps=1e-1):
 
 	return tr[0], tl[0], br[0], bl[0]
 
-def feather_muscle1_test_setup(x = 3, y = 2):
-	step = 0.1
-	V,T,U = rectangle_mesh(x, y, step=step)
-	# V,T, U = torus_mesh(5, 4, 3, step)
-
-	half_x = step*(x)/2.0
-	half_y = step*(y)/2.0
-	u = []
-	for i in range(len(T)):
-		e = T[i]
-		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
-		if(c[1]<half_y):
-			u.append(-0.15)
-		else:
-			u.append(0.15)
-
-	to_fix =[]
-	for i in get_min_max(V,1):
-		if(V[i][0]>half_x):
-			to_fix.append(i)
-
-	return (V, T, u), to_fix
-
-def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 10, p2 = 5):
-	step = 0.1
-	V = []
-	T = []
-	u = []
-	V.append([(r4+1)*step, (r4+1)*step])
-	V.append([(r4+1)*step + 1.5*step*r1, (r4+1)*step ])
-	V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
-	V.append([(r4+1)*step + 1.75*step*r1, (r4+1)*step ])
-	V.append([(r4+1)*step - 1.75*step*r1, (r4+1)*step ])
-	for theta in range(0, p1):
-		angle = theta*np.pi/p2
-		# if(angle<=np.pi):
-		V.append([2*step*r1*np.cos(angle) + (r4+1)*step, step*r1*np.sin(angle)+ (r4+1)*step])
-		V.append([2*step*r2*np.cos(angle) + (r4+1)*step, step*r2*np.sin(angle)+ (r4+1)*step])
-		V.append([2*step*r3*np.cos(angle) + (r4+1)*step, step*r3*np.sin(angle)+ (r4+1)*step])
-		V.append([2*step*r4*np.cos(angle) + (r4+1)*step, step*r4*np.sin(angle)+ (r4+1)*step])
-
-	T = Delaunay(V).simplices
-
-	for i in range(len(T)):
-		e = T[i]
-		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
-		if(c[1]< (step*(r4+1))):
-			u.append(-0.15)
-		else:
-			u.append(0.15)
-
-
-	to_fix =get_max(V,0)
-	print(to_fix)
-	return (V, T, u), to_fix
