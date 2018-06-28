@@ -38,26 +38,6 @@ def snapshot_basis(filen):
 	red, S, V = np.linalg.svd(A[:,:,0].T)
 	return red[:,:len(S)]
 
-def generate_bbw_matrix():
-	# List of boundary indices (aka fixed value indices into VV)
-	b = igl.eigen.MatrixXi()
-	# List of boundary conditions of each weight function
-	bc = igl.eigen.MatrixXd()
-
-	igl.boundary_conditions(V, T, C, igl.eigen.MatrixXi(), BE, igl.eigen.MatrixXi(), b, bc)
-
-	bbw_data = igl.BBWData()
-	# only a few iterations for sake of demo
-	bbw_data.active_set_params.max_iter = 8
-	bbw_data.verbosity = 2
-	if not igl.bbw(V, T, b, bc, bbw_data, W):
-		exit(-1)
-
-	# Normalize weights to sum to one
-	igl.normalize_row_sums(W, W)
-	# precompute linear blend skinning matrix
-	igl.lbs_matrix(V, W, M)
-
 def generate_euclidean_weights(CAx, handles, others):
 	W = np.zeros((len(handles) + len(others), len(handles)))
 

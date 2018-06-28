@@ -13,7 +13,7 @@ import sys, os
 import cProfile
 sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
-np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.3f}'.format(x)})
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 from iglhelpers import *
 temp_png = os.path.join(os.getcwd(),"out.png")
 
@@ -34,7 +34,6 @@ class Mesh:
 		self.x0 = np.ravel(self.V)
 		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
 		self.u = iVTU[2] if iVTU[2] is not None else np.zeros(len(self.T))
-		self.q = np.zeros(len(self.T)*(1+2)) #theta, sx, sy
 
 		self.number_of_verts_fixed_on_element = None
 		self.P = None
@@ -50,6 +49,12 @@ class Mesh:
 		self.z = None
 		self.z0 = None
 		
+		t_size = len(self.T)
+		self.GF = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
+		self.GR = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
+		self.GS = sparse.diags([np.zeros(6*t_size-1), np.ones(6*t_size), np.zeros(6*t_size-1)],[-1,0,1]).tolil()
+		self.GU = sparse.diags([np.ones(6*t_size)],[0]).tolil()
+
 		if(setup==False):
 
 			# Rotation clusterings
@@ -65,18 +70,7 @@ class Mesh:
 			self.red_s = None
 			self.sW = None
 			self.setupStrainSkinnings()
-
-
-			t_size = len(self.T)
-			self.GF = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
-			self.GR = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
-			self.GS = sparse.diags([np.zeros(6*t_size-1), np.ones(6*t_size), np.zeros(6*t_size-1)],[-1,0,1]).tolil()
-			self.GU = sparse.diags([np.ones(6*t_size)],[0]).tolil()
-
-			#set initial strains
-			for i in range(len(self.T)):
-				self.q[3*i + 1] = 1
-				self.q[3*i + 2] = 1
+	
 			
 			print("\n+ Setup GF")
 			self.getGlobalF(updateR = True, updateS = True, updateU=True)
@@ -301,16 +295,12 @@ class Mesh:
 		return U
 
 	def getR(self, ind):
-		# theta = self.q[3*ind]
 		theta = self.red_r[self.r_element_cluster_map[ind]]
 		c, s = np.cos(theta), np.sin(theta)
 		R = np.array(((c,-s), (s, c)))
 		return R
 
 	def getS(self, ind):
-		# sx = self.q[3*ind+1]
-		# sy = self.q[3*ind+2]
-
 		sx = self.sW[3*ind,:].dot(self.red_s)
 		sy = self.sW[3*ind+1,:].dot(self.red_s)
 		z = self.sW[3*ind +2,:].dot(self.red_s)

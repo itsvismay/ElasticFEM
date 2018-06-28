@@ -23,7 +23,7 @@ import sys, os
 import cProfile
 sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
-np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.3f}'.format(x)})
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 from iglhelpers import *
 
 from Helpers import *
@@ -108,14 +108,11 @@ def modal_analysis(mesh):
 		num_modes = 500
 
 	eig, ev = general_eig_solve(A=K, B = M, modes=num_modes+2)
-	print(ev.shape)
 
 	ev *= np.logical_or(1e-10<ev , ev<-1e-10)
 	eig = eig[2:]
 	ev = ev[:,2:]
-	print(ev.shape, eig.shape)
 	ev = np.divide(ev, eig*eig)
-	print(ev.shape)
 	ev = sparse.csc_matrix(ev)
 	############handle modes KKT solve#####
 	col1 = sparse.vstack((K, C))
@@ -135,7 +132,7 @@ def modal_analysis(mesh):
 	Q = eVeH
 	return Q
 
-def k_means_rclustering(mesh, mode=0):
+def k_means_rclustering(mesh, clusters = 5):
 	A = mesh.getA()
 	C = mesh.getC()
 	G = np.add(mesh.G.toarray().T, mesh.x0)
@@ -146,14 +143,78 @@ def k_means_rclustering(mesh, mode=0):
 	# print(CAG.shape, Data.shape)
 	for i in range(len(mesh.T)):
 		point = CAG[6*i:6*i+2, :]
-		Data[i,:] = np.ravel(point)
+		Data[i,:] = np.ravel(point) #triangle by x1,y1,x2,y2, x3,y3....
 
 
-	centroids,_ = kmeans(Data, 8)
+	centroids,_ = kmeans(Data, clusters)
 	idx,_ = vq(Data,centroids)
-	print(idx.shape, Data.shape, centroids.shape)
-	print(len(mesh.T))
+
 	return idx
+
+def bbw_strain_skinning_matrix(mesh, handles=[0,1]):
+	vertex_handles = mesh.T[handles]
+	unique_vert_handles = np.unique(vertex_handles)
+	helper = np.add(np.zeros(unique_vert_handles[-1]+1), -1)
+
+	for i in range(len(unique_vert_handles)):
+		helper[unique_vert_handles[i]] = i 
+
+	vert_to_tet = np.zeros((len(handles), 3), dtype="int32")
+	for i in range(vertex_handles.shape[0]):
+		vert_to_tet[i,:] = helper[vertex_handles[i]]
+	print(vert_to_tet)
+	C = mesh.V[unique_vert_handles]
+	P = np.array([np.arange(len(C))], dtype="int32").T
+
+	V = igl.eigen.MatrixXd(mesh.V)
+	T = igl.eigen.MatrixXi(mesh.T)
+	M = igl.eigen.MatrixXd()
+	W = igl.eigen.MatrixXd()
+	C = igl.eigen.MatrixXd(C)
+	P = igl.eigen.MatrixXi(P)
+	# List of boundary indices (aka fixed value indices into VV)
+	b = igl.eigen.MatrixXi()
+	# List of boundary conditions of each weight function
+	bc = igl.eigen.MatrixXd()
+
+	igl.boundary_conditions(V, T, C, P, igl.eigen.MatrixXi(), igl.eigen.MatrixXi(), b, bc)
+	print("Boundary Conds")
+	
+
+	
+	bbw_data = igl.BBWData()
+	# only a few iterations for sake of demo
+	bbw_data.active_set_params.max_iter = 8
+	bbw_data.verbosity = 2
+
+	if not igl.bbw(V, T, b, bc, bbw_data, W):
+		exit(-1)
+	# Normalize weights to sum to one
+	igl.normalize_row_sums(W, W)
+	# precompute linear blend skinning matrix
+	igl.lbs_matrix(V, W, M)
+	
+	vW = e2p(W) #v x verts of handles
+
+	tW = np.zeros((len(mesh.T), len(handles))) #T x handles
+	#get average of vertices for each triangle
+	for i in range(len(mesh.T)):
+		e = mesh.T[i]
+		for h in range(len(handles)):
+			if i== handles[h]:
+				tW[i,:] *= 0
+				tW[i,h] = 1
+
+				break
+			p0 = vW[e[0],vert_to_tet[h,:]].sum()
+			p1 = vW[e[1],vert_to_tet[h,:]].sum()
+			p2 = vW[e[2],vert_to_tet[h,:]].sum()
+			tW[i,h] = (p0+p1+p2)/3.
+
+	# tW /= tW.sum(axis =1)[:, np.newaxis] #normalize rows to sum to 1
+	print("bbw")
+	print(tW)
+	# exit()
 
 class Preprocessing:
 	def __init__(self, _VT):
@@ -193,7 +254,7 @@ class Preprocessing:
 		self.mesh.G = Q[:, :15]
 		self.mesh.z = np.zeros(15)
 		self.rClusters = k_means_rclustering(self.mesh)
-		print(self.rClusters)
+		sW = bbw_strain_skinning_matrix(self.mesh)
 
 	def display(self):
 		red = igl.eigen.MatrixXd([[1,0,0]])
@@ -241,15 +302,16 @@ class Preprocessing:
 					mov_pts.append(self.V[self.Mov[i]])
 				viewer.data().add_points(igl.eigen.MatrixXd(np.array(mov_pts)), green)
 				return True
+			if hit:
+				print("Element", fid)
+				ind = e2p(fid)[0][0]
+				print(self.T[ind])
+				return True
 			return False
 
 		def key_down(viewer,aaa, bbb):
 			if(aaa == 65):
 				self.createMesh()
-			if(aaa == 67):
-				#new rot cluster mode
-				self.rClusters = k_means_rclustering(self.mesh, mode=self.gi)
-				self.gi+=1
 
 			viewer.data().clear()
 			viewer.data().set_mesh(igl.eigen.MatrixXd(self.V), 
