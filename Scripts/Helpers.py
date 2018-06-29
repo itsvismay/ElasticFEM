@@ -127,3 +127,6 @@ def get_corners(iV, top=True, eps=1e-1):
 
 	return tr[0], tl[0], br[0], bl[0]
 
+def get_unit_normal(p1, p2, p3):
+	n = np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3)))
+	return n/np.linalg.norm(n)

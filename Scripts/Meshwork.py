@@ -23,11 +23,11 @@ import sys, os
 import cProfile
 sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
+from Helpers import *
+from Mesh import Mesh
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 from iglhelpers import *
 
-from Helpers import *
-from Mesh import Mesh
 
 def rectangle_mesh(x, y, step=1):
 	V = []
@@ -61,7 +61,7 @@ def feather_muscle1_test_setup(x = 3, y = 2):
 
 	return (V, T, u), to_fix
 
-def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 100, p2 = 50):
+def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 50, p2 = 50):
 	step = 0.1
 	V = []
 	T = []
@@ -91,9 +91,7 @@ def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 100, p2 = 50):
 
 
 	to_fix =get_max(V,0)
-	print(to_fix)
 	return (V, T, u), to_fix
-
 
 def modal_analysis(mesh):
 	A = mesh.getA()
@@ -162,7 +160,7 @@ def bbw_strain_skinning_matrix(mesh, handles=[0,1]):
 	vert_to_tet = np.zeros((len(handles), 3), dtype="int32")
 	for i in range(vertex_handles.shape[0]):
 		vert_to_tet[i,:] = helper[vertex_handles[i]]
-	print(vert_to_tet)
+
 	C = mesh.V[unique_vert_handles]
 	P = np.array([np.arange(len(C))], dtype="int32").T
 
@@ -177,9 +175,7 @@ def bbw_strain_skinning_matrix(mesh, handles=[0,1]):
 	# List of boundary conditions of each weight function
 	bc = igl.eigen.MatrixXd()
 
-	igl.boundary_conditions(V, T, C, P, igl.eigen.MatrixXi(), igl.eigen.MatrixXi(), b, bc)
-	print("Boundary Conds")
-	
+	igl.boundary_conditions(V, T, C, P, igl.eigen.MatrixXi(), igl.eigen.MatrixXi(), b, bc)	
 
 	
 	bbw_data = igl.BBWData()
@@ -211,10 +207,54 @@ def bbw_strain_skinning_matrix(mesh, handles=[0,1]):
 			p2 = vW[e[2],vert_to_tet[h,:]].sum()
 			tW[i,h] = (p0+p1+p2)/3.
 
-	# tW /= tW.sum(axis =1)[:, np.newaxis] #normalize rows to sum to 1
-	print("bbw")
-	print(tW)
-	# exit()
+	tW /= np.linalg.norm(tW, axis =1)[:, np.newaxis] #normalize rows to sum to 1
+	
+
+def heat_method(mesh):
+	t = 1e-2
+	eLc = igl.eigen.SparseMatrixd()
+	igl.cotmatrix(igl.eigen.MatrixXd(mesh.V), igl.eigen.MatrixXi(mesh.T), eLc)
+	Lc = e2p(eLc)
+
+	M = mesh.getMassMatrix()
+	Mdiag = M.diagonal()[2*np.arange(Lc.shape[0])]
+	Mc = sparse.diags(Mdiag)
+
+
+	#Au = b st. Cu = Cu0
+	u0 = np.zeros(len(mesh.V))
+	fixed = list(set(mesh.fixed) - set(mesh.mov))
+	u0[fixed] = 100
+	u0[mesh.mov] =0
+
+	Id = sparse.eye(len(mesh.V)).tocsc()
+	notfix = [i for i in range(len(u0)) if u0[i]==0]
+	B = Id[:,notfix]
+	# u0[mesh.mov] = 0
+
+	A = (Mc - t*Lc)
+	u = sparse.linalg.spsolve(A.tocsc(), u0)
+
+	gradu = np.zeros(len(mesh.T))
+	for i in range(len(mesh.T)):
+		e = mesh.T[i]
+		area2 = 2*get_area(mesh.V[e[0]], mesh.V[e[1]], mesh.V[e[2]])
+		
+		p0 = np.concatenate((mesh.V[e[0]], [0]))
+		p1 = np.concatenate((mesh.V[e[1]], [0]))
+		p2 = np.concatenate((mesh.V[e[2]], [0]))
+
+		normal = get_unit_normal(p0, p1, p2)
+		s1 = u[e[0]]*np.cross(normal, mesh.V[e[1]] - mesh.V[e[2]])[0:2]
+		s2 = u[e[1]]*np.cross(normal, mesh.V[e[2]] - mesh.V[e[0]])[0:2]
+		s3 = u[e[2]]*np.cross(normal, mesh.V[e[0]] - mesh.V[e[1]])[0:2]
+		uvec = (1/area2)*(s1+s2+s3)
+		veca = uvec
+		vecb = np.array([1,0])
+		theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
+		gradu[i] = theta
+
+	return gradu
 
 class Preprocessing:
 	def __init__(self, _VT):
@@ -222,11 +262,12 @@ class Preprocessing:
 		self.V = _VT[0]
 		self.T = _VT[1]
 		self.U = np.zeros(len(self.T))
-		self.Fix = get_max(self.V,a=1, eps=1e-2)		
-		self.Mov = get_min(self.V, a=1, eps=1e-2)
+		self.Fix = get_max(self.V,a=0, eps=1e-2)		
+		self.Mov = get_min(self.V, a=0, eps=1e-2)
 		self.rClusters = []
 		self.gi = 0
 		self.mesh = None
+		self.uvec = []
 
 	def save_mesh_setup(self, name=None):
 		#SAVE: V, T, Fixed points, Moving points,Eigs, EigV 
@@ -255,6 +296,9 @@ class Preprocessing:
 		self.mesh.z = np.zeros(15)
 		self.rClusters = k_means_rclustering(self.mesh)
 		sW = bbw_strain_skinning_matrix(self.mesh)
+
+		self.uvec = heat_method(self.mesh)
+		self.mesh.u = self.uvec
 
 	def display(self):
 		red = igl.eigen.MatrixXd([[1,0,0]])
@@ -327,8 +371,16 @@ class Preprocessing:
 				if (self.rClusters != []):
 					color = igl.eigen.MatrixXd(np.array([randc[self.rClusters[i]]]))
 
-				viewer.data().add_points(igl.eigen.MatrixXd(np.array([c])),  color)
+				# viewer.data().add_points(igl.eigen.MatrixXd(np.array([c])),  color)
 			
+			if len(self.uvec) != 0:
+				CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
+				for i in range(len(self.T)):
+					C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
+					U = np.multiply(self.mesh.getU(i).transpose(), np.array([[0.03],[0.01]]))+C
+					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
+					viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), blue)
+
 			fixed_pts = []
 			for i in range(len(self.Fix)):
 				fixed_pts.append(self.V[self.Fix[i]])

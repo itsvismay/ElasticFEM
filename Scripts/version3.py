@@ -2,8 +2,8 @@
 import Meshwork 
 
 #Mesh creation
-# VTU,tofix = Meshwork.feather_muscle2_test_setup()
-VTU = Meshwork.rectangle_mesh(x=4, y=4, step=0.1)
+VTU,tofix = Meshwork.feather_muscle2_test_setup()
+# VTU = Meshwork.rectangle_mesh(x=10, y=10, step=0.1)
 d = Meshwork.Preprocessing(_VT = VTU)
 d.display()
 
