@@ -25,7 +25,7 @@ sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
 from Helpers import *
 from Mesh import Mesh
-np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.3f}'.format(x)})
 from iglhelpers import *
 
 
@@ -61,7 +61,7 @@ def feather_muscle1_test_setup(x = 3, y = 2):
 
 	return (V, T, u), to_fix
 
-def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 50, p2 = 50):
+def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 200, p2 = 100):
 	step = 0.1
 	V = []
 	T = []
@@ -211,7 +211,7 @@ def bbw_strain_skinning_matrix(mesh, handles=[0,1]):
 	
 
 def heat_method(mesh):
-	t = 1e-2
+	t = 1e-1
 	eLc = igl.eigen.SparseMatrixd()
 	igl.cotmatrix(igl.eigen.MatrixXd(mesh.V), igl.eigen.MatrixXi(mesh.T), eLc)
 	Lc = e2p(eLc)
@@ -224,37 +224,54 @@ def heat_method(mesh):
 	#Au = b st. Cu = Cu0
 	u0 = np.zeros(len(mesh.V))
 	fixed = list(set(mesh.fixed) - set(mesh.mov))
-	u0[fixed] = 100
-	u0[mesh.mov] =0
+	u0[fixed] = 2
+	u0[mesh.mov] = -2
 
 	Id = sparse.eye(len(mesh.V)).tocsc()
-	notfix = [i for i in range(len(u0)) if u0[i]==0]
-	B = Id[:,notfix]
-	# u0[mesh.mov] = 0
+	fixedverts = [i for i in range(len(u0)) if u0[i]!=0]
+	C = Id[:,fixedverts]
 
 	A = (Mc - t*Lc)
-	u = sparse.linalg.spsolve(A.tocsc(), u0)
+	# u = sparse.linalg.spsolve(A.tocsc(), u0)
+	col1 = sparse.vstack((A, C.T))
+	col2 = sparse.vstack((C, sparse.csc_matrix((C.shape[1], C.shape[1]))))
+	KKT = sparse.hstack((col1, col2))
+	lhs = np.concatenate((u0, C.T.dot(u0)))
+	u = sparse.linalg.spsolve(KKT.tocsc(), lhs)[0:len(u0)]
+	
+	eG = igl.eigen.SparseMatrixd()
+	nV = np.concatenate((mesh.V, u[:,np.newaxis]), axis=1)
+	igl.grad(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(mesh.T), eG)
+	eu = igl.eigen.MatrixXd(u)
+	eGu = (eG*eu).MapMatrix(len(mesh.T), 3)
+	Gu = e2p(eGu)
 
 	gradu = np.zeros(len(mesh.T))
+	uvecs = np.zeros((len(mesh.T),2))
 	for i in range(len(mesh.T)):
 		e = mesh.T[i]
-		area2 = 2*get_area(mesh.V[e[0]], mesh.V[e[1]], mesh.V[e[2]])
 		
-		p0 = np.concatenate((mesh.V[e[0]], [0]))
-		p1 = np.concatenate((mesh.V[e[1]], [0]))
-		p2 = np.concatenate((mesh.V[e[2]], [0]))
-
-		normal = get_unit_normal(p0, p1, p2)
-		s1 = u[e[0]]*np.cross(normal, mesh.V[e[1]] - mesh.V[e[2]])[0:2]
-		s2 = u[e[1]]*np.cross(normal, mesh.V[e[2]] - mesh.V[e[0]])[0:2]
-		s3 = u[e[2]]*np.cross(normal, mesh.V[e[0]] - mesh.V[e[1]])[0:2]
-		uvec = (1/area2)*(s1+s2+s3)
+		# area2 = 2*get_area(mesh.V[e[0]], mesh.V[e[1]], mesh.V[e[2]])
+		# p0 = np.concatenate((mesh.V[e[0]], [0]))
+		# p1 = np.concatenate((mesh.V[e[1]], [0]))
+		# p2 = np.concatenate((mesh.V[e[2]], [0]))
+		# normal = get_unit_normal(p0, p1, p2)
+		# s1 = u[e[0]]*np.cross(normal, mesh.V[e[1]] - mesh.V[e[2]])[0:2]
+		# s2 = u[e[1]]*np.cross(normal, mesh.V[e[2]] - mesh.V[e[0]])[0:2]
+		# s3 = u[e[2]]*np.cross(normal, mesh.V[e[0]] - mesh.V[e[1]])[0:2]
+		# uvec = (1/area2)*(s1+s2+s3)
+		uvec = Gu[i,0:2]
+		uvecs[i,:] = uvec
 		veca = uvec
 		vecb = np.array([1,0])
-		theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
+		# theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
+		x1 = np.cross(veca, vecb).dot(np.array([0,0,1]))
+		x2 = np.linalg.norm(veca)*np.linalg.norm(vecb) + veca.dot(vecb)
+		theta = 2*np.arctan2(x1, x2)[2]
+		# print(theta)
 		gradu[i] = theta
 
-	return gradu
+	return gradu, u, eGu, uvecs
 
 class Preprocessing:
 	def __init__(self, _VT):
@@ -262,12 +279,14 @@ class Preprocessing:
 		self.V = _VT[0]
 		self.T = _VT[1]
 		self.U = np.zeros(len(self.T))
-		self.Fix = get_max(self.V,a=0, eps=1e-2)		
-		self.Mov = get_min(self.V, a=0, eps=1e-2)
+		self.Fix = get_max(self.V, a=1, eps=1e-2)		
+		self.Mov = get_min(self.V, a=1, eps=1e-2)
 		self.rClusters = []
 		self.gi = 0
 		self.mesh = None
-		self.uvec = []
+		self.uvec = None
+		self.eGu = None
+		self.UVECS = None
 
 	def save_mesh_setup(self, name=None):
 		#SAVE: V, T, Fixed points, Moving points,Eigs, EigV 
@@ -291,15 +310,15 @@ class Preprocessing:
 		to_mov = self.Mov
 		
 		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, setup= True, red_g=True)
-		Q = modal_analysis(self.mesh)
-		self.mesh.G = Q[:, :15]
-		self.mesh.z = np.zeros(15)
-		self.rClusters = k_means_rclustering(self.mesh)
-		sW = bbw_strain_skinning_matrix(self.mesh)
+		# Q = modal_analysis(self.mesh)
+		# self.mesh.G = Q[:, :15]
+		# self.mesh.z = np.zeros(15)
+		# self.rClusters = k_means_rclustering(self.mesh)
+		# sW = bbw_strain_skinning_matrix(self.mesh)
 
-		self.uvec = heat_method(self.mesh)
-		self.mesh.u = self.uvec
-
+		self.mesh.u, self.uvec, self.eGu, self.UVECS = heat_method(self.mesh)
+	
+		
 	def display(self):
 		red = igl.eigen.MatrixXd([[1,0,0]])
 		purple = igl.eigen.MatrixXd([[1,0,1]])
@@ -358,8 +377,21 @@ class Preprocessing:
 				self.createMesh()
 
 			viewer.data().clear()
-			viewer.data().set_mesh(igl.eigen.MatrixXd(self.V), 
-									igl.eigen.MatrixXi(self.T))
+			if self.uvec is None:
+				nV = self.V
+			else:
+				nV = self.V
+				# print(self.mesh.V.shape, self.uvec.shape)
+				# nV = np.concatenate((self.mesh.V, self.uvec[:,np.newaxis]), axis=1)
+				# BC = igl.eigen.MatrixXd()
+				# igl.barycenter(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(self.T), BC)
+
+				# GU_mag = self.eGu.rowwiseNorm()
+				# max_size = igl.avg_edge_length(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(self.T)) / GU_mag.mean()
+				
+				# viewer.data().add_edges(BC, BC + max_size*self.eGu, black)
+
+			viewer.data().set_mesh(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(self.T))
 
 			centroids = []
 			for i in range(len(self.T)):
@@ -373,13 +405,13 @@ class Preprocessing:
 
 				# viewer.data().add_points(igl.eigen.MatrixXd(np.array([c])),  color)
 			
-			if len(self.uvec) != 0:
+			if not self.uvec is None:
 				CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
 				for i in range(len(self.T)):
 					C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-					U = np.multiply(self.mesh.getU(i).transpose(), np.array([[0.03],[0.01]]))+C
+					U = np.multiply(self.mesh.getU(i), np.array([[0.03],[0.03]])) + C
 					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
-					viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), blue)
+					# viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), red)
 
 			fixed_pts = []
 			for i in range(len(self.Fix)):
