@@ -7,7 +7,7 @@ import scipy
 from scipy.optimize import minimize
 from scipy.spatial import Delaunay
 from scipy import sparse
-
+from scipy.cluster.vq import vq, kmeans, whiten
 import random
 import sys, os
 import cProfile
@@ -22,14 +22,14 @@ from Helpers import *
 class Mesh:
 
 	def __init__(self, iVTU, ito_fix=[], ito_mov=[], setup=False, red_g= True):
-		#object vars
+		#Get Variables setup
 		self.reduced_g = red_g
 		self.youngs = 60000
 		self.poissons = 0.45
-		self.fixed = ito_fix
+		self.fixed = list(set(ito_fix).union(set(ito_mov)))
 		self.V = np.array(iVTU[0])
 		self.T = iVTU[1]
-		self.mov = ito_mov
+		self.mov = list(set(ito_mov))
 
 		self.x0 = np.ravel(self.V)
 		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
@@ -45,9 +45,9 @@ class Mesh:
 		self.Mass = None
 
 		self.G = None
+		self.Q = None
 		self.Eigvals = None
 		self.z = None
-		self.z0 = None
 		
 		t_size = len(self.T)
 		self.GF = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
@@ -55,26 +55,69 @@ class Mesh:
 		self.GS = sparse.diags([np.zeros(6*t_size-1), np.ones(6*t_size), np.zeros(6*t_size-1)],[-1,0,1]).tolil()
 		self.GU = sparse.diags([np.ones(6*t_size)],[0]).tolil()
 
-		if(setup==False):
 
-			# Rotation clusterings
-			self.red_r = None
-			self.r_element_cluster_map = None
-			self.r_cluster_element_map = defaultdict(list)
-			self.RotationBLOCK = None
-			self.setupRotClusters()
+		# Modal analysis
+		modes_used = 100
+		self.Q =self.setupModes()
+		self.G = self.Q[:,:modes_used]
+		self.z = np.zeros(modes_used)
+
+		# Rotation clusterings
+		self.red_r = None
+		self.r_element_cluster_map = None
+		self.r_cluster_element_map = defaultdict(list)
+		self.RotationBLOCK = None
+		self.setupRotClusters()
 
 
-			# self.readInRotClusters()
-			#S skinnings
-			self.red_s = None
-			self.sW = None
-			self.setupStrainSkinnings()
-	
-			
-			print("\n+ Setup GF")
-			self.getGlobalF(updateR = True, updateS = True, updateU=True)
-			print("- Done with GF")
+		# self.readInRotClusters()
+		#S skinnings
+		self.red_s = None
+		self.s_handles_ind = None
+		self.sW = None
+		self.setupStrainSkinnings()
+
+		
+		print("\n+ Setup GF")
+		self.getGlobalF(updateR = True, updateS = True, updateU=True)
+		print("- Done with GF")
+
+	def setupModes(self):
+		A = self.getA()
+		P = self.getP()
+		B, AB = self.createBlockingMatrix()
+		C = AB.T
+		M = self.getMassMatrix()
+		K = A.T.dot(P.T.dot(P.dot(A)))
+		if K.shape[0]-3<500:
+			num_modes = K.shape[0]-3
+		else:
+			num_modes = 500
+
+		eig, ev = general_eig_solve(A=K, B = M, modes=num_modes+2)
+
+		ev *= np.logical_or(1e-10<ev , ev<-1e-10)
+		eig = eig[2:]
+		ev = ev[:,2:]
+		ev = np.divide(ev, eig*eig)
+		ev = sparse.csc_matrix(ev)
+		############handle modes KKT solve#####
+		col1 = sparse.vstack((K, C))
+		col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
+		KKT = sparse.hstack((col1, col2))
+		eHconstrains = sparse.vstack((sparse.csc_matrix((K.shape[0], C.shape[0])), sparse.eye(C.shape[0])))
+		eH = sparse.linalg.spsolve(KKT.tocsc(), eHconstrains.tocsc())[0:K.shape[0]]
+		# eH *= np.logical_or(1e-10<eH , eH<-1e-10)
+		# eHFac =  scipy.sparse.linalg.splu(KKT.tocsc())
+		# eH = eHFac.solve(eHconstrains.toarray())[0:K.shape[0]]
+		#######################################
+		###############QR get orth basis#######
+		eHeV = sparse.hstack((eH, ev))
+		# eVN = np.append(eVeH, np.zeros((len(self.self.x0),1)),1)
+		# eVN[:,-1] = self.self.x0
+		# Q, QR1 = np.linalg.qr(eVeH, mode="reduced")
+		Q = eHeV
+		return Q
 
 	def setupStrainSkinnings(self):
 		print("Setting up skinnings")
@@ -87,52 +130,86 @@ class Mesh:
 		t_set = Set([i for i in range(len(self.T))])
 
 		# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
-		self.s_handles_ind = [1,3]
+		self.s_handles_ind = [0,1]
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
-		centroids = self.getC().dot(self.getA().dot(self.x0))
-
 		#generate weights by euclidean dist
-		self.sW = generate_euclidean_weights(centroids, self.s_handles_ind, list(t_set.difference(Set(self.s_handles_ind))))
-		# print(self.T)
-		# print(self.s_handles_ind)
+		self.sW = self.bbw_strain_skinning_matrix(self.s_handles_ind)
 
 		print("Done setting up skinnings")
 		return
 
+	def bbw_strain_skinning_matrix(self, handles=[0]):
+		vertex_handles = self.T[handles]
+		unique_vert_handles = np.unique(vertex_handles)
+		helper = np.add(np.zeros(unique_vert_handles[-1]+1), -1)
+
+		for i in range(len(unique_vert_handles)):
+			helper[unique_vert_handles[i]] = i 
+
+		vert_to_tet = np.zeros((len(handles), 3), dtype="int32")
+		for i in range(vertex_handles.shape[0]):
+			vert_to_tet[i,:] = helper[vertex_handles[i]]
+
+		C = self.V[unique_vert_handles]
+		P = np.array([np.arange(len(C))], dtype="int32").T
+
+		V = igl.eigen.MatrixXd(self.V)
+		T = igl.eigen.MatrixXi(self.T)
+		M = igl.eigen.MatrixXd()
+		W = igl.eigen.MatrixXd()
+		C = igl.eigen.MatrixXd(C)
+		P = igl.eigen.MatrixXi(P)
+		# List of boundary indices (aka fixed value indices into VV)
+		b = igl.eigen.MatrixXi()
+		# List of boundary conditions of each weight function
+		bc = igl.eigen.MatrixXd()
+
+		igl.boundary_conditions(V, T, C, P, igl.eigen.MatrixXi(), igl.eigen.MatrixXi(), b, bc)	
+
+		
+		bbw_data = igl.BBWData()
+		# only a few iterations for sake of demo
+		bbw_data.active_set_params.max_iter = 8
+		bbw_data.verbosity = 2
+
+		if not igl.bbw(V, T, b, bc, bbw_data, W):
+			exit(-1)
+		# Normalize weights to sum to one
+		igl.normalize_row_sums(W, W)
+		# precompute linear blend skinning matrix
+		igl.lbs_matrix(V, W, M)
+		
+		vW = e2p(W) #v x verts of handles
+
+		tW = np.zeros((len(self.T), len(handles))) #T x handles
+		#get average of vertices for each triangle
+		for i in range(len(self.T)):
+			e = self.T[i]
+			for h in range(len(handles)):
+				if i== handles[h]:
+					tW[i,:] *= 0
+					tW[i,h] = 1
+
+					break
+				p0 = vW[e[0],vert_to_tet[h,:]].sum()
+				p1 = vW[e[1],vert_to_tet[h,:]].sum()
+				p2 = vW[e[2],vert_to_tet[h,:]].sum()
+				tW[i,h] = (p0+p1+p2)/3.
+
+		tW /= np.linalg.norm(tW, axis =1)[:, np.newaxis] #normalize rows to sum to 1
+		return np.kron(tW, np.eye(3))
+
 	def setupRotClusters(self):
 		print("Setting up rotation clusters")
-
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
-		nrc =  2#len(self.T)
+		nrc =  5
 		self.red_r = np.zeros(nrc)
-		self.r_element_cluster_map = np.zeros(len(self.T), dtype = int)
-		centroids = self.getC().dot(self.getA().dot(self.x0))
-		mins = np.amin(self.V, axis=0)
-		maxs = np.amax(self.V, axis=0)
-		minx = mins[0]
-		maxx = maxs[0]
-		miny = mins[1]
-		maxy = maxs[1]
+		self.r_element_cluster_map = self.kmeans_rotationclustering()
 
-		for i in range(len(self.T)):
-			# self.r_element_cluster_map[i] = i
-			# self.r_cluster_element_map[i].append(i)
-			if(centroids[6*i]<=(maxx + minx)/2.0):
-				if(centroids[6*i+1]<=(maxy + miny)/2.0):
-					self.r_element_cluster_map[i] = 0
-					self.r_cluster_element_map[0].append(i)
-				else:
-					self.r_element_cluster_map[i] = 1
-					self.r_cluster_element_map[1].append(i)
-			else:
-				if(centroids[6*i+1]<=(maxy + miny)/2.0):
-					self.r_element_cluster_map[i] = 0
-					self.r_cluster_element_map[0].append(i)
-				else:
-					self.r_element_cluster_map[i] = 1
-					self.r_cluster_element_map[1].append(i)
+		for i in range(len(self.T)):			
+			self.r_cluster_element_map[self.r_element_cluster_map[i]].append(i)
 
 		self.RotationBLOCK = []
 		for i in range(len(self.red_r)):
@@ -149,46 +226,23 @@ class Mesh:
 		print("Done setting up rotation clusters \n")
 		return
 
-	def setupModalAnalysis(self, modes):
-		# not_moving = set(self.fixed) - set(self.mov)
-		B, AB = self.createBlockingMatrix()
-		M = self.getMassMatrix()
-		K = self.getStiffnessMatrix()
-		M = B.T.dot(M.dot(B))
-		K = B.T.dot(K.dot(B))
-		eig, ev = general_eig_solve(A=K, B =M, modes=modes)
-		ev *= np.logical_or(1e-10>ev , ev<-1e-10)
-		self.G = sparse.csc_matrix(B.dot(ev))
-		self.G.eliminate_zeros()
+	def kmeans_rotationclustering(self, clusters = 5):
+		A = self.getA()
+		C = self.getC()
+		G = np.add(self.G.toarray().T, self.x0)
+		#all modes at once
+		CAG = C.dot(A.dot(G.T))#scipy wants data in format: observations(elem) x features (modes)
 
-		self.Eigvals = eig
-		print("Done Modal Analysis")
-
-	def readInRotClusters(self):
-		print("Read in rotation clusters")
-		t_set = Set([i for i in range(len(self.T))])
-		nrc = 5
-		self.red_r = np.zeros(nrc)
-		self.r_element_cluster_map = np.zeros(len(self.T), dtype=int)
-
-		values = [[16,0,1,12], [9,10,11,13],[14,15,5,4],[6,7]]
-		for i in range(len(values)):
-			for j in range(len(values[i])):
-				self.r_element_cluster_map[values[i][j]] = i+1
-
-		for i in range(len(self.r_element_cluster_map)):
-			self.r_cluster_element_map[self.r_element_cluster_map[i]].append(i)
+		Data = np.zeros((len(self.T), 2*self.G.shape[1]))
+		# print(CAG.shape, Data.shape)
+		for i in range(len(self.T)):
+			point = CAG[6*i:6*i+2, :]
+			Data[i,:] = np.ravel(point) #triangle by x1,y1,x2,y2, x3,y3....
 
 
-		self.RotationBLOCK = []
-		for i in range(len(self.red_r)):
-			fixed = t_set.difference(Set(self.r_cluster_element_map[i]))
-
-			b = sparse.kron(np.delete(np.eye(len(self.T)), list(fixed), axis=1), sparse.eye(6))
-			self.RotationBLOCK.append(b)
-
-		print("done reading rot clusters\n")
-		return
+		centroids,_ = kmeans(Data, clusters)
+		idx,_ = vq(Data,centroids)
+		return idx
 
 	def createBlockingMatrix(self, fix=None):
 		if(self.BLOCK == None or self.ANTI_BLOCK==None or fix != None):

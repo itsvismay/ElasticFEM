@@ -63,6 +63,7 @@ class TimeIntegrator:
 		for i in range(len(self.mov)):
 			# self.mesh.g[2*self.mov[i]] -= self.adder
 			self.mesh.g[2*self.mov[i]+1] += self.adder
+		print("moved")
 		# self.mesh.red_s[1] += 0.2
 		# self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
 

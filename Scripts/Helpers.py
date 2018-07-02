@@ -130,3 +130,130 @@ def get_corners(iV, top=True, eps=1e-1):
 def get_unit_normal(p1, p2, p3):
 	n = np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3)))
 	return n/np.linalg.norm(n)
+
+def rectangle_mesh(x, y, step=1):
+	V = []
+	for i in range(0,x+1):
+		for j in range(0,y+1):
+			V.append([step*i, step*j])
+	
+	T = Delaunay(V).simplices
+	return V, T
+
+def feather_muscle1_test_setup(x = 3, y = 2):
+	step = 0.1
+	V,T,U = rectangle_mesh(x, y, step=step)
+	# V,T, U = torus_mesh(5, 4, 3, step)
+
+	half_x = step*(x)/2.0
+	half_y = step*(y)/2.0
+	u = []
+	for i in range(len(T)):
+		e = T[i]
+		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
+		if(c[1]<half_y):
+			u.append(-0.15)
+		else:
+			u.append(0.15)
+
+	to_fix =[]
+	for i in get_min_max(V,1):
+		if(V[i][0]>half_x):
+			to_fix.append(i)
+
+	return (V, T, u), to_fix
+
+def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 200, p2 = 100):
+	step = 0.1
+	V = []
+	T = []
+	u = []
+	V.append([(r4+1)*step, (r4+1)*step])
+	V.append([(r4+1)*step + 1.5*step*r1, (r4+1)*step ])
+	V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
+	V.append([(r4+1)*step + 1.75*step*r1, (r4+1)*step ])
+	V.append([(r4+1)*step - 1.75*step*r1, (r4+1)*step ])
+	for theta in range(0, p1):
+		angle = theta*np.pi/p2
+		# if(angle<=np.pi):
+		V.append([2*step*r1*np.cos(angle) + (r4+1)*step, step*r1*np.sin(angle)+ (r4+1)*step])
+		V.append([2*step*r2*np.cos(angle) + (r4+1)*step, step*r2*np.sin(angle)+ (r4+1)*step])
+		V.append([2*step*r3*np.cos(angle) + (r4+1)*step, step*r3*np.sin(angle)+ (r4+1)*step])
+		V.append([2*step*r4*np.cos(angle) + (r4+1)*step, step*r4*np.sin(angle)+ (r4+1)*step])
+
+	T = Delaunay(V).simplices
+
+	for i in range(len(T)):
+		e = T[i]
+		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
+		if(c[1]< (step*(r4+1))):
+			u.append(-0.15)
+		else:
+			u.append(0.15)
+
+
+	to_fix =get_max(V,0)
+	return (V, T, u), to_fix
+
+def heat_method(mesh):
+	t = 1e-1
+	eLc = igl.eigen.SparseMatrixd()
+	igl.cotmatrix(igl.eigen.MatrixXd(mesh.V), igl.eigen.MatrixXi(mesh.T), eLc)
+	Lc = e2p(eLc)
+
+	M = mesh.getMassMatrix()
+	Mdiag = M.diagonal()[2*np.arange(Lc.shape[0])]
+	Mc = sparse.diags(Mdiag)
+
+
+	#Au = b st. Cu = Cu0
+	u0 = np.zeros(len(mesh.V))
+	fixed = list(set(mesh.fixed) - set(mesh.mov))
+	u0[fixed] = 2
+	u0[mesh.mov] = -2
+
+	Id = sparse.eye(len(mesh.V)).tocsc()
+	fixedverts = [i for i in range(len(u0)) if u0[i]!=0]
+	C = Id[:,fixedverts]
+
+	A = (Mc - t*Lc)
+	# u = sparse.linalg.spsolve(A.tocsc(), u0)
+	col1 = sparse.vstack((A, C.T))
+	col2 = sparse.vstack((C, sparse.csc_matrix((C.shape[1], C.shape[1]))))
+	KKT = sparse.hstack((col1, col2))
+	lhs = np.concatenate((u0, C.T.dot(u0)))
+	u = sparse.linalg.spsolve(KKT.tocsc(), lhs)[0:len(u0)]
+	
+	eG = igl.eigen.SparseMatrixd()
+	nV = np.concatenate((mesh.V, u[:,np.newaxis]), axis=1)
+	igl.grad(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(mesh.T), eG)
+	eu = igl.eigen.MatrixXd(u)
+	eGu = (eG*eu).MapMatrix(len(mesh.T), 3)
+	Gu = e2p(eGu)
+
+	gradu = np.zeros(len(mesh.T))
+	uvecs = np.zeros((len(mesh.T),2))
+	for i in range(len(mesh.T)):
+		e = mesh.T[i]
+		
+		# area2 = 2*get_area(mesh.V[e[0]], mesh.V[e[1]], mesh.V[e[2]])
+		# p0 = np.concatenate((mesh.V[e[0]], [0]))
+		# p1 = np.concatenate((mesh.V[e[1]], [0]))
+		# p2 = np.concatenate((mesh.V[e[2]], [0]))
+		# normal = get_unit_normal(p0, p1, p2)
+		# s1 = u[e[0]]*np.cross(normal, mesh.V[e[1]] - mesh.V[e[2]])[0:2]
+		# s2 = u[e[1]]*np.cross(normal, mesh.V[e[2]] - mesh.V[e[0]])[0:2]
+		# s3 = u[e[2]]*np.cross(normal, mesh.V[e[0]] - mesh.V[e[1]])[0:2]
+		# uvec = (1/area2)*(s1+s2+s3)
+		uvec = Gu[i,0:2]
+		uvecs[i,:] = uvec
+		veca = uvec
+		vecb = np.array([1,0])
+		# theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
+		x1 = np.cross(veca, vecb).dot(np.array([0,0,1]))
+		x2 = np.linalg.norm(veca)*np.linalg.norm(vecb) + veca.dot(vecb)
+		theta = 2*np.arctan2(x1, x2)[2]
+		# print(theta)
+		gradu[i] = theta
+
+	return gradu, u, eGu, uvecs

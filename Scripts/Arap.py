@@ -7,7 +7,7 @@ import scipy
 from scipy.optimize import minimize
 from scipy.spatial import Delaunay
 from scipy import sparse
-
+import datetime
 import random
 import sys, os
 import cProfile
@@ -38,48 +38,6 @@ class ARAP:
 
 		self.DSDs = None
 		self.sparseDSds()
-
-		#Modal Analysis
-		if self.mesh.reduced_g:
-			# N,n = self.mesh.getN()
-			M = self.mesh.getMassMatrix()
-			K = AtPtPA 
-			num_modes = 100 #if AtPtPA.shape[0]/10< 70
-			eig, ev = general_eig_solve(A=K, B = M, modes=num_modes+2)
-			print(ev.shape)
-			ev *= np.logical_or(1e-10<ev , ev<-1e-10)
-			eig = eig[2:]
-			ev = sparse.csc_matrix(ev[:,2:])
-			# ev = B.dot(ev)
-			############handle modes KKT solve#####
-			col1 = sparse.vstack((K, C))
-			col2 = sparse.vstack((C.T, sparse.csc_matrix((C.shape[0], C.shape[0]))))
-			KKT = sparse.hstack((col1, col2))
-			eHconstrains = sparse.vstack((sparse.csc_matrix((K.shape[0], C.shape[0])), sparse.eye(C.shape[0])))
-			eH = sparse.linalg.spsolve(KKT.tocsc(), eHconstrains.tocsc())[0:K.shape[0]]
-			# eH *= np.logical_or(1e-10>eH , eH<-1e-10)
-			# eHFac =  scipy.sparse.linalg.splu(KKT.tocsc())
-			# eH = eHFac.solve(eHconstrains.toarray())[0:K.shape[0]]
-			#######################################
-			###############QR get orth basis#######
-			eVeH = sparse.hstack((ev, eH))
-			# eVN = np.append(eVeH, np.zeros((len(self.mesh.x0),1)),1)
-			# eVN[:,-1] = self.mesh.x0
-			# Q, QR1 = np.linalg.qr(eVeH, mode="reduced")
-			Q = eVeH
-			print("Mode DOFS, Verts, Elements: ", Q.shape[1], len(self.mesh.V), len(self.mesh.T))
-			#######################################
-			self.mesh.G = sparse.csc_matrix(Q)
-			self.mesh.Eigvals = eig
-			#######################################
-			##############Lstsq To find z0###########
-			# self.mesh.z0 = np.linalg.lstsq(Q,self.mesh.x0)[0]
-			self.mesh.z = np.zeros(Q.shape[1])
-
-
-		else:
-			self.mesh.G = sparse.eye(2*len(self.mesh.V))
-			self.mesh.z = np.zeros(len(self.mesh.g))
 		
 		#LU inverse
 		self.Egg = self.mesh.G.T.dot(A.T.dot(P.T.dot(P.dot(A.dot(self.mesh.G)))))
