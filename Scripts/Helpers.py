@@ -10,21 +10,20 @@ import pyigl as igl
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.3f}'.format(x)})
 from iglhelpers import *
 
-def general_eig_solve(A, B=None, modes=5):
+def general_eig_solve(A, B=None, modes=None):
 	#pass in A = K matrix, and B = M matrix
 	print("+General Eig Solve")
-	if(A.shape[0]<= modes):
-		print("Too many modes")
-		exit()
-	# A1 = A.toarray()
-	# B1 = B.toarray()
-	# e, ev = scipy.linalg.eigh(A1, b=B1, eigvals=(0,modes))
-	e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), k = modes, which="SM")
+	
+	if modes is None:
+		e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), which="SM")
+	else:
+		if(A.shape[0]<= modes):
+			print("Too many modes")
+			exit()
+		e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), k= modes+2, which="SM")
 
-	eigvals = e[0:modes]
-	eigvecs = ev[:, 0:modes]
 	print("-Done with Eig Solve")
-	return eigvals, eigvecs
+	return e, ev
 
 def snapshot_basis(filen):
 	

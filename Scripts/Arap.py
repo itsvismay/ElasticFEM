@@ -7,6 +7,7 @@ import scipy
 from scipy.optimize import minimize
 from scipy.spatial import Delaunay
 from scipy import sparse
+
 import datetime
 import random
 import sys, os

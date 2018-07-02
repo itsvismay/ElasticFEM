@@ -21,9 +21,10 @@ from Helpers import *
 
 class Mesh:
 
-	def __init__(self, iVTU, ito_fix=[], ito_mov=[], setup=False, red_g= True):
+	def __init__(self, iVTU=None, ito_fix=[], ito_mov=[], modes_used=None, read_in=False):
+		if read_in:
+			return
 		#Get Variables setup
-		self.reduced_g = red_g
 		self.youngs = 60000
 		self.poissons = 0.45
 		self.fixed = list(set(ito_fix).union(set(ito_mov)))
@@ -55,12 +56,10 @@ class Mesh:
 		self.GS = sparse.diags([np.zeros(6*t_size-1), np.ones(6*t_size), np.zeros(6*t_size-1)],[-1,0,1]).tolil()
 		self.GU = sparse.diags([np.ones(6*t_size)],[0]).tolil()
 
-
 		# Modal analysis
-		modes_used = 100
-		self.Q =self.setupModes()
-		self.G = self.Q[:,:modes_used]
-		self.z = np.zeros(modes_used)
+		self.Q =self.setupModes(modes_used=modes_used)
+		self.G = self.Q[:,:]
+		self.z = np.zeros(self.G.shape[1])
 
 		# Rotation clusterings
 		self.red_r = None
@@ -82,19 +81,20 @@ class Mesh:
 		self.getGlobalF(updateR = True, updateS = True, updateU=True)
 		print("- Done with GF")
 
-	def setupModes(self):
+	def init_from_file(self, V=None, T=None, u=None, Q=None, fix=None, mov=None, r_element_cluster_map=None, s_handles_ind=None, modes_used=None):
+		print(V.shape)
+		exit()
+
+
+	def setupModes(self, modes_used=None):
 		A = self.getA()
 		P = self.getP()
 		B, AB = self.createBlockingMatrix()
 		C = AB.T
 		M = self.getMassMatrix()
 		K = A.T.dot(P.T.dot(P.dot(A)))
-		if K.shape[0]-3<500:
-			num_modes = K.shape[0]-3
-		else:
-			num_modes = 500
 
-		eig, ev = general_eig_solve(A=K, B = M, modes=num_modes+2)
+		eig, ev = general_eig_solve(A=K, B = M, modes=modes_used)
 
 		ev *= np.logical_or(1e-10<ev , ev<-1e-10)
 		eig = eig[2:]
@@ -197,7 +197,7 @@ class Mesh:
 				p2 = vW[e[2],vert_to_tet[h,:]].sum()
 				tW[i,h] = (p0+p1+p2)/3.
 
-		tW /= np.linalg.norm(tW, axis =1)[:, np.newaxis] #normalize rows to sum to 1
+		tW /= np.sum(tW, axis =1)[:, np.newaxis] #normalize rows to sum to 1
 		return np.kron(tW, np.eye(3))
 
 	def setupRotClusters(self):
@@ -390,6 +390,7 @@ class Mesh:
 			sx = s[3*np.arange(len(self.T))]
 			sy = s[3*np.arange(len(self.T))+1]
 			so = s[3*np.arange(len(self.T))+2]
+	
 			diag_x = np.kron(sx, np.array([1,0,1,0,1,0]))
 			diag_y = np.kron(sy, np.array([0,1,0,1,0,1]))
 			diag_o = np.kron(so, np.array([1,0,1,0,1,0]))

@@ -29,16 +29,13 @@ from Neo import NeohookeanElastic
 from Arap import ARAP
 
 class Display:
-	def __init__(self, imesh, iarap, ineo, isolve):
+	def __init__(self, isolve):
 		self.last_mouse = None
 		self.mode = 0
-		self.mesh = imesh
-		self.arap = iarap
-		self.neo = ineo
 		self.time_integrator = isolve
 
 	def display(self):
-		self.mesh.red_r[0] = 0.1
+		self.time_integrator.mesh.red_r[0] = 0.1
 
 		viewer = igl.glfw.Viewer()
 
@@ -54,8 +51,8 @@ class Display:
 				up = e2p(coord)
 				print("vec", up - self.last_mouse)
 			for i in range(len(self.time_integrator.mov)):
-				# self.mesh.g[2*self.time_integrator.mov[i]]   -= self.time_integrator.adder
-				self.mesh.g[2*self.time_integrator.mov[i]+1] -= self.time_integrator.adder
+				# self.time_integrator.mesh.g[2*self.time_integrator.mov[i]]   -= self.time_integrator.adder
+				self.time_integrator.mesh.g[2*self.time_integrator.mov[i]+1] -= self.time_integrator.adder
 			return False
 
 		def mouse_down(viewer, btn, bbb):
@@ -70,13 +67,13 @@ class Display:
 		
 			if(aaa==65):
 				self.time_integrator.move_g()
-				# self.arap.iterate()
-				self.time_integrator.static_solve()
+				self.time_integrator.arap.iterate()
+				# self.time_integrator.static_solve()
 				self.time_integrator.time +=1
 
 				
-			DV, DT = self.mesh.getDiscontinuousVT()
-			RV, RT = self.mesh.getContinuousVT()
+			DV, DT = self.time_integrator.mesh.getDiscontinuousVT()
+			RV, RT = self.time_integrator.mesh.getContinuousVT()
 			V2 = igl.eigen.MatrixXd(RV)
 			T2 = igl.eigen.MatrixXi(RT)
 			viewer.data().set_mesh(V2, T2)
@@ -94,30 +91,30 @@ class Display:
 
 
 			FIXED = []
-			disp_g = self.mesh.getg()
-			for i in range(len(self.mesh.fixed)):
-				FIXED.append(disp_g[2*self.mesh.fixed[i]:2*self.mesh.fixed[i]+2])
+			disp_g = self.time_integrator.mesh.getg()
+			for i in range(len(self.time_integrator.mesh.fixed)):
+				FIXED.append(disp_g[2*self.time_integrator.mesh.fixed[i]:2*self.time_integrator.mesh.fixed[i]+2])
 
 			viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
 
 
-			CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.getg()))
+			CAg = self.time_integrator.mesh.getC().dot(self.time_integrator.mesh.getA().dot(self.time_integrator.mesh.getg()))
 			#centroids and rotation clusters
-			for i in range(len(self.mesh.T)):
-				S = self.mesh.getS(i)
+			for i in range(len(self.time_integrator.mesh.T)):
+				S = self.time_integrator.mesh.getS(i)
 				C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-				U = 0.01*self.mesh.getU(i).transpose()+C
-				if(np.linalg.norm(self.mesh.sW[2*i,:])>=1):
+				U = 0.01*self.time_integrator.mesh.getU(i).transpose()+C
+				if(np.linalg.norm(self.time_integrator.mesh.sW[2*i,:])>=1):
 					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 					viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), green)
 				else:
 					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 					viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), red)
-				viewer.data().add_points(igl.eigen.MatrixXd(np.array([CAg[6*i:6*i+2]])), igl.eigen.MatrixXd([[0, .2*self.mesh.r_element_cluster_map[i],1-0.2*self.mesh.r_element_cluster_map[i]]]))
+				viewer.data().add_points(igl.eigen.MatrixXd(np.array([CAg[6*i:6*i+2]])), igl.eigen.MatrixXd([[0, .2*self.time_integrator.mesh.r_element_cluster_map[i],1-0.2*self.time_integrator.mesh.r_element_cluster_map[i]]]))
 
 			#snapshot
-			if(aaa==65 and not self.mesh.reduced_g):
-				displacements = disp_g - self.mesh.x0
+			if(aaa==65 and not self.time_integrator.mesh.reduced_g):
+				displacements = disp_g - self.time_integrator.mesh.x0
 				igl.writeDMAT("snapshots/"+str(self.time_integrator.time)+".dmat", igl.eigen.MatrixXd(displacements), False)
 
 			#Write image

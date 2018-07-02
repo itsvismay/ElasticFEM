@@ -31,18 +31,19 @@ from iglhelpers import *
 
 class Preprocessing:
 
-	def __init__(self, _VT):
+	def __init__(self, _VT=None):
 		self.last_mouse = None
-		self.V = _VT[0]
-		self.T = _VT[1]
-		self.U = np.zeros(len(self.T))
-		self.Fix = get_max(self.V, a=1, eps=1e-2)		
-		self.Mov = get_min(self.V, a=1, eps=1e-2)
-		self.rClusters = []
-		self.gi = 0
-		self.mesh = None
-		self.uvec = None
-		self.eGu = None
+		if _VT is not None:
+			self.V = _VT[0]
+			self.T = _VT[1]
+			self.U = np.zeros(len(self.T))
+			self.Fix = get_max(self.V, a=1, eps=1e-2)		
+			self.Mov = get_min(self.V, a=1, eps=1e-2)
+			self.rClusters = []
+			self.gi = 0
+			self.mesh = None
+			self.uvec = None
+			self.eGu = None
 		self.UVECS = None
 
 	def save_mesh_setup(self, name=None):
@@ -58,37 +59,67 @@ class Preprocessing:
 		folder = "./MeshSetups/"+name+"/"
 		if self.mesh is not None:
 			igl.writeDMAT(folder+"V.dmat", igl.eigen.MatrixXd(np.array(self.mesh.V)), True)
-			# igl.writeDMAT(folder+"F.dmat", igl.eigen.MatrixXd(self.mesh.T), True)
-			# igl.writeDMAT(folder+"FixV.dmat", igl.eigen.MatrixXd(np.array(self.mesh.fixed)), True)
-			# igl.writeDMAT(folder+"MovV.dmat", igl.eigen.MatrixXd(np.array(self.mesh.mov)), True)
+			igl.writeDMAT(folder+"F.dmat", igl.eigen.MatrixXi(self.mesh.T), True)
+			igl.writeDMAT(folder+"FixV.dmat", igl.eigen.MatrixXi(np.array([self.mesh.fixed], dtype='int32')), True)
+			igl.writeDMAT(folder+"MovV.dmat", igl.eigen.MatrixXi(np.array([self.mesh.mov], dtype='int32')), True)
+			igl.writeDMAT(folder+"Uvec.dmat", igl.eigen.MatrixXd(np.array([self.mesh.u])), True)
+
+			if self.mesh.Q is not None:
+				igl.writeDMAT(folder+"Modes.dmat", igl.eigen.MatrixXd(self.mesh.Q.toarray()), True)
+				# igl.writeDMAT(folder+"Eigs.dmat", )
+			if self.mesh.r_element_cluster_map is not None:
+				igl.writeDMAT(folder+"Rclusters.dmat", igl.eigen.MatrixXi(self.mesh.r_element_cluster_map), True)
+			if self.mesh.s_handles_ind is not None:
+				igl.writeDMAT(folder+"SHandles.dmat", igl.eigen.MatrixXi(np.array([self.mesh.s_handles_ind], dtype='int32')), True)
 			
-			# if self.mesh.Q is not None:
-			# 	igl.writeDMAT(folder+"Modes.dmat", igl.eigen.MatrixXd(self.mesh.Q), True)
-			# 	# igl.writeDMAT(folder+"Eigs.dmat", )
-			# if self.mesh.r_element_cluster_map is not None:
-			# 	igl.writeDMAT(folder+"Rclusters.dmat", igl.eigen.MatrixXi(self.mesh.r_element_cluster_map), True)
-			# if self.mesh.s_handles_ind is not None:
-			# 	igl.writeDMAT(folder+"SHandles.dmat", igl.eigen.MatrixXi(np.array(self.s_handles_ind, dtype='int32')), True)
-		
 	def read_mesh_setup(self, name=None):
 		if name==None:
 			print("Name can't be none.")
 			exit()
+		else:
+			folder = "./MeshSetups/"+name+"/"
+			eV = igl.eigen.MatrixXd()
+			eT = igl.eigen.MatrixXi()
+			eu = igl.eigen.MatrixXd()
+			eQ = igl.eigen.MatrixXd()
+			efix = igl.eigen.MatrixXi()
+			emov = igl.eigen.MatrixXi()
+			es_ind = igl.eigen.MatrixXi()
+			er_ind = igl.eigen.MatrixXi()
 
-	def createMesh(self):
+			igl.readDMAT(folder+"V.dmat", eV)
+			igl.readDMAT(folder+"F.dmat", eT)
+			igl.readDMAT(folder+"Uvec.dmat", eu)
+			igl.readDMAT(folder+"Modes.dmat", eQ)
+			igl.readDMAT(folder+"FixV.dmat", efix)
+			igl.readDMAT(folder+"MovV.dmat", emov)
+			igl.readDMAT(folder+"Rclusters.dmat", er_ind)
+			igl.readDMAT(folder+"SHandles.dmat", es_ind)
+			
+			self.mesh = Mesh(read_in = True)
+			self.mesh.init_from_file(V=e2p(eV), 
+								T=e2p(eT), 
+								u=e2p(eu), 
+								Q=e2p(eQ), 
+								fix=e2p(efix), 
+								mov=e2p(emov), 
+								r_element_cluster_map=e2p(er_ind), 
+								s_handles_ind=e2p(es_ind), 
+								modes_used=None)
+
+	def createMesh(self, modes=None):
 		to_fix = self.Fix+self.Mov 
 		to_mov = self.Mov
 		
-		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, setup= True, red_g=True)
+		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, read_in= False, modes_used=modes)
 		self.mesh.u, self.uvec, self.eGu, self.UVECS = heat_method(self.mesh)
 	
-	def getMesh(self):
-		if self.mesh is not None:
-			return self.mesh 
+	def getMesh(self, name=None, modes_used=None):
+		if name is not None:
+			self.read_mesh_setup(name = name)
 		else:
-			print("Mesh is None, sending default mesh.")
-			self.createMesh()
-			return self.mesh
+			self.createMesh(modes=modes_used)
+		return self.mesh
 
 	def display(self):
 		red = igl.eigen.MatrixXd([[1,0,0]])

@@ -60,12 +60,13 @@ class TimeIntegrator:
 			self.adder *= -1
 			self.add_on = 25
 
-		for i in range(len(self.mov)):
+		# for i in range(len(self.mov)):
 			# self.mesh.g[2*self.mov[i]] -= self.adder
-			self.mesh.g[2*self.mov[i]+1] += self.adder
+			# self.mesh.g[2*self.mov[i]+1] -= self.adder
 		print("moved")
-		# self.mesh.red_s[1] += 0.2
-		# self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
+		self.mesh.red_s[0] += 0.2
+		self.mesh.red_s[3] +=0.2
+		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
 
 	def static_solve(self):
 		print("Static Solve")
