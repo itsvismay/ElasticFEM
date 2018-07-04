@@ -1,25 +1,24 @@
-import numpy as np
-from version2 import triangle_mesh, rectangle_mesh, torus_mesh, featherize,get_min, get_max, get_min_max, NeohookeanElastic, ARAP, Mesh
+from Helpers import *
+import Meshwork
+import Arap
+import Neo
+import Display
+import Solvers
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 
 def FiniteDifferencesARAP():
-	eps = 1e-2
-	iV, iT, iU = rectangle_mesh(2,1,angle = np.pi/4, step = .1)
-
+	eps = 1e-4
 	its = 100
-	to_fix = get_min_max(iV, a=1)
-	to_mov = get_min(iV, a =1)
-	print(to_fix)
-	print(to_mov)
-	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=False)
-	# mesh.red_r[0] += 0.1
-	arap = ARAP(mesh, filen="/crap")	
-	mesh.getGlobalF()
-	# print(mesh.G.dot(mesh.z))
-	# print(mesh.G.shape)
+	VTU,tofix = Meshwork.feather_muscle2_test_setup()
+	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
+	mw = Meshwork.Preprocessing(_VT = VTU)
+	mw.Fix = get_max(mw.V, a=0, eps=1e-2)		
+	mw.Mov = get_min(mw.V, a=0, eps=1e-2)
+	mesh = mw.getMesh()
+	arap = Arap.ARAP(imesh = mesh, filen="crap/")
 	
 	E0 = arap.energy(_z=mesh.z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 	print("Default Energy ", E0)
-
 	
 	def check_dEdg():
 		real = arap.dEdg()
@@ -51,14 +50,6 @@ def FiniteDifferencesARAP():
 		print(realdEds)
 		print(np.array(dEds))
 		print("Es ", np.sum(np.array(dEds)-realdEds))
-
-	def check_dEdS():
-		dEdS_real, dEds_real = arap.dEds()
-		F,R,S,U = mesh.getGlobalF()
-		
-		S[0,0] += eps
-		Ei = arap.energy(_g=mesh.g, _R =R0, _S=S, _U=U0)
-		print((Ei - E0)/eps - dEdS_real[0,0])
 
 	def check_dEdr():
 		realdEdR, realdEdr = arap.dEdr()
@@ -273,7 +264,6 @@ def FiniteDifferencesARAP():
 		z0 = np.zeros(len(mesh.z)) + mesh.z
 		g0 = np.zeros(len(mesh.g)) + mesh.g
 		r0 = np.array(mesh.red_r) 
-		q0 = np.zeros(len(mesh.q)) + mesh.q
 		for i in range(len(mesh.red_s)):
 			mesh.z = np.zeros(len(mesh.z)) + z0
 
@@ -333,27 +323,23 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
-	check_Hessian_dEdgds()
+	# check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
 	# check_dgds_drds()
 
-FiniteDifferencesARAP()
+# FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-6
-	iV, iT, iU = rectangle_mesh(3,3,angle = 0, step = .1)
-
 	its = 100
-	to_fix = get_min_max(iV, a=1)
-	to_mov = get_min(iV, a =1)
-	print(to_fix)
-	print(to_mov)
-	mesh = Mesh((iV,iT, iU), ito_fix=to_fix, ito_mov=to_mov, red_g=True)
-	# print(mesh.fixed)
-	
-	arap = ARAP(mesh)	
-	mesh.getGlobalF()
-	ne = NeohookeanElastic(imesh = mesh)
+	VTU,tofix = Meshwork.feather_muscle2_test_setup()
+	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
+	mw = Meshwork.Preprocessing(_VT = VTU)
+	mw.Fix = get_max(mw.V, a=0, eps=1e-2)		
+	mw.Mov = get_min(mw.V, a=0, eps=1e-2)
+	mesh = mw.getMesh()
+	arap = Arap.ARAP(imesh = mesh, filen="crap/")
+	ne = Neo.NeohookeanElastic(imesh = mesh)
 
 	def check_PrinStretchForce():
 		e0 = ne.WikipediaEnergy(_rs = mesh.red_s)
@@ -384,11 +370,7 @@ def FiniteDifferencesElasticity():
 
 		dEgds = []
 		for i in range(len(mesh.red_s)):
-			if mesh.reduced_g==False:
-				mesh.g = np.zeros(len(mesh.g))
-			else:
-				mesh.z = np.zeros(len(mesh.z))
-			
+			mesh.z = np.zeros(len(mesh.z))	
 			mesh.red_s[i] += eps
 			mesh.getGlobalF(updateR=False, updateS=True)
 			arap.iterate()
@@ -426,4 +408,4 @@ def FiniteDifferencesElasticity():
 	# check_gravityForce()
 	# check_muscleForce()
 
-# FiniteDifferencesElasticity()
+FiniteDifferencesElasticity()

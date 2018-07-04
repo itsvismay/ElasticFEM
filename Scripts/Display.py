@@ -35,8 +35,6 @@ class Display:
 		self.time_integrator = isolve
 
 	def display(self):
-		self.time_integrator.mesh.red_r[0] = 0.1
-
 		viewer = igl.glfw.Viewer()
 
 		tempR = igl.eigen.MatrixXuc(1280, 800)
@@ -66,9 +64,9 @@ class Display:
 			viewer.data().clear()
 		
 			if(aaa==65):
-				self.time_integrator.move_g()
-				self.time_integrator.arap.iterate()
-				# self.time_integrator.static_solve()
+				# self.time_integrator.move_g()
+				# self.time_integrator.arap.iterate()
+				self.time_integrator.static_solve()
 				self.time_integrator.time +=1
 
 				
@@ -113,7 +111,7 @@ class Display:
 				viewer.data().add_points(igl.eigen.MatrixXd(np.array([CAg[6*i:6*i+2]])), igl.eigen.MatrixXd([[0, .2*self.time_integrator.mesh.r_element_cluster_map[i],1-0.2*self.time_integrator.mesh.r_element_cluster_map[i]]]))
 
 			#snapshot
-			if(aaa==65 and not self.time_integrator.mesh.reduced_g):
+			if(aaa==65):
 				displacements = disp_g - self.time_integrator.mesh.x0
 				igl.writeDMAT("snapshots/"+str(self.time_integrator.time)+".dmat", igl.eigen.MatrixXd(displacements), False)
 

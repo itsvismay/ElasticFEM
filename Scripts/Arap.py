@@ -81,7 +81,6 @@ class ARAP:
 		FPAx = _R.dot(_U.dot(_S.dot(_U.T.dot(self.PAx))))
 		# print(_z)
 		# print(PAg)
-		print(FPAx)
 		return 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
 
 	def Energy(self):
@@ -418,7 +417,10 @@ class ARAP:
 		repeatUWr = repeat3.dot(UWr)
 		
 		#This is the tricky part
-		PAQ = self.PAG.toarray()
+		if sparse.issparse(self.PAG):
+			PAQ = self.PAG.toarray()
+		else:
+			PAQ = self.PAG
 		b = np.array([[0,1],[-1,0]])
 		blocks = []
 		_6T_ = 6*len(self.mesh.T)

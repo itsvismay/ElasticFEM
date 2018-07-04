@@ -57,8 +57,12 @@ class Mesh:
 		self.GU = sparse.diags([np.ones(6*t_size)],[0]).tolil()
 
 		# Modal analysis
-		self.Q =self.setupModes(modes_used=modes_used)
-		self.G = self.Q[:,:]
+		if modes_used is None:
+			self.Q = None 
+			self.G = sparse.eye(2*len(self.V))
+		else:
+			self.Q =self.setupModes(modes_used=modes_used)
+			self.G = self.Q[:,:]
 		self.z = np.zeros(self.G.shape[1])
 
 		# Rotation clusterings
@@ -76,15 +80,66 @@ class Mesh:
 		self.sW = None
 		self.setupStrainSkinnings()
 
-		
 		print("\n+ Setup GF")
 		self.getGlobalF(updateR = True, updateS = True, updateU=True)
 		print("- Done with GF")
 
 	def init_from_file(self, V=None, T=None, u=None, Q=None, fix=None, mov=None, r_element_cluster_map=None, s_handles_ind=None, modes_used=None):
-		print(V.shape)
-		exit()
+		self.youngs = 60000
+		self.poissons = 0.45
+		self.V = V
+		self.T = T
+		self.fixed = fix[0,:]
+		self.mov = mov[0,:]
+		self.x0 = np.ravel(self.V)
+		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
+		self.u = u[0,:]
 
+		self.number_of_verts_fixed_on_element = None
+		self.P = None
+		self.A = None
+		self.C = None
+		self.N = None
+		self.BLOCK = None
+		self.ANTI_BLOCK = None
+		self.Mass = None
+
+		self.Eigvals = None
+		self.z = None
+		
+		t_size = len(self.T)
+		self.GF = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
+		self.GR = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
+		self.GS = sparse.diags([np.zeros(6*t_size-1), np.ones(6*t_size), np.zeros(6*t_size-1)],[-1,0,1]).tolil()
+		self.GU = sparse.diags([np.ones(6*t_size)],[0]).tolil()
+
+		# Modal analysis
+		self.Q = Q
+		if modes_used is not None:
+			self.G = Q[:, :modes_used]
+		else:
+			self.G = sparse.eye(2*len(self.V))
+		self.z = np.zeros(self.G.shape[1])
+	
+		# Rotation clusterings
+		self.red_r = None
+		self.r_element_cluster_map = r_element_cluster_map[:,0]
+		self.r_cluster_element_map = defaultdict(list)
+		self.RotationBLOCK = None
+		self.setupRotClusters( rclusters=True)
+
+
+		# self.readInRotClusters()
+		#S skinnings
+		self.red_s = None
+		self.s_handles_ind = s_handles_ind[0,:]
+		self.sW = None
+		self.setupStrainSkinnings(shandles = True)
+
+		
+		print("\n+ Setup GF")
+		self.getGlobalF(updateR = True, updateS = True, updateU=True)
+		print("- Done with GF")
 
 	def setupModes(self, modes_used=None):
 		A = self.getA()
@@ -119,7 +174,7 @@ class Mesh:
 		Q = eHeV
 		return Q
 
-	def setupStrainSkinnings(self):
+	def setupStrainSkinnings(self, shandles = False):
 		print("Setting up skinnings")
 		if len(self.T) == 1:
 			self.s_handles_ind = [0]
@@ -129,8 +184,10 @@ class Mesh:
 
 		t_set = Set([i for i in range(len(self.T))])
 
-		# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
-		self.s_handles_ind = [0,1]
+		if shandles is False:
+			# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
+			self.s_handles_ind = [0,1]
+		
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
 		#generate weights by euclidean dist
@@ -200,16 +257,20 @@ class Mesh:
 		tW /= np.sum(tW, axis =1)[:, np.newaxis] #normalize rows to sum to 1
 		return np.kron(tW, np.eye(3))
 
-	def setupRotClusters(self):
+	def setupRotClusters(self, rclusters=False):
 		print("Setting up rotation clusters")
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
-		nrc =  5
-		self.red_r = np.zeros(nrc)
-		self.r_element_cluster_map = self.kmeans_rotationclustering()
+		if rclusters is False:
+			nrc =  5
+			self.r_element_cluster_map = self.kmeans_rotationclustering(clusters=nrc)
 
 		for i in range(len(self.T)):			
 			self.r_cluster_element_map[self.r_element_cluster_map[i]].append(i)
+
+		if rclusters is True:
+			nrc = len(self.r_cluster_element_map.keys())
+		self.red_r = np.zeros(nrc)
 
 		self.RotationBLOCK = []
 		for i in range(len(self.red_r)):

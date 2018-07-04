@@ -162,33 +162,18 @@ def feather_muscle1_test_setup(x = 3, y = 2):
 
 	return (V, T, u), to_fix
 
-def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 200, p2 = 100):
+def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 50, p2 = 25):
 	step = 0.1
 	V = []
 	T = []
 	u = []
-	V.append([(r4+1)*step, (r4+1)*step])
-	V.append([(r4+1)*step + 1.5*step*r1, (r4+1)*step ])
-	V.append([(r4+1)*step - 1.5*step*r1, (r4+1)*step ])
-	V.append([(r4+1)*step + 1.75*step*r1, (r4+1)*step ])
-	V.append([(r4+1)*step - 1.75*step*r1, (r4+1)*step ])
+	
 	for theta in range(0, p1):
 		angle = theta*np.pi/p2
-		# if(angle<=np.pi):
-		V.append([2*step*r1*np.cos(angle) + (r4+1)*step, step*r1*np.sin(angle)+ (r4+1)*step])
-		V.append([2*step*r2*np.cos(angle) + (r4+1)*step, step*r2*np.sin(angle)+ (r4+1)*step])
-		V.append([2*step*r3*np.cos(angle) + (r4+1)*step, step*r3*np.sin(angle)+ (r4+1)*step])
-		V.append([2*step*r4*np.cos(angle) + (r4+1)*step, step*r4*np.sin(angle)+ (r4+1)*step])
-
+		# for i in range(2):
+		V.append([2*step*r1*np.cos(angle), step*r1*np.sin(angle)])
+	print(np.array(V))
 	T = Delaunay(V).simplices
-
-	for i in range(len(T)):
-		e = T[i]
-		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
-		if(c[1]< (step*(r4+1))):
-			u.append(-0.15)
-		else:
-			u.append(0.15)
 
 
 	to_fix =get_max(V,0)

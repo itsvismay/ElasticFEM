@@ -32,13 +32,13 @@ from iglhelpers import *
 class Preprocessing:
 
 	def __init__(self, _VT=None):
-		self.last_mouse = None
+		self.mouse_down = False
 		if _VT is not None:
 			self.V = _VT[0]
 			self.T = _VT[1]
 			self.U = np.zeros(len(self.T))
-			self.Fix = get_max(self.V, a=1, eps=1e-2)		
-			self.Mov = get_min(self.V, a=1, eps=1e-2)
+			self.Fix = get_max(self.V, a=0, eps=1e-2)		
+			self.Mov = get_min(self.V, a=0, eps=1e-2)
 			self.rClusters = []
 			self.gi = 0
 			self.mesh = None
@@ -54,9 +54,10 @@ class Preprocessing:
 		#AND json file with basic info
 		# - mesh folder name (so ARAP pre-processing can potentially be saved)
 		# - sizes, YM, poisson, muscle strengths, density
-		if name==None:
+		if name is None:
 			name = str(datetime.datetime.now())
 		folder = "./MeshSetups/"+name+"/"
+		print("writing DMATS to "+folder)
 		if self.mesh is not None:
 			igl.writeDMAT(folder+"V.dmat", igl.eigen.MatrixXd(np.array(self.mesh.V)), True)
 			igl.writeDMAT(folder+"F.dmat", igl.eigen.MatrixXi(self.mesh.T), True)
@@ -71,13 +72,15 @@ class Preprocessing:
 				igl.writeDMAT(folder+"Rclusters.dmat", igl.eigen.MatrixXi(self.mesh.r_element_cluster_map), True)
 			if self.mesh.s_handles_ind is not None:
 				igl.writeDMAT(folder+"SHandles.dmat", igl.eigen.MatrixXi(np.array([self.mesh.s_handles_ind], dtype='int32')), True)
-			
+		print("Done writing DMAT")
+
 	def read_mesh_setup(self, name=None):
 		if name==None:
 			print("Name can't be none.")
 			exit()
 		else:
 			folder = "./MeshSetups/"+name+"/"
+			print("READING DMATs from "+folder)
 			eV = igl.eigen.MatrixXd()
 			eT = igl.eigen.MatrixXi()
 			eu = igl.eigen.MatrixXd()
@@ -106,6 +109,7 @@ class Preprocessing:
 								r_element_cluster_map=e2p(er_ind), 
 								s_handles_ind=e2p(es_ind), 
 								modes_used=None)
+			print("Done reading DMAT")
 
 	def createMesh(self, modes=None):
 		to_fix = self.Fix+self.Mov 
@@ -133,52 +137,50 @@ class Preprocessing:
 
 		viewer = igl.glfw.Viewer()
 		def mouse_up(viewer, btn, bbb):
-			print("up")
+			self.mouse_down = False
 
 		def mouse_down(viewer, btn, bbb):
-			print("down")
+			self.mouse_down = True
 			# Cast a ray in the view direction starting from the mouse position
 			bc = igl.eigen.MatrixXd()
 			fid = igl.eigen.MatrixXi(np.array([-1]))
 			coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
 			hit = igl.unproject_onto_mesh(coord, viewer.core.view * viewer.core.model,
 			viewer.core.proj, viewer.core.viewport, igl.eigen.MatrixXd(self.V), igl.eigen.MatrixXi(self.T), fid, bc)
+
 			if hit and btn==0:
 				# paint hit red
-				print("fix", fid)
 				ind = e2p(fid)[0][0]
-				self.Fix.append(self.T[ind][0])
-				self.Fix.append(self.T[ind][1])
-				self.Fix.append(self.T[ind][2])
-				fixed_pts = []
-				for i in range(len(self.Fix)):
-					fixed_pts.append(self.V[self.Fix[i]])
-				viewer.data().add_points(igl.eigen.MatrixXd(np.array(fixed_pts)), red)
+				self.Fix.append(self.T[ind][np.argmax(bc)])
+				print("fix",self.T[ind][np.argmax(bc)])
+
 				return True
+			
 			if hit and btn==2:
 				# paint hit red
-				print("mov", fid)
 				ind = e2p(fid)[0][0]
-				self.Mov.append(self.T[ind][0])
-				self.Mov.append(self.T[ind][1])
-				self.Mov.append(self.T[ind][2])
-				mov_pts = []
-				for i in range(len(self.Mov)):
-					mov_pts.append(self.V[self.Mov[i]])
-				viewer.data().add_points(igl.eigen.MatrixXd(np.array(mov_pts)), green)
+				self.Mov.append(self.T[ind][np.argmax(bc)])
+				print("mov",self.T[ind][np.argmax(bc)])
 				return True
-			if hit:
-				print("Element", fid)
-				ind = e2p(fid)[0][0]
-				print(self.T[ind])
-				return True
+			
 			return False
+
+		def mouse_move(viewer, mx, my):
+			if self.mouse_down:
+				# Cast a ray in the view direction starting from the mouse position
+				bc = igl.eigen.MatrixXd()
+				fid = igl.eigen.MatrixXi(np.array([-1]))
+				coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
+				hit = igl.unproject_onto_mesh(coord, viewer.core.view * viewer.core.model,
+				viewer.core.proj, viewer.core.viewport, igl.eigen.MatrixXd(self.V), igl.eigen.MatrixXi(self.T), fid, bc)
+				print(fid)
+
 
 		def key_down(viewer,aaa, bbb):
 			if(aaa == 65):
 				self.createMesh()
 			if(aaa == 83):
-				self.save_mesh_setup(name="test")
+				self.save_mesh_setup(name=None)
 
 			viewer.data().clear()
 			if self.uvec is None:
@@ -196,17 +198,12 @@ class Preprocessing:
 
 			viewer.data().set_mesh(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(self.T))
 
-			centroids = []
-			for i in range(len(self.T)):
-				p1 = self.V[self.T[i][0]]
-				p2 = self.V[self.T[i][1]]
-				p3 = self.V[self.T[i][2]]
-				c = get_centroid(p1, p2, p3) 
-				color = black
-				if (self.mesh is not None):
-					color = igl.eigen.MatrixXd(np.array([randc[self.mesh.r_element_cluster_map[i]]]))
-
-				viewer.data().add_points(igl.eigen.MatrixXd(np.array([c])),  color)
+			if (self.mesh is not None):
+				Colors = []
+				for i in range(len(self.T)): 
+					color = black
+					Colors.append(randc[self.mesh.r_element_cluster_map[i]])
+				viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
 			
 			if not self.mesh is None:
 				CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
@@ -215,6 +212,7 @@ class Preprocessing:
 					U = np.multiply(self.mesh.getU(i), np.array([[0.03],[0.03]])) + C
 					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 
+		def pre_draw(viewer):
 			fixed_pts = []
 			for i in range(len(self.Fix)):
 				fixed_pts.append(self.V[self.Fix[i]])
@@ -229,6 +227,8 @@ class Preprocessing:
 		viewer.callback_mouse_down = mouse_down
 		viewer.callback_key_down = key_down
 		viewer.callback_mouse_up = mouse_up
+		viewer.callback_mouse_move = mouse_move
+		viewer.callback_pre_draw = pre_draw
 		viewer.core.is_animating = False
 		viewer.launch()
 
