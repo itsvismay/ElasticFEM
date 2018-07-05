@@ -7,7 +7,7 @@ import Solvers
 
 #Mesh creation
 # VTU,tofix = Meshwork.feather_muscle2_test_setup()
-VTU = Meshwork.rectangle_mesh(x=5, y=5, step=0.1)
+VTU = Meshwork.rectangle_mesh(x=4, y=2, step=0.1)
 mw = Meshwork.Preprocessing(_VT = VTU)
 mw.display()
 exit()
@@ -15,7 +15,7 @@ exit()
 
 #Read-in mesh: read V, T, U, rot-clusters, skinning handles, Modes (if reduced)
 mw = Meshwork.Preprocessing(_VT = None)
-mesh = mw.getMesh(name="600x300Oval", modes_used=None)
+mesh = mw.getMesh(name="test", modes_used=None)
 
 #ARAP setup
 arap = Arap.ARAP(imesh=mesh, filen="snapshots/")

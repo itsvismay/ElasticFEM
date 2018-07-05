@@ -27,23 +27,25 @@ from Helpers import *
 from Mesh import Mesh
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.3f}'.format(x)})
 from iglhelpers import *
+import json
 
 
 class Preprocessing:
 
 	def __init__(self, _VT=None):
-		self.mouse_down = False
+		self.middle_button_down = False
 		if _VT is not None:
 			self.V = _VT[0]
 			self.T = _VT[1]
 			self.U = np.zeros(len(self.T))
 			self.Fix = get_max(self.V, a=0, eps=1e-2)		
 			self.Mov = get_min(self.V, a=0, eps=1e-2)
-			self.rClusters = []
 			self.gi = 0
 			self.mesh = None
 			self.uvec = None
 			self.eGu = None
+			self.uClusters = []
+			self.uClusterNum = -1
 		self.UVECS = None
 
 	def save_mesh_setup(self, name=None):
@@ -56,6 +58,7 @@ class Preprocessing:
 		# - sizes, YM, poisson, muscle strengths, density
 		if name is None:
 			name = str(datetime.datetime.now())
+			os.makedirs("./MeshSetups/"+name)
 		folder = "./MeshSetups/"+name+"/"
 		print("writing DMATS to "+folder)
 		if self.mesh is not None:
@@ -72,6 +75,14 @@ class Preprocessing:
 				igl.writeDMAT(folder+"Rclusters.dmat", igl.eigen.MatrixXi(self.mesh.r_element_cluster_map), True)
 			if self.mesh.s_handles_ind is not None:
 				igl.writeDMAT(folder+"SHandles.dmat", igl.eigen.MatrixXi(np.array([self.mesh.s_handles_ind], dtype='int32')), True)
+			if self.mesh.u_clusters_element_map is not None:
+				for i in range(len(self.mesh.u_clusters_element_map)):
+					igl.writeDMAT(folder+"uClusters"+str(i)+".dmat", igl.eigen.MatrixXi(np.array(list(self.mesh.u_clusters_element_map[i]))), True)
+
+			data = {"uClusters": len(self.mesh.u_clusters_element_map)}
+			with open(folder+"params.json", 'w') as outfile:
+				json.dump(data, outfile)
+
 		print("Done writing DMAT")
 
 	def read_mesh_setup(self, name=None):
@@ -80,6 +91,8 @@ class Preprocessing:
 			exit()
 		else:
 			folder = "./MeshSetups/"+name+"/"
+			jdata = json.load(open(folder+"params.json"))
+			len_uClusters = jdata['uClusters']
 			print("READING DMATs from "+folder)
 			eV = igl.eigen.MatrixXd()
 			eT = igl.eigen.MatrixXi()
@@ -89,6 +102,8 @@ class Preprocessing:
 			emov = igl.eigen.MatrixXi()
 			es_ind = igl.eigen.MatrixXi()
 			er_ind = igl.eigen.MatrixXi()
+			u_ind = []
+			eu_ind = igl.eigen.MatrixXi()
 
 			igl.readDMAT(folder+"V.dmat", eV)
 			igl.readDMAT(folder+"F.dmat", eT)
@@ -98,6 +113,10 @@ class Preprocessing:
 			igl.readDMAT(folder+"MovV.dmat", emov)
 			igl.readDMAT(folder+"Rclusters.dmat", er_ind)
 			igl.readDMAT(folder+"SHandles.dmat", es_ind)
+			for i in range(len_uClusters):
+				igl.readDMAT(folder+"uClusters"+str(i)+".dmat", eu_ind)
+				print(eu_ind)
+				exit()
 			
 			self.mesh = Mesh(read_in = True)
 			self.mesh.init_from_file(V=e2p(eV), 
@@ -108,16 +127,20 @@ class Preprocessing:
 								mov=e2p(emov), 
 								r_element_cluster_map=e2p(er_ind), 
 								s_handles_ind=e2p(es_ind), 
+								u_clusters_element_map=e2p(u_ind),
 								modes_used=None)
+			
 			print("Done reading DMAT")
 
 	def createMesh(self, modes=None):
-		to_fix = self.Fix+self.Mov 
+		to_fix = self.Fix
 		to_mov = self.Mov
 		
 		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, read_in= False, modes_used=modes)
 		self.mesh.u, self.uvec, self.eGu, self.UVECS = heat_method(self.mesh)
-	
+		self.mesh.u_clusters_element_map = [np.array(list(e)) for e in self.uClusters]
+
+
 	def getMesh(self, name=None, modes_used=None):
 		if name is not None:
 			self.read_mesh_setup(name = name)
@@ -137,50 +160,54 @@ class Preprocessing:
 
 		viewer = igl.glfw.Viewer()
 		def mouse_up(viewer, btn, bbb):
-			self.mouse_down = False
+			self.middle_button_down = False
 
 		def mouse_down(viewer, btn, bbb):
-			self.mouse_down = True
 			# Cast a ray in the view direction starting from the mouse position
 			bc = igl.eigen.MatrixXd()
 			fid = igl.eigen.MatrixXi(np.array([-1]))
 			coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
 			hit = igl.unproject_onto_mesh(coord, viewer.core.view * viewer.core.model,
 			viewer.core.proj, viewer.core.viewport, igl.eigen.MatrixXd(self.V), igl.eigen.MatrixXi(self.T), fid, bc)
+			ind = e2p(fid)[0][0]
 
 			if hit and btn==0:
 				# paint hit red
-				ind = e2p(fid)[0][0]
 				self.Fix.append(self.T[ind][np.argmax(bc)])
 				print("fix",self.T[ind][np.argmax(bc)])
-
 				return True
 			
 			if hit and btn==2:
 				# paint hit red
-				ind = e2p(fid)[0][0]
 				self.Mov.append(self.T[ind][np.argmax(bc)])
 				print("mov",self.T[ind][np.argmax(bc)])
 				return True
+
+			if hit and btn==1:
+				self.middle_button_down = True
+				self.uClusters.append(set())
+				self.uClusterNum += 1
 			
 			return False
 
 		def mouse_move(viewer, mx, my):
-			if self.mouse_down:
+			if self.middle_button_down:
 				# Cast a ray in the view direction starting from the mouse position
 				bc = igl.eigen.MatrixXd()
 				fid = igl.eigen.MatrixXi(np.array([-1]))
 				coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
 				hit = igl.unproject_onto_mesh(coord, viewer.core.view * viewer.core.model,
 				viewer.core.proj, viewer.core.viewport, igl.eigen.MatrixXd(self.V), igl.eigen.MatrixXi(self.T), fid, bc)
-				print(fid)
+				ind = e2p(fid)[0][0]
+
+				self.uClusters[self.uClusterNum].add(ind)
 
 
 		def key_down(viewer,aaa, bbb):
 			if(aaa == 65):
 				self.createMesh()
 			if(aaa == 83):
-				self.save_mesh_setup(name=None)
+				self.save_mesh_setup(name="test")
 
 			viewer.data().clear()
 			if self.uvec is None:

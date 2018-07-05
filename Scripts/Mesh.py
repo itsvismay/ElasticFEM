@@ -35,6 +35,7 @@ class Mesh:
 		self.x0 = np.ravel(self.V)
 		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
 		self.u = iVTU[2] if iVTU[2] is not None else np.zeros(len(self.T))
+		self.u_clusters_element_map = None 
 
 		self.number_of_verts_fixed_on_element = None
 		self.P = None
@@ -84,7 +85,7 @@ class Mesh:
 		self.getGlobalF(updateR = True, updateS = True, updateU=True)
 		print("- Done with GF")
 
-	def init_from_file(self, V=None, T=None, u=None, Q=None, fix=None, mov=None, r_element_cluster_map=None, s_handles_ind=None, modes_used=None):
+	def init_from_file(self, V=None, T=None, u=None, Q=None, fix=None, mov=None, r_element_cluster_map=None, s_handles_ind=None, u_clusters_element_map=None, modes_used=None):
 		self.youngs = 60000
 		self.poissons = 0.45
 		self.V = V
@@ -112,6 +113,9 @@ class Mesh:
 		self.GR = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
 		self.GS = sparse.diags([np.zeros(6*t_size-1), np.ones(6*t_size), np.zeros(6*t_size-1)],[-1,0,1]).tolil()
 		self.GU = sparse.diags([np.ones(6*t_size)],[0]).tolil()
+		
+		# U clusters
+		self.u_clusters_element_map = u_clusters_element_map
 
 		# Modal analysis
 		self.Q = Q
@@ -120,7 +124,7 @@ class Mesh:
 		else:
 			self.G = sparse.eye(2*len(self.V))
 		self.z = np.zeros(self.G.shape[1])
-	
+		
 		# Rotation clusterings
 		self.red_r = None
 		self.r_element_cluster_map = r_element_cluster_map[:,0]
