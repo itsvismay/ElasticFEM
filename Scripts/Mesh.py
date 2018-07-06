@@ -27,7 +27,7 @@ class Mesh:
 		#Get Variables setup
 		self.youngs = 60000
 		self.poissons = 0.45
-		self.fixed = list(set(ito_fix).union(set(ito_mov)))
+		self.fixed = list(set(ito_fix))#.union(set(ito_mov)))
 		self.V = np.array(iVTU[0])
 		self.T = iVTU[1]
 		self.mov = list(set(ito_mov))
@@ -36,7 +36,7 @@ class Mesh:
 		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
 		self.u = iVTU[2] if iVTU[2] is not None else np.zeros(len(self.T))
 		self.u_clusters_element_map = None 
-		self.u_toggle = np.ones(len(self.T))
+		self.u_toggle = np.zeros(len(self.T))
 
 		self.number_of_verts_fixed_on_element = None
 		self.P = None
@@ -97,7 +97,7 @@ class Mesh:
 		self.x0 = np.ravel(self.V)
 		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
 		self.u = u[0,:]
-		self.u_toggle = np.zero(len(self.T))
+		self.u_toggle = np.zeros(len(self.T))
 
 		self.number_of_verts_fixed_on_element = None
 		self.P = None

@@ -138,8 +138,8 @@ class Preprocessing:
 		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, read_in= False, modes_used=modes)
 		self.mesh.u, self.uvec, self.eGu, self.UVECS = heat_method(self.mesh)
 		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
-		self.uClusters = [[t for t in range(len(self.T)) if CAg[6*t]<=0.1],
-							[t for t in range(len(self.T)) if CAg[6*t]>=0.9]]
+		self.uClusters = [[t for t in range(len(self.T)) if CAg[6*t+1]<=0.1],
+							[t for t in range(len(self.T)) if CAg[6*t+1]>=0.9]]
 
 		self.mesh.u_clusters_element_map = [np.array(list(e), dtype="int32") for e in self.uClusters]
 		self.mesh.getGlobalF(updateU=True)

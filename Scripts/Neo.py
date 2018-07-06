@@ -198,10 +198,10 @@ class NeohookeanElastic:
 		# e1 = self.GravityEnergy()
 		e3 = self.MuscleEnergy(_rs=irs)
 		print("e123", e2, e3)
-		return e2# + e3
+		return e2 + e3
 
 	def Forces(self, irs, idgds):
 		f2 = self.WikipediaForce(_rs=irs)
 		# f1 =  -1*self.GravityForce(idgds)
 		f3 = self.MuscleForce(_rs=irs)
-		return f2# + f3
+		return f2 + f3

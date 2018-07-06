@@ -44,28 +44,16 @@ class Display:
 		randc = [[random.uniform(0,1), random.uniform(0,1), random.uniform(0,1)] for i in range(10)]
 
 		def mouse_up(viewer, btn, bbb):
-			if btn==1:
-				coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
-				print("up", coord)
-				up = e2p(coord)
-				print("vec", up - self.last_mouse)
-			for i in range(len(self.time_integrator.mov)):
-				# self.time_integrator.mesh.g[2*self.time_integrator.mov[i]]   -= self.time_integrator.adder
-				self.time_integrator.mesh.g[2*self.time_integrator.mov[i]+1] -= self.time_integrator.adder
 			return False
 
 		def mouse_down(viewer, btn, bbb):
-			if btn==1:
-				coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
-				self.last_mouse = e2p(coord)
-
 			return False
 
 		def key_down(viewer,aaa, bbb):
 			viewer.data().clear()
 		
 			if(aaa==65):
-				self.time_integrator.move_g()
+				# self.time_integrator.move_g()
 				# self.time_integrator.arap.iterate()
 				self.time_integrator.static_solve()
 				self.time_integrator.time +=1

@@ -26,7 +26,7 @@ class TimeIntegrator:
 		self.mesh = imesh
 		self.arap = iarap
 		self.elastic = ielastic
-		self.adder = .15
+		self.adder = .3
 		# self.set_random_strain()
 		self.mov = self.mesh.mov
 		self.bnds = [(1e-5, None) for i in range(len(self.mesh.red_s))]
@@ -61,7 +61,7 @@ class TimeIntegrator:
 			self.add_on = 25
 
 		for i in range(len(self.mov)):
-			self.mesh.g[2*self.mov[i]] -= self.adder
+			self.mesh.g[2*self.mov[i]] += self.adder
 			# self.mesh.g[2*self.mov[i]+1] += self.adder
 		# print("moved")
 		# self.mesh.red_s[3*np.arange(len(self.mesh.red_s)/3)+1] += 0.2
@@ -78,7 +78,7 @@ class TimeIntegrator:
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 
 		alpha1 =1e5
-		alpha2 =0
+		alpha2 =1
 
 		def energy(s):
 			for i in range(len(s)):
@@ -90,12 +90,12 @@ class TimeIntegrator:
 			self.arap.iterate()
 
 			E_arap = self.arap.Energy()
-			# E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
+			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
 			# print("s", self.mesh.red_s)
 			# print("E", E_arap, E_elastic)
 
 
-			return alpha1*E_arap# + alpha2*E_elastic
+			return alpha1*E_arap + alpha2*E_elastic
 
 		def jacobian(s):
 			for i in range(len(s)):
@@ -106,8 +106,8 @@ class TimeIntegrator:
 			self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()
 
-			# J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
-			return  alpha1*J_arap# + alpha2*J_elastic
+			J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
+			return  alpha1*J_arap + alpha2*J_elastic
 
 
 		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})

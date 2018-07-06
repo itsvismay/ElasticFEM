@@ -323,17 +323,17 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
 	# check_Hessian_dEdrdr()
-	check_Hessian_dEdgds()
+	# check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
 	# check_dgds_drds()
 
-FiniteDifferencesARAP()
+# FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-6
 	its = 100
 	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
-	VTU = Meshwork.rectangle_mesh(x=1, y=1, step=0.1)
+	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
 	mw = Meshwork.Preprocessing(_VT = VTU)
 	mw.Fix = get_max(mw.V, a=1, eps=1e-2)		
 	mw.Mov = get_min(mw.V, a=1, eps=1e-2)
@@ -404,8 +404,8 @@ def FiniteDifferencesElasticity():
 		print("fake", dEds)
 		print("Diff", np.sum(real - np.array(dEds)))
 
-	# check_PrinStretchForce()
+	check_PrinStretchForce()
 	# check_gravityForce()
-	check_muscleForce()
+	# check_muscleForce()
 
 # FiniteDifferencesElasticity()
