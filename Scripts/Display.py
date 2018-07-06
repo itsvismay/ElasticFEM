@@ -41,6 +41,7 @@ class Display:
 		tempG = igl.eigen.MatrixXuc(1280, 800)
 		tempB = igl.eigen.MatrixXuc(1280, 800)
 		tempA = igl.eigen.MatrixXuc(1280, 800)
+		randc = [[random.uniform(0,1), random.uniform(0,1), random.uniform(0,1)] for i in range(10)]
 
 		def mouse_up(viewer, btn, bbb):
 			if btn==1:
@@ -64,12 +65,14 @@ class Display:
 			viewer.data().clear()
 		
 			if(aaa==65):
-				# self.time_integrator.move_g()
+				self.time_integrator.move_g()
 				# self.time_integrator.arap.iterate()
 				self.time_integrator.static_solve()
 				self.time_integrator.time +=1
 
-				
+			if(aaa>=49 and aaa<=57):
+				self.time_integrator.toggle_muscle_group(aaa-49)
+
 			DV, DT = self.time_integrator.mesh.getDiscontinuousVT()
 			RV, RT = self.time_integrator.mesh.getContinuousVT()
 			V2 = igl.eigen.MatrixXd(RV)
@@ -88,27 +91,43 @@ class Display:
 				viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
 
 
+			MOV = []
+			disp_g = self.time_integrator.mesh.getg()
+			for i in range(len(self.time_integrator.mesh.mov)):
+				MOV.append(disp_g[2*self.time_integrator.mesh.mov[i]:2*self.time_integrator.mesh.mov[i]+2])
+			viewer.data().add_points(igl.eigen.MatrixXd(np.array(MOV)), green)
+
+
 			FIXED = []
 			disp_g = self.time_integrator.mesh.getg()
 			for i in range(len(self.time_integrator.mesh.fixed)):
 				FIXED.append(disp_g[2*self.time_integrator.mesh.fixed[i]:2*self.time_integrator.mesh.fixed[i]+2])
-
 			viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
 
 
+			#Muscle fiber directions
 			CAg = self.time_integrator.mesh.getC().dot(self.time_integrator.mesh.getA().dot(self.time_integrator.mesh.getg()))
-			#centroids and rotation clusters
 			for i in range(len(self.time_integrator.mesh.T)):
 				S = self.time_integrator.mesh.getS(i)
 				C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-				U = 0.01*self.time_integrator.mesh.getU(i).transpose()+C
-				if(np.linalg.norm(self.time_integrator.mesh.sW[2*i,:])>=1):
-					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
-					viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), green)
-				else:
-					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
-					viewer.data().add_edges(igl.eigen.MatrixXd(C[1,:]), igl.eigen.MatrixXd(U[1,:]), red)
-				viewer.data().add_points(igl.eigen.MatrixXd(np.array([CAg[6*i:6*i+2]])), igl.eigen.MatrixXd([[0, .2*self.time_integrator.mesh.r_element_cluster_map[i],1-0.2*self.time_integrator.mesh.r_element_cluster_map[i]]]))
+				U = 0.03*self.time_integrator.mesh.getU(i).transpose()+C
+				viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
+
+			Colors = np.ones(self.time_integrator.mesh.T.shape)
+			if aaa==67:
+				for i in range(len(self.time_integrator.mesh.u_clusters_element_map)):
+					for j in range(len(self.time_integrator.mesh.u_clusters_element_map[i])):
+						k = self.time_integrator.mesh.u_clusters_element_map[i][j]
+						Colors[k,:] = randc[i]
+			elif aaa==82:
+				for i in range(len(self.time_integrator.mesh.T)): 
+					color = black
+					Colors[i,:] = randc[self.time_integrator.mesh.r_element_cluster_map[i]]
+			elif aaa>=49 and aaa<=57:
+				for j in range(len(self.time_integrator.mesh.u_clusters_element_map[aaa-49])):
+					k = self.time_integrator.mesh.u_clusters_element_map[aaa-49][j]
+					Colors[k,:] = randc[aaa-49]
+			viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
 
 			#snapshot
 			if(aaa==65):

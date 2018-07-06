@@ -70,14 +70,14 @@ class Preprocessing:
 
 			if self.mesh.Q is not None:
 				igl.writeDMAT(folder+"Modes.dmat", igl.eigen.MatrixXd(self.mesh.Q.toarray()), True)
-				# igl.writeDMAT(folder+"Eigs.dmat", )
+				# igl.writeDMAT(folder+"Eigs.dmat")
 			if self.mesh.r_element_cluster_map is not None:
 				igl.writeDMAT(folder+"Rclusters.dmat", igl.eigen.MatrixXi(self.mesh.r_element_cluster_map), True)
 			if self.mesh.s_handles_ind is not None:
 				igl.writeDMAT(folder+"SHandles.dmat", igl.eigen.MatrixXi(np.array([self.mesh.s_handles_ind], dtype='int32')), True)
 			if self.mesh.u_clusters_element_map is not None:
 				for i in range(len(self.mesh.u_clusters_element_map)):
-					igl.writeDMAT(folder+"uClusters"+str(i)+".dmat", igl.eigen.MatrixXi(np.array(list(self.mesh.u_clusters_element_map[i]))), True)
+					igl.writeDMAT(folder+"uClusters"+str(i)+".dmat", igl.eigen.MatrixXi(np.array([self.mesh.u_clusters_element_map[i]])), True)
 
 			data = {"uClusters": len(self.mesh.u_clusters_element_map)}
 			with open(folder+"params.json", 'w') as outfile:
@@ -115,9 +115,8 @@ class Preprocessing:
 			igl.readDMAT(folder+"SHandles.dmat", es_ind)
 			for i in range(len_uClusters):
 				igl.readDMAT(folder+"uClusters"+str(i)+".dmat", eu_ind)
-				print(eu_ind)
-				exit()
-			
+				u_ind.append(e2p(eu_ind)[0,:])
+
 			self.mesh = Mesh(read_in = True)
 			self.mesh.init_from_file(V=e2p(eV), 
 								T=e2p(eT), 
@@ -127,7 +126,7 @@ class Preprocessing:
 								mov=e2p(emov), 
 								r_element_cluster_map=e2p(er_ind), 
 								s_handles_ind=e2p(es_ind), 
-								u_clusters_element_map=e2p(u_ind),
+								u_clusters_element_map= u_ind,
 								modes_used=None)
 			
 			print("Done reading DMAT")
@@ -138,8 +137,12 @@ class Preprocessing:
 		
 		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, read_in= False, modes_used=modes)
 		self.mesh.u, self.uvec, self.eGu, self.UVECS = heat_method(self.mesh)
-		self.mesh.u_clusters_element_map = [np.array(list(e)) for e in self.uClusters]
+		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
+		self.uClusters = [[t for t in range(len(self.T)) if CAg[6*t]<=0.1],
+							[t for t in range(len(self.T)) if CAg[6*t]>=0.9]]
 
+		self.mesh.u_clusters_element_map = [np.array(list(e), dtype="int32") for e in self.uClusters]
+		self.mesh.getGlobalF(updateU=True)
 
 	def getMesh(self, name=None, modes_used=None):
 		if name is not None:
@@ -160,7 +163,9 @@ class Preprocessing:
 
 		viewer = igl.glfw.Viewer()
 		def mouse_up(viewer, btn, bbb):
-			self.middle_button_down = False
+			if btn==1:
+				self.middle_button_down = False
+
 
 		def mouse_down(viewer, btn, bbb):
 			# Cast a ray in the view direction starting from the mouse position
@@ -187,6 +192,7 @@ class Preprocessing:
 				self.middle_button_down = True
 				self.uClusters.append(set())
 				self.uClusterNum += 1
+				return True
 			
 			return False
 
@@ -199,8 +205,8 @@ class Preprocessing:
 				hit = igl.unproject_onto_mesh(coord, viewer.core.view * viewer.core.model,
 				viewer.core.proj, viewer.core.viewport, igl.eigen.MatrixXd(self.V), igl.eigen.MatrixXi(self.T), fid, bc)
 				ind = e2p(fid)[0][0]
-
 				self.uClusters[self.uClusterNum].add(ind)
+				return True
 
 
 		def key_down(viewer,aaa, bbb):
@@ -225,13 +231,20 @@ class Preprocessing:
 
 			viewer.data().set_mesh(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(self.T))
 
-			if (self.mesh is not None):
-				Colors = []
-				for i in range(len(self.T)): 
-					color = black
-					Colors.append(randc[self.mesh.r_element_cluster_map[i]])
+			if self.mesh is not None:
+				Colors = np.ones(self.mesh.T.shape)
+				if (aaa==82):
+					for i in range(len(self.mesh.T)): 
+						color = black
+						Colors[i,:] = randc[self.mesh.r_element_cluster_map[i]]
+				elif(aaa==67):
+					for i in range(len(self.mesh.u_clusters_element_map)):
+						for j in range(len(self.mesh.u_clusters_element_map[i])):
+							k = self.mesh.u_clusters_element_map[i][j]
+							Colors[k,:] = randc[i]
+				
 				viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
-			
+
 			if not self.mesh is None:
 				CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
 				for i in range(len(self.T)):

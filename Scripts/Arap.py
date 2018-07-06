@@ -22,7 +22,6 @@ temp_png = os.path.join(os.getcwd(),"out.png")
 		
 class ARAP:
 	#class vars
-
 	def __init__(self, imesh, filen=None):
 		print("Init ARAP")
 		self.mesh = imesh
@@ -202,9 +201,10 @@ class ARAP:
 		# for i in range(self.Egs.shape[0]):
 		# 	for j in range(self.Egs.shape[1]):
 		# 		self.Egs[i,j] = DS[j].multiply(d_gEgdS[i]).sum()
-
+		# print(self.Egs)
 		self.Egs = self.constTimeEgs()
-		
+		# print(self.Egs)
+		# exit()
 		mid = self.constTimeErs_mid()
 		self.Ers = self.constTimeErs_second(mid)
 			
@@ -390,7 +390,11 @@ class ARAP:
 
 	def setupConstEgsTerms(self):
 		wr_cols = []
+		c_vec = []
 		for i in range(len(self.mesh.red_r)):
+			c1, c2 = np.cos(self.mesh.red_r[i]), np.sin(self.mesh.red_r[i])
+			c_vec.append(c1)
+			c_vec.append(c2)
 			ce_map = np.array(self.mesh.r_cluster_element_map[i])
 			wr_c1 = np.zeros(2*len(self.mesh.T))
 			wr_c2 = np.zeros(2*len(self.mesh.T))
@@ -398,19 +402,18 @@ class ARAP:
 			wr_c2[2*ce_map+1] = 1
 			wr_cols.append(wr_c1)
 			wr_cols.append(wr_c2)
-
+		c_vec = np.array(c_vec)
 		Wr = np.vstack(wr_cols).T
 
 		UU = sparse.lil_matrix((2*len(self.mesh.T), 2*len(self.mesh.T)))
 		zsize = len(self.mesh.z)
 		for t in range(len(self.mesh.T)):
-			u = self.mesh.getU(t)
-			u1, u2 = u[0,0], u[0,1]
+			u1, u2 = np.cos(self.mesh.u[t]), np.sin(self.mesh.u[t])
 
-			UU[2*t, 2*t]    = -u1
-			UU[2*t, 2*t+1]  = u2
-			UU[2*t+1, 2*t]  = u2
-			UU[2*t+1, 2*t+1]= u1 
+			UU[2*t, 2*t]    = u1
+			UU[2*t, 2*t+1]  = -u2
+			UU[2*t+1, 2*t]  = -u2
+			UU[2*t+1, 2*t+1]= -u1 
 
 		UWr = UU.dot(Wr)
 		repeat3 = sparse.kron(sparse.eye(len(self.mesh.T)), np.array([[1,0],[0,1], [1,0],[0,1], [1,0],[0,1]]))
@@ -418,27 +421,34 @@ class ARAP:
 		
 		#This is the tricky part
 		if sparse.issparse(self.PAG):
-			PAQ = self.PAG.toarray()
+			QAP = -1*self.PAG.T.toarray()
 		else:
-			PAQ = self.PAG
-		b = np.array([[0,1],[-1,0]])
-		blocks = []
+			QAP = -1*self.PAG.T
+	
+		# PAGtRU = -self.PAG.T.dot(self.mesh.GR.dot(self.mesh.GU))
+		# print("PAG")
+		# print(self.mesh.GU)
+		# print(self.mesh.u)
+		# # print(UWr.dot(c_vec))
+		# exit()
+	
 		_6T_ = 6*len(self.mesh.T)
-		for m in range(len(self.mesh.z)):
-			evens = PAQ[2*np.arange(_6T_/2) , m] #first, third, fifth, etc...
-			diag = np.kron(evens, np.array([1,-1]))
+		for m in range(0,len(self.mesh.z)):
+			evens = QAP[m, 2*np.arange(_6T_/2)] #first, third, fifth, etc...
+			diag = np.kron(evens, np.array([1,1]))
 
-			odds = PAQ[2*np.arange(_6T_/2)+1, m]
+			odds = QAP[m, 2*np.arange(_6T_/2)+1]
 			off_diag = np.kron(odds, np.array([1,0]))
 			
-			PAGm = sparse.diags([off_diag[:-1], diag, off_diag[:-1]], [-1,0,1])
-			PAGmUWrUtPAxdS = PAGm.dot(repeatUWr).T.dot(self.constErs_Terms[0])
+			PAGm = sparse.diags([off_diag[:-1], diag, -1*off_diag[:-1]], [-1,0,1])
+	
+			PAGmUWrUtPAxdS = (PAGm.dot(repeatUWr)).T.dot(self.constErs_Terms[0])
 			self.constEgsTerms.append(PAGmUWrUtPAxdS)
 			
 	def constTimeEgs(self):
 		c_vec = []
 		for i in range(len(self.mesh.red_r)):
-			c1, c2 = np.cos(self.mesh.red_r[i]), -np.sin(self.mesh.red_r[i])
+			c1, c2 = np.cos(self.mesh.red_r[i]), np.sin(self.mesh.red_r[i])
 			c_vec.append(c1)
 			c_vec.append(c2)
 		c = np.array(c_vec)
@@ -466,7 +476,7 @@ class ARAP:
 			col_i = np.zeros(Ers_mid.shape[0])
 			col_i[2*np.arange(Ers_mid.shape[0]/2)] = odd_i
 			col_i[2*np.arange(Ers_mid.shape[0]/2)+1] = even_i
-			Ers_mid[:, i]   = col_i
+			Ers_mid[:, i] = col_i
 
 		return Ers_mid
 	

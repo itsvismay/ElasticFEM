@@ -36,6 +36,7 @@ class Mesh:
 		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
 		self.u = iVTU[2] if iVTU[2] is not None else np.zeros(len(self.T))
 		self.u_clusters_element_map = None 
+		self.u_toggle = np.ones(len(self.T))
 
 		self.number_of_verts_fixed_on_element = None
 		self.P = None
@@ -90,11 +91,13 @@ class Mesh:
 		self.poissons = 0.45
 		self.V = V
 		self.T = T
+		# self.fixed = np.hstack((fix[0,:],mov[0,:]))
 		self.fixed = fix[0,:]
 		self.mov = mov[0,:]
 		self.x0 = np.ravel(self.V)
 		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
 		self.u = u[0,:]
+		self.u_toggle = np.zero(len(self.T))
 
 		self.number_of_verts_fixed_on_element = None
 		self.P = None
@@ -119,10 +122,11 @@ class Mesh:
 
 		# Modal analysis
 		self.Q = Q
-		if modes_used is not None:
+		if modes_used is not None and len(Q) != 0:
 			self.G = Q[:, :modes_used]
 		else:
 			self.G = sparse.eye(2*len(self.V))
+
 		self.z = np.zeros(self.G.shape[1])
 		
 		# Rotation clusterings
@@ -189,8 +193,9 @@ class Mesh:
 		t_set = Set([i for i in range(len(self.T))])
 
 		if shandles is False:
+			print("No reduced skinning handles")
 			# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
-			self.s_handles_ind = [0,1]
+			self.s_handles_ind = [0]
 		
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
@@ -303,7 +308,6 @@ class Mesh:
 		for i in range(len(self.T)):
 			point = CAG[6*i:6*i+2, :]
 			Data[i,:] = np.ravel(point) #triangle by x1,y1,x2,y2, x3,y3....
-
 
 		centroids,_ = kmeans(Data, clusters)
 		idx,_ = vq(Data,centroids)

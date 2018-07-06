@@ -62,18 +62,23 @@ class TimeIntegrator:
 
 		for i in range(len(self.mov)):
 			self.mesh.g[2*self.mov[i]] -= self.adder
-			# self.mesh.g[2*self.mov[i]+1] -= self.adder
-		print("moved")
-		# self.mesh.red_s[1] += 0.2
+			# self.mesh.g[2*self.mov[i]+1] += self.adder
+		# print("moved")
+		# self.mesh.red_s[3*np.arange(len(self.mesh.red_s)/3)+1] += 0.2
 		# self.mesh.red_s[4] += 0.2
 		# self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
 
+	def toggle_muscle_group(self, num):
+		#toggle 1 to 0 and 0 to 1
+		self.mesh.u_toggle[self.mesh.u_clusters_element_map[num]] = self.mesh.u_toggle[self.mesh.u_clusters_element_map[num]] == 0
+		self.static_solve()
+		
 	def static_solve(self):
 		print("Static Solve")
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 
 		alpha1 =1e5
-		alpha2 =1
+		alpha2 =0
 
 		def energy(s):
 			for i in range(len(s)):
@@ -85,12 +90,12 @@ class TimeIntegrator:
 			self.arap.iterate()
 
 			E_arap = self.arap.Energy()
-			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
+			# E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
 			# print("s", self.mesh.red_s)
-			print("E", E_arap, E_elastic)
+			# print("E", E_arap, E_elastic)
 
 
-			return alpha1*E_arap + alpha2*E_elastic
+			return alpha1*E_arap# + alpha2*E_elastic
 
 		def jacobian(s):
 			for i in range(len(s)):
@@ -101,8 +106,8 @@ class TimeIntegrator:
 			self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()
 
-			J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
-			return  alpha2*J_elastic + alpha1*J_arap
+			# J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
+			return  alpha1*J_arap# + alpha2*J_elastic
 
 
 		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})

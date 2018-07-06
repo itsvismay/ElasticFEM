@@ -33,11 +33,11 @@ class NeohookeanElastic:
 		self.mC = 0.5*self.mesh.youngs/(2.0*(1.0+self.mesh.poissons))
 		self.dimensions = 2
 
-		self.grav = np.array([0,9.81])
-		self.rho = 10
+		self.grav = np.array([0, 9.81])
+		self.rho = 1000
 
 		self.muscle_fiber_mag_target = 100
-		self.muscle_fibre_mag = 50
+		self.muscle_fibre_mag = 500
 
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)
@@ -81,8 +81,6 @@ class NeohookeanElastic:
 		t_1 = np.dot(wx, rs)
 		t_2 = np.dot(wy, rs)
 
-
-
 		if(t_1<=0 or t_2<=0 or t_1*t_2-t_0*t_0<=0):
 			return 1e40
 
@@ -100,7 +98,6 @@ class NeohookeanElastic:
 		t_14 = ((a * md) * ((t_8 ** (t_13 - 1)) * ((t_8 ** t_13) - 1)))
 		functionValue = (a * ((mc * (((t_3 ** t_11) * (t_1 + t_2)) - 2)) + (md * (((t_3 ** t_13) - 1) ** 2))))
 		gradient = (((((((((((4 * a) * t_9) / 6.0) * t_4) * wo) - (((t_10 * t_7) * wx) + ((t_10 * t_6) * wy))) + (t_12 * wx)) + (t_12 * wy)) + ((t_14 * t_7) * wx)) + ((t_14 * t_6) * wy)) - ((((4 * t_14) / 2.0) * t_4) * wo))
-
 		return -gradient
 
 	def WikipediaForce(self, _rs):
@@ -148,7 +145,7 @@ class NeohookeanElastic:
 
 		return E
 
-	def MuscleElementEnergy(self, rs,wx, wy, wo, u):
+	def MuscleElementEnergy(self, rs,wx, wy, wo, u, tog):
 		sx = wx.dot(rs)
 		sy = wy.dot(rs)
 		so = wo.dot(rs)
@@ -157,7 +154,7 @@ class NeohookeanElastic:
 
 		c = np.array([[sx, so],[so, sy]])
 
-		return 0.5*self.muscle_fibre_mag*(u.dot(c.dot(c.T.dot(u.T))))
+		return 0.5*self.muscle_fibre_mag*tog*(u.dot(c.dot(c.T.dot(u.T))))
 
 	def MuscleEnergy(self, _rs):
 		En = 0
@@ -165,22 +162,22 @@ class NeohookeanElastic:
 			alpha = self.mesh.u[t]
 			c, s = np.cos(alpha), np.sin(alpha)
 			u = np.array([c,s]).dot(np.array([[c,-s],[s, c]]))
-
-			En += self.MuscleElementEnergy(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u)
-
+			toggle = self.mesh.u_toggle[t]
+			E = self.MuscleElementEnergy(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u, toggle)
+			En += E
 		return En
 
-	def MuscleElementForce(self, rs, wx, wy, wo, u1, u2):
+	def MuscleElementForce(self, rs, wx, wy, wo, u1, u2, tog):
 
-		t0 = self.muscle_fibre_mag *u1*u1
+		t0 = self.muscle_fibre_mag*u1*u1*tog
 		t1 = t0*(rs.dot(wx)*wx + rs.dot(wo)*wo)
 
 
-		t2 = 0.5*self.muscle_fibre_mag*u1*u2
+		t2 = 0.5*self.muscle_fibre_mag*u1*u2*tog
 		t3 = t2*rs.dot(wo)
 		t4 = t3*wx + t2*rs.dot(wx)*wo + t3*wy + t2*rs.dot(wy)*wo
 
-		t5 = self.muscle_fibre_mag *u2*u2
+		t5 = self.muscle_fibre_mag *u2*u2*tog
 		t6 = t5*(rs.dot(wy)*wy + rs.dot(wo)*wo)
 
 		return -1*(t1 + 2*t4 + t6)
@@ -191,20 +188,20 @@ class NeohookeanElastic:
 			alpha = self.mesh.u[t]
 			c, s = np.cos(alpha), np.sin(alpha)
 			u = np.array([c,s]).dot(np.array([[c,-s],[s, c]]))
-			force += self.MuscleElementForce(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u[0], u[1])
+			toggle = self.mesh.u_toggle[t]
+			force += self.MuscleElementForce(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u[0], u[1], toggle)
 
 		return force
 
 	def Energy(self, irs):
 		e2 = self.WikipediaEnergy(_rs=irs)
-		e1 = -1*self.GravityEnergy()
+		# e1 = self.GravityEnergy()
 		e3 = self.MuscleEnergy(_rs=irs)
-		# print("e3 ", e1, e2, e3)
-		return e1 + e2 + e3
+		print("e123", e2, e3)
+		return e2# + e3
 
 	def Forces(self, irs, idgds):
 		f2 = self.WikipediaForce(_rs=irs)
-		f1 =  -1*self.GravityForce(idgds)
+		# f1 =  -1*self.GravityForce(idgds)
 		f3 = self.MuscleForce(_rs=irs)
-		# print("f3 ", f3)
-		return f1 + f2 + f3
+		return f2# + f3
