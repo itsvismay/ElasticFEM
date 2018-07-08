@@ -29,7 +29,7 @@ class TimeIntegrator:
 		self.adder = .3
 		# self.set_random_strain()
 		self.mov = self.mesh.mov
-		self.bnds = [(1e-5, None) for i in range(len(self.mesh.red_s))]
+		self.bnds = [(0, None) if i%3==2 else (1e-5, None) for i in range(len(self.mesh.red_s)) ]
 		self.add_on = 10
 	
 	def set_strain(self):
@@ -77,13 +77,13 @@ class TimeIntegrator:
 		print("Static Solve")
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 
-		alpha1 =0#1e5
-		alpha2 =1
-
+		alpha1 =1e5
+		alpha2 =1e1
 
 		def energy(s):
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
+
 
 			self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
 
@@ -108,13 +108,13 @@ class TimeIntegrator:
 			J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
 			return  alpha1*J_arap + alpha2*J_elastic
 
-
-		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
+		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-6, 'disp': False, 'eps':1e-8})
 
 		for i in range(len(res.x)):
 			self.mesh.red_s[i] = res.x[i]
 
 		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
+
 		print("r1", self.mesh.red_r)
 		print("s1", res.x)
 		print("g1", self.mesh.z)

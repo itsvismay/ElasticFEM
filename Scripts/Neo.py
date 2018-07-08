@@ -76,7 +76,6 @@ class NeohookeanElastic:
 	def WikipediaPrinStretchElementForce(self, a, rs, wx, wy, wo):
 		md = self.mD
 		mc = self.mC
-
 		t_0 = np.dot(wx, rs)
 		t_1 = np.dot(wy, rs)
 		t_2 = np.log(((t_0 * t_1) - (np.dot(wo, rs) ** 2)))
@@ -107,7 +106,6 @@ class NeohookeanElastic:
 
 		#MATH version
 		#E = mc*((wx'*rs) + (wy'*rs)-2 - log(wx'*rs*wy'*rs - (wo'*rs)^2)) + (md/4)*(log(wx'*rs*wy'*rs - (wo'*rs)^2)^2)
-		
 		t_0 = np.dot(wx, rs)
 		t_1 = np.dot(wy, rs)
 		t_2 = np.log(((t_0 * t_1) - (np.dot(wo, rs) ** 2)))

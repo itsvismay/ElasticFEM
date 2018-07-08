@@ -758,6 +758,7 @@ class ARAP:
 
 			self.USUtPAx_E.append(USUPAx)
 
+			
 		Eg0 = self.dEdg()
 		for i in range(its):
 			g = self.itT()

@@ -359,7 +359,7 @@ def FiniteDifferencesElasticity():
 
 		print("real", real)
 		print("fake", dEds)
-		print("Diff", np.sum(real - np.array(dEds)))
+		print("Diff", np.linalg.norm(real - np.array(dEds)))
 
 	def check_gravityForce():
 		e0 = ne.GravityEnergy()
