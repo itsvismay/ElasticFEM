@@ -38,8 +38,8 @@ class Preprocessing:
 			self.V = _VT[0]
 			self.T = _VT[1]
 			self.U = np.zeros(len(self.T))
-			self.Fix = get_max(self.V, a=0, eps=1e-2)		
-			self.Mov = get_min(self.V, a=0, eps=1e-2)
+			self.Fix = get_max(self.V, a=1, eps=1e-2)		
+			self.Mov = get_min(self.V, a=1, eps=1e-2)
 			self.gi = 0
 			self.mesh = None
 			self.uvec = None

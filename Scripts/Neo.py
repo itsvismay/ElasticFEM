@@ -14,8 +14,8 @@ import sys, os
 import cProfile
 sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
-np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.3f}'.format(x)})
 from iglhelpers import *
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 
 temp_png = os.path.join(os.getcwd(),"out.png")
 
@@ -77,28 +77,19 @@ class NeohookeanElastic:
 		md = self.mD
 		mc = self.mC
 
-		t_0 = np.dot(wo, rs)
-		t_1 = np.dot(wx, rs)
-		t_2 = np.dot(wy, rs)
-
-		if(t_1<=0 or t_2<=0 or t_1*t_2-t_0*t_0<=0):
-			return 1e40
-
-		t_3 = ((t_1 * t_2) - (t_0 * t_0))
-		t_4 = np.dot(rs, wo)
-		t_5 = (2.0 / 6)
-		t_6 = np.dot(rs, wx)
-		t_7 = np.dot(rs, wy)
-		t_8 = ((t_6 * t_7) - (t_4 * t_4))
-		t_9 = ((mc * (t_8 ** -(1 + t_5))) * (t_6 + t_7))
-		t_10 = (((2 * a) * t_9) / 6.0)
-		t_11 = -t_5
-		t_12 = ((a * mc) * (t_8 ** t_11))
-		t_13 = (1.0 / 2)
-		t_14 = ((a * md) * ((t_8 ** (t_13 - 1)) * ((t_8 ** t_13) - 1)))
-		functionValue = (a * ((mc * (((t_3 ** t_11) * (t_1 + t_2)) - 2)) + (md * (((t_3 ** t_13) - 1) ** 2))))
-		gradient = (((((((((((4 * a) * t_9) / 6.0) * t_4) * wo) - (((t_10 * t_7) * wx) + ((t_10 * t_6) * wy))) + (t_12 * wx)) + (t_12 * wy)) + ((t_14 * t_7) * wx)) + ((t_14 * t_6) * wy)) - ((((4 * t_14) / 2.0) * t_4) * wo))
+		t_0 = np.dot(wx, rs)
+		t_1 = np.dot(wy, rs)
+		t_2 = np.log(((t_0 * t_1) - (np.dot(wo, rs) ** 2)))
+		t_3 = np.dot(rs, wy)
+		t_4 = np.dot(rs, wx)
+		t_5 = np.dot(rs, wo)
+		t_6 = ((t_4 * t_3) - (t_5 ** 2))
+		t_7 = (mc / t_6)
+		t_8 = np.log(t_6)
+		t_9 = (((2 * md) * t_8) / (4 * t_6))
+		gradient = ((((((mc * wx) + (mc * wy)) - ((((t_7 * t_3) * wx) + ((t_7 * t_4) * wy)) - ((((2 * mc) / t_6) * t_5) * wo))) + ((t_9 * t_3) * wx)) + ((t_9 * t_4) * wy)) - ((((md * t_8) / t_6) * t_5) * wo))
 		return -gradient
+	
 
 	def WikipediaForce(self, _rs):
 		force = np.zeros(len(self.mesh.red_s))
@@ -111,28 +102,27 @@ class NeohookeanElastic:
 
 	def WikipediaPrinStretchElementEnergy(self, area, rs, wx, wy, wo):
 
-		m_D = self.mD
-		m_C = self.mC
+		md = self.mD
+		mc = self.mC
 
 		#MATH version
-		# c = [[sx, so],[so, sy]]
-		# I1 = np.trace(c)
-		# I3 = np.linalg.det(c)
-		# J = math.sqrt(I3)
-		# I1_b = math.pow(J, -2.0/3)*(I1)
-		# v1 = area*(m_C*(I1_b -2) + m_D*(J-1)*(J-1))
-
-		sx = wx.dot(rs)
-		sy = wy.dot(rs)
-		so = wo.dot(rs)
-		# print(sx, sy, so)
-		if(sx<=0 or sy<=0 or sx*sy-so*so<=0):
+		#E = mc*((wx'*rs) + (wy'*rs)-2 - log(wx'*rs*wy'*rs - (wo'*rs)^2)) + (md/4)*(log(wx'*rs*wy'*rs - (wo'*rs)^2)^2)
+		
+		t_0 = np.dot(wx, rs)
+		t_1 = np.dot(wy, rs)
+		t_2 = np.log(((t_0 * t_1) - (np.dot(wo, rs) ** 2)))
+		t_3 = np.dot(rs, wy)
+		t_4 = np.dot(rs, wx)
+		t_5 = np.dot(rs, wo)
+		t_6 = ((t_4 * t_3) - (t_5 ** 2))
+		t_7 = (mc / t_6)
+		t_8 = np.log(t_6)
+		t_9 = (((2 * md) * t_8) / (4 * t_6))
+		if(t_0<=0 or t_1<=0 or t_0*t_1-t_5*t_5<=0):
 			return 1e40
-		term1 = m_C*(math.pow(math.sqrt(sx*sy - so*so), -2.0/3)*(sx + sy) - 2)
-		term2 = m_D*math.pow((math.pow(sx*sy -so*so, 1/2.0) - 1), 2)
-		v2 = area*(term1 + term2)
-		# print(math.pow(math.sqrt(sx*sy - so*so), -2.0/3), (sx + sy), v2)
-		return v2
+
+		functionValue = ((mc * (((t_0 - 2) + t_1) - t_2)) + ((md * (t_2 ** 2)) / 4))
+		return functionValue
 
 	def WikipediaEnergy(self,_rs):
 		E = 0
@@ -196,12 +186,12 @@ class NeohookeanElastic:
 	def Energy(self, irs):
 		e2 = self.WikipediaEnergy(_rs=irs)
 		# e1 = self.GravityEnergy()
-		e3 = self.MuscleEnergy(_rs=irs)
-		print("e123", e2, e3)
-		return e2 + e3
+		# e3 = self.MuscleEnergy(_rs=irs)
+		print("e123", e2)#, e3)
+		return e2# + e3
 
 	def Forces(self, irs, idgds):
 		f2 = self.WikipediaForce(_rs=irs)
 		# f1 =  -1*self.GravityForce(idgds)
-		f3 = self.MuscleForce(_rs=irs)
-		return f2 + f3
+		# f3 = self.MuscleForce(_rs=irs)
+		return f2# + f3

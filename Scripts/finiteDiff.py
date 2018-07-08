@@ -330,7 +330,7 @@ def FiniteDifferencesARAP():
 # FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-6
+	eps = 1e-4
 	its = 100
 	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
 	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
@@ -408,4 +408,4 @@ def FiniteDifferencesElasticity():
 	# check_gravityForce()
 	# check_muscleForce()
 
-# FiniteDifferencesElasticity()
+FiniteDifferencesElasticity()

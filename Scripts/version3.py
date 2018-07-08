@@ -1,9 +1,10 @@
 #running the code version 3
 import Meshwork
 import Arap
-import Neo
 import Display
 import Solvers
+import Neo
+
 
 #Mesh creation
 # VTU,tofix = Meshwork.feather_muscle2_test_setup()

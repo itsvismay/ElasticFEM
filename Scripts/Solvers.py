@@ -13,7 +13,7 @@ import sys, os
 import cProfile
 sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
-np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.3f}'.format(x)})
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 from iglhelpers import *
 
 temp_png = os.path.join(os.getcwd(),"out.png")
@@ -77,14 +77,14 @@ class TimeIntegrator:
 		print("Static Solve")
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 
-		alpha1 =1e5
+		alpha1 =0#1e5
 		alpha2 =1
+
 
 		def energy(s):
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
 
-			# print("guess ", self.mesh.red_s)
 			self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
 
 			self.arap.iterate()
@@ -94,14 +94,13 @@ class TimeIntegrator:
 			# print("s", self.mesh.red_s)
 			# print("E", E_arap, E_elastic)
 
-
 			return alpha1*E_arap + alpha2*E_elastic
 
 		def jacobian(s):
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
 
-			# print("guess ",self.mesh.red_s)
+
 			dgds = None
 			self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()
