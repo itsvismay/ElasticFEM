@@ -100,7 +100,6 @@ class TimeIntegrator:
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
 
-
 			dgds = None
 			self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()

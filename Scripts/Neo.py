@@ -37,7 +37,7 @@ class NeohookeanElastic:
 		self.rho = 1000
 
 		self.muscle_fiber_mag_target = 100
-		self.muscle_fibre_mag = 500
+		self.muscle_fibre_mag = 10000
 
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)
@@ -184,12 +184,12 @@ class NeohookeanElastic:
 	def Energy(self, irs):
 		e2 = self.WikipediaEnergy(_rs=irs)
 		# e1 = self.GravityEnergy()
-		# e3 = self.MuscleEnergy(_rs=irs)
-		print("e123", e2)#, e3)
-		return e2# + e3
+		e3 = self.MuscleEnergy(_rs=irs)
+		print("e123", e2, e3)
+		return e2 + e3
 
 	def Forces(self, irs, idgds):
 		f2 = self.WikipediaForce(_rs=irs)
 		# f1 =  -1*self.GravityForce(idgds)
-		# f3 = self.MuscleForce(_rs=irs)
-		return f2# + f3
+		f3 = self.MuscleForce(_rs=irs)
+		return f2 + f3

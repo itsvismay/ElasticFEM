@@ -195,8 +195,25 @@ class Mesh:
 		if shandles is False:
 			print("No reduced skinning handles")
 			# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
-			self.s_handles_ind = [0]
-		
+			# self.s_handles_ind = [0]
+			self.s_handles_ind = []
+			CAx0 = self.getC().dot(self.getA().dot(self.x0))
+			for k in range(len(self.r_cluster_element_map.keys())):
+				els = np.array(self.r_cluster_element_map[k], dtype='int32')
+				centx = CAx0[6*els]
+				centy = CAx0[6*els+1]
+				avc = np.array([np.sum(centx)/len(els), np.sum(centy)/len(els)]) 
+				minind = els[0]
+				mindist = np.linalg.norm(avc-np.array([centx[0], centy[0]]))
+				for i in range(1,len(els)):
+					dist = np.linalg.norm(avc-np.array([centx[i], centy[i]]))
+					if dist<=mindist:
+						mindist = dist 
+						minind = els[i]
+
+				self.s_handles_ind.append(minind)
+
+
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
 		#generate weights by euclidean dist

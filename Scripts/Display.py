@@ -108,6 +108,13 @@ class Display:
 						k = self.time_integrator.mesh.u_clusters_element_map[i][j]
 						Colors[k,:] = randc[i]
 			elif aaa==82:
+				for i in range(len(self.time_integrator.mesh.r_cluster_element_map.keys())):
+					els = np.array(self.time_integrator.mesh.r_cluster_element_map[i], dtype='int32')
+					centx = CAg[6*els]
+					centy = CAg[6*els+1]
+					avc = np.array([[np.sum(centx)/len(els), np.sum(centy)/len(els)]])
+					
+					viewer.data().add_points(igl.eigen.MatrixXd(avc), black)
 				for i in range(len(self.time_integrator.mesh.T)): 
 					color = black
 					Colors[i,:] = randc[self.time_integrator.mesh.r_element_cluster_map[i]]
@@ -115,6 +122,7 @@ class Display:
 				for j in range(len(self.time_integrator.mesh.u_clusters_element_map[aaa-49])):
 					k = self.time_integrator.mesh.u_clusters_element_map[aaa-49][j]
 					Colors[k,:] = randc[aaa-49]
+			Colors[np.array([self.time_integrator.mesh.s_handles_ind]),:] = np.array([0,0,0])
 			viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
 
 			#snapshot
