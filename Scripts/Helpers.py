@@ -137,7 +137,7 @@ def rectangle_mesh(x, y, step=1):
 			V.append([step*i, step*j])
 	
 	T = Delaunay(V).simplices
-	return V, T
+	return np.array(V), T
 
 def feather_muscle1_test_setup(x = 3, y = 2):
 	step = 0.1

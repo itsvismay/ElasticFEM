@@ -32,20 +32,23 @@ import json
 
 class Preprocessing:
 
-	def __init__(self, _VT=None):
+	def __init__(self, _VT=None, modes_used=None):
 		self.middle_button_down = False
 		if _VT is not None:
 			self.V = _VT[0]
 			self.T = _VT[1]
+			print(self.V.shape, self.T.shape)
+
 			self.U = np.zeros(len(self.T))
-			self.Fix = get_max(self.V, a=1, eps=1e-2)		
-			self.Mov = get_min(self.V, a=1, eps=1e-2)
+			self.Fix = []# get_max(self.V, a=1, eps=1e-2)		
+			self.Mov = []#get_min(self.V, a=1, eps=1e-2)
 			self.gi = 0
 			self.mesh = None
 			self.uvec = None
 			self.eGu = None
 			self.uClusters = []
 			self.uClusterNum = -1
+			self.modes_used = modes_used
 		self.UVECS = None
 
 	def save_mesh_setup(self, name=None):
@@ -85,7 +88,7 @@ class Preprocessing:
 
 		print("Done writing DMAT")
 
-	def read_mesh_setup(self, name=None):
+	def read_mesh_setup(self, name=None, modes_used=None):
 		if name==None:
 			print("Name can't be none.")
 			exit()
@@ -127,8 +130,8 @@ class Preprocessing:
 								r_element_cluster_map=e2p(er_ind), 
 								s_handles_ind=e2p(es_ind), 
 								u_clusters_element_map= u_ind,
-								modes_used=None)
-			
+								modes_used=modes_used)
+
 			print("Done reading DMAT")
 
 	def createMesh(self, modes=None):
@@ -138,15 +141,15 @@ class Preprocessing:
 		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, read_in= False, modes_used=modes)
 		self.mesh.u, self.uvec, self.eGu, self.UVECS = heat_method(self.mesh)
 		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
-		self.uClusters = [[t for t in range(len(self.T)) if CAg[6*t]<=0.1],
-							[t for t in range(len(self.T)) if CAg[6*t]>=0.9]]
+		# self.uClusters = [[t for t in range(len(self.T)) if CAg[6*t]<=0.1],
+		# 					[t for t in range(len(self.T)) if CAg[6*t]>=0.9]]
 
 		self.mesh.u_clusters_element_map = [np.array(list(e), dtype="int32") for e in self.uClusters]
 		self.mesh.getGlobalF(updateU=True)
 
 	def getMesh(self, name=None, modes_used=None):
 		if name is not None:
-			self.read_mesh_setup(name = name)
+			self.read_mesh_setup(name = name, modes_used=modes_used)
 		else:
 			self.createMesh(modes=modes_used)
 		return self.mesh
@@ -211,16 +214,16 @@ class Preprocessing:
 
 		def key_down(viewer,aaa, bbb):
 			if(aaa == 65):
-				self.createMesh()
+				self.createMesh(modes=self.modes_used)
 			if(aaa == 83):
 				self.save_mesh_setup(name="test")
 
 			viewer.data().clear()
 			if self.uvec is None:
-				nV = self.V
+				nV = self.V#np.concatenate((self.V, np.zeros((len(self.V),1))), axis =1)
 			else:
 				#3d Heat Gradient
-				nV = self.V
+				nV = self.V#np.concatenate((self.V, np.zeros((len(self.V),1))), axis =1)
 				# print(self.mesh.V.shape, self.uvec.shape)
 				# nV = np.concatenate((self.mesh.V, self.uvec[:,np.newaxis]), axis=1)
 				# BC = igl.eigen.MatrixXd()
@@ -228,7 +231,7 @@ class Preprocessing:
 				# GU_mag = self.eGu.rowwiseNorm()
 				# max_size = igl.avg_edge_length(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(self.T)) / GU_mag.mean()
 				# viewer.data().add_edges(BC, BC + max_size*self.eGu, black)
-
+	
 			viewer.data().set_mesh(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(self.T))
 
 			if self.mesh is not None:
@@ -242,7 +245,7 @@ class Preprocessing:
 						for j in range(len(self.mesh.u_clusters_element_map[i])):
 							k = self.mesh.u_clusters_element_map[i][j]
 							Colors[k,:] = randc[i]
-				
+				Colors[np.array([self.mesh.s_handles_ind]),:] = np.array([0,0,0])
 				viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
 
 			if not self.mesh is None:

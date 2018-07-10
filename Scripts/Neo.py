@@ -34,10 +34,10 @@ class NeohookeanElastic:
 		self.dimensions = 2
 
 		self.grav = np.array([0, 9.81])
-		self.rho = 1000
+		self.rho = 10
 
 		self.muscle_fiber_mag_target = 100
-		self.muscle_fibre_mag = 10000
+		self.muscle_fibre_mag = 50000
 
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)

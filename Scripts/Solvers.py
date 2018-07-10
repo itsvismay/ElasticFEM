@@ -101,13 +101,13 @@ class TimeIntegrator:
 				self.mesh.red_s[i] = s[i]
 
 			dgds = None
-			self.arap.iterate()
+			# self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()
 
 			J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
 			return  alpha1*J_arap + alpha2*J_elastic
 
-		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-6, 'disp': False, 'eps':1e-8})
+		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
 
 		for i in range(len(res.x)):
 			self.mesh.red_s[i] = res.x[i]

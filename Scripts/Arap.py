@@ -390,11 +390,7 @@ class ARAP:
 
 	def setupConstEgsTerms(self):
 		wr_cols = []
-		c_vec = []
 		for i in range(len(self.mesh.red_r)):
-			c1, c2 = np.cos(self.mesh.red_r[i]), np.sin(self.mesh.red_r[i])
-			c_vec.append(c1)
-			c_vec.append(c2)
 			ce_map = np.array(self.mesh.r_cluster_element_map[i])
 			wr_c1 = np.zeros(2*len(self.mesh.T))
 			wr_c2 = np.zeros(2*len(self.mesh.T))
@@ -402,7 +398,6 @@ class ARAP:
 			wr_c2[2*ce_map+1] = 1
 			wr_cols.append(wr_c1)
 			wr_cols.append(wr_c2)
-		c_vec = np.array(c_vec)
 		Wr = np.vstack(wr_cols).T
 
 		UU = sparse.lil_matrix((2*len(self.mesh.T), 2*len(self.mesh.T)))
@@ -761,12 +756,15 @@ class ARAP:
 			
 		Eg0 = self.dEdg()
 		for i in range(its):
+			print("		itT")
 			g = self.itT()
+			print("		itR")
 			r = self.itR()
+			print("		GF")
 			self.mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
-			
+			print("		dEdg")
 			Eg = self.dEdg()
-			# print("i", i,np.linalg.norm(Eg-Eg0))
+
 			if(1e-8 > np.linalg.norm(Eg-Eg0)):
 				# print("En",self.Energy(), self.mesh.red_r, self.mesh.z)
 				print("	-ARAP iterate "+str(i))

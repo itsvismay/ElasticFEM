@@ -37,6 +37,11 @@ class Display:
 	def display(self):
 		viewer = igl.glfw.Viewer()
 
+		red = igl.eigen.MatrixXd([[1,0,0]])
+		purple = igl.eigen.MatrixXd([[1,0,1]])
+		green = igl.eigen.MatrixXd([[0,1,0]])
+		black = igl.eigen.MatrixXd([[0,0,0]])
+
 		tempR = igl.eigen.MatrixXuc(1280, 800)
 		tempG = igl.eigen.MatrixXuc(1280, 800)
 		tempB = igl.eigen.MatrixXuc(1280, 800)
@@ -61,22 +66,17 @@ class Display:
 			if(aaa>=49 and aaa<=57):
 				self.time_integrator.toggle_muscle_group(aaa-49)
 
-			DV, DT = self.time_integrator.mesh.getDiscontinuousVT()
+			print("DRAWING--------")
+			# DV, DT = self.time_integrator.mesh.getDiscontinuousVT()
 			RV, RT = self.time_integrator.mesh.getContinuousVT()
 			V2 = igl.eigen.MatrixXd(RV)
 			T2 = igl.eigen.MatrixXi(RT)
 			viewer.data().set_mesh(V2, T2)
 
-			red = igl.eigen.MatrixXd([[1,0,0]])
-			purple = igl.eigen.MatrixXd([[1,0,1]])
-			green = igl.eigen.MatrixXd([[0,1,0]])
-			black = igl.eigen.MatrixXd([[0,0,0]])
-
-
-			for e in DT:
-				P = DV[e]
-				DP = np.array([P[1], P[2], P[0]])
-				viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
+			# for e in DT:
+			# 	P = DV[e]
+			# 	DP = np.array([P[1], P[2], P[0]])
+			# 	viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
 
 
 			MOV = []
@@ -108,13 +108,6 @@ class Display:
 						k = self.time_integrator.mesh.u_clusters_element_map[i][j]
 						Colors[k,:] = randc[i]
 			elif aaa==82:
-				for i in range(len(self.time_integrator.mesh.r_cluster_element_map.keys())):
-					els = np.array(self.time_integrator.mesh.r_cluster_element_map[i], dtype='int32')
-					centx = CAg[6*els]
-					centy = CAg[6*els+1]
-					avc = np.array([[np.sum(centx)/len(els), np.sum(centy)/len(els)]])
-					
-					viewer.data().add_points(igl.eigen.MatrixXd(avc), black)
 				for i in range(len(self.time_integrator.mesh.T)): 
 					color = black
 					Colors[i,:] = randc[self.time_integrator.mesh.r_element_cluster_map[i]]
@@ -124,7 +117,7 @@ class Display:
 					Colors[k,:] = randc[aaa-49]
 			Colors[np.array([self.time_integrator.mesh.s_handles_ind]),:] = np.array([0,0,0])
 			viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
-
+			print("Done drawing--------")
 			#snapshot
 			if(aaa==65):
 				displacements = disp_g - self.time_integrator.mesh.x0
@@ -146,3 +139,21 @@ class Display:
 		viewer.callback_mouse_up = mouse_up
 		viewer.core.is_animating = False
 		viewer.launch()
+
+	def headless(self):
+
+
+
+		pr = cProfile.Profile()
+		pr.enable()
+
+		# self.time_integrator.mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
+		self.time_integrator.static_solve()
+		
+		pr.disable()
+		s = StringIO.StringIO()
+		sortby = 'cumulative'
+		ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+		ps.print_stats(100)
+		print(s.getvalue())
+		return
