@@ -83,9 +83,8 @@ class TimeIntegrator:
 		def energy(s):
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
+			self.arap.updateConstUSUtPAx()
 
-
-			self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
 
 			self.arap.iterate()
 
@@ -99,7 +98,8 @@ class TimeIntegrator:
 		def jacobian(s):
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
-
+			self.arap.updateConstUSUtPAx()
+			
 			dgds = None
 			# self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()

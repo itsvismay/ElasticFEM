@@ -142,8 +142,6 @@ class Display:
 
 	def headless(self):
 
-
-
 		pr = cProfile.Profile()
 		pr.enable()
 

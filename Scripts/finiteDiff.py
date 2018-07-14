@@ -4,7 +4,7 @@ import Arap
 import Neo
 import Display
 import Solvers
-np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.3f}'.format(x)})
 
 def FiniteDifferencesARAP():
 	eps = 1e-4
@@ -12,8 +12,8 @@ def FiniteDifferencesARAP():
 	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
 	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
 	mw = Meshwork.Preprocessing(_VT = VTU)
-	mw.Fix = get_max(mw.V, a=0, eps=1e-2)		
-	mw.Mov = get_min(mw.V, a=0, eps=1e-2)
+	mw.Fix = get_max(mw.V, a=1, eps=1e-2)		
+	mw.Mov = get_min(mw.V, a=1, eps=1e-2)
 	mesh = mw.getMesh()
 	arap = Arap.ARAP(imesh = mesh, filen="crap/")
 	# mesh.red_r[1]= 0.1
@@ -270,6 +270,7 @@ def FiniteDifferencesARAP():
 
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
+			arap.updateConstUSUtPAx()
 
 			arap.iterate()
 			drds_left = np.array(mesh.red_r)
@@ -280,10 +281,12 @@ def FiniteDifferencesARAP():
 
 			mesh.red_s[i] -= 0.5*eps
 			mesh.getGlobalF()
+			arap.updateConstUSUtPAx()
 			arap.iterate()
 
 			mesh.red_s[i] -= 0.5*eps
 			mesh.getGlobalF()
+			arap.updateConstUSUtPAx()
 			arap.iterate()
 			drds_right = np.array(mesh.red_r)
 			# if(mesh.reduced_g):
@@ -293,6 +296,7 @@ def FiniteDifferencesARAP():
 
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
+			arap.updateConstUSUtPAx()
 			arap.iterate()
 
 
@@ -327,7 +331,7 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrds()
 	# check_dgds_drds()
 
-# FiniteDifferencesARAP()
+FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-4
@@ -408,4 +412,4 @@ def FiniteDifferencesElasticity():
 	# check_gravityForce()
 	# check_muscleForce()
 
-FiniteDifferencesElasticity()
+# FiniteDifferencesElasticity()

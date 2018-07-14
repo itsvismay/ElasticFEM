@@ -69,13 +69,17 @@ class ARAP:
 		self.constErs_midTerms = []
 		self.constErs_Terms = []
 		self.constEgsTerms = []
+		self.constUUtPaxTerms = []
+		self.constEsTerms = []
 		self.setupConstErTerms()
-		self.setupConstEsTerms()
 		self.setupConstErsTerms()
 		self.setupConstEgsTerms()
+		self.setupConstEsTerms()
+		self.setupConstUSUtPAxTerms()
 		print("Done with ARAP init")
 
 	def energy(self, _z, _R, _S, _U):
+		self.updateConstUSUtPAx()
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G.dot(_z) + self.mesh.x0)) 
 		FPAx = _R.dot(_U.dot(_S.dot(_U.T.dot(self.PAx))))
 		# print(_z)
@@ -84,7 +88,7 @@ class ARAP:
 
 	def Energy(self):
 		PAg = self.PA.dot(self.mesh.getg())
-		FPAx0 = self.mesh.GF.dot(self.PAx)
+		FPAx0 = self.constTimeFPAx()
 		en = 0.5*(np.dot(PAg - FPAx0, PAg - FPAx0))
 		return en
 
@@ -93,7 +97,7 @@ class ARAP:
 		self.mesh.getGlobalF(updateR=True, updateS=True, updateU=False)
 		Egg, Erg, Err, Egs, Ers = self.Hessians(useSparse=useSparse)
 
-		lhs_left = sparse.vstack((Egg, Erg.T))
+		lhs_left = np.vstack((Egg, Erg.T))
 		lhs_right = np.concatenate((Erg , Err))
 
 		rhs = -1*np.concatenate((Egs, Ers))
@@ -110,49 +114,22 @@ class ARAP:
 			r_size = R.shape[1]
 			rb_size = R.shape[0]
 
-			if useSparse:
-				if rb_size>0:
-					col1 = sparse.vstack((lhs_left, np.vstack((C.toarray(), np.zeros((rb_size, r_size))))))
-					# print("col", col1.shape, col1.nnz)
-					col2 = sparse.vstack((lhs_right, np.vstack((np.zeros((gb_size, r_size)), R))))
-					# print("col", col2.shape, col2.nnz)
-					col3 = sparse.vstack(( C.T, sparse.vstack((sparse.csc_matrix((r_size, gb_size)), np.vstack((np.zeros((gb_size, gb_size)), np.zeros((rb_size, gb_size))))))) )
-					# print("col", col3.shape, col3.nnz)
-					col4 = sparse.vstack(( np.vstack((np.zeros((r_size, rb_size)), R.T)), np.vstack((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
-					jacKKT = sparse.hstack((col1, col2, col3, col4))
-				else:
+			
 				
-					col1 = sparse.vstack((lhs_left, C))
-					# print("col", col1.shape, col1.nnz)
-					col2 = sparse.vstack((lhs_right, sparse.csc_matrix((gb_size, r_size))))
-					# print("col", col2.shape, col2.nnz)
-					col3 = sparse.vstack(( C.T,
-						sparse.vstack((sparse.csc_matrix((r_size, gb_size)),
-									sparse.csc_matrix((gb_size, gb_size))))))
-					# print("col", col3.shape, col3.nnz)
-					jacKKT = sparse.hstack((col1, col2, col3))
+			col1 = np.vstack((lhs_left, C))
+			# print("col", col1.shape, col1.nnz)
+			col2 = np.vstack((lhs_right, np.zeros((gb_size, r_size))))
+			# print("col", col2.shape, col2.nnz)
+			col3 = np.vstack(( C.T,
+				np.vstack((np.zeros((r_size, gb_size)),
+							np.zeros((gb_size, gb_size))))))
+			# print("col", col3.shape, col3.nnz)
+			jacKKT = np.hstack((col1, col2, col3))
 
-		
-				KKT_constrains = np.vstack((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
-				
-				jacChol = scipy.sparse.linalg.splu(jacKKT.tocsc())
-				Jac_s = jacChol.solve(KKT_constrains)
+			KKT_constrains = np.vstack((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
+			
+			Jac_s = scipy.linalg.solve(jacKKT, KKT_constrains)
 
-			else:
-				col1 = np.concatenate((lhs_left.toarray(), np.concatenate((C.toarray(), np.zeros((rb_size, r_size))))))
-				# print("col", col1.shape)
-				col2 = np.concatenate((lhs_right, np.concatenate((np.zeros((gb_size, r_size)), R))))
-				# print("col", col2.shape)
-				col3 = np.concatenate((C.T.toarray(), np.concatenate((np.zeros((r_size, gb_size)), np.concatenate((np.zeros((gb_size, gb_size)), np.zeros((rb_size, gb_size))))))) )
-				# print("col", col3.shape)
-				col4 = np.concatenate(( np.concatenate((np.zeros((r_size, rb_size)), R.T)),
-					np.concatenate((np.zeros((gb_size, rb_size)), np.zeros((rb_size, rb_size)))) ))
-				# print("col", col4.shape)
-				jacKKT = np.hstack((col1, col2, col3, col4))
-				jacChol, jacLower = scipy.linalg.lu_factor(jacKKT)
-				KKT_constrains = np.concatenate((rhs, np.zeros((gb_size+rb_size, rhs.shape[1]))))
-
-				Jac_s = scipy.linalg.lu_solve((jacChol, jacLower), KKT_constrains)
 
 			results = Jac_s[0:rhs.shape[0], :]
 
@@ -439,7 +416,195 @@ class ARAP:
 	
 			PAGmUWrUtPAxdS = (PAGm.dot(repeatUWr)).T.dot(self.constErs_Terms[0])
 			self.constEgsTerms.append(PAGmUWrUtPAxdS)
+	
+	def setupConstEsTerms(self):
+		wr_cols = []
+		for i in range(len(self.mesh.red_r)):
+			ce_map = np.array(self.mesh.r_cluster_element_map[i])
+			wr_c1 = np.zeros(2*len(self.mesh.T))
+			wr_c2 = np.zeros(2*len(self.mesh.T))
+			wr_c1[2*ce_map] = 1
+			wr_c2[2*ce_map+1] = 1
+			wr_cols.append(wr_c1)
+			wr_cols.append(wr_c2)
+		Wr = np.vstack(wr_cols).T
+
+		UtPAx = self.mesh.GU.T.dot(self.PAx)
+		MUtPAx = sparse.lil_matrix((6*len(self.mesh.T), 3*len(self.mesh.T)))
+		for t in range(len(self.mesh.T)):
+			x = UtPAx[6*t:6*t+6]
+
+			MUtPAx[6*t+0, 3*t+0] = x[0]
+			MUtPAx[6*t+0, 3*t+2] = x[1]
+			MUtPAx[6*t+1, 3*t+1] = x[1]
+			MUtPAx[6*t+1, 3*t+2] = x[0]
+
+			MUtPAx[6*t+2, 3*t+0] = x[2]
+			MUtPAx[6*t+2, 3*t+2] = x[3]
+			MUtPAx[6*t+3, 3*t+1] = x[3]
+			MUtPAx[6*t+3, 3*t+2] = x[2]
 			
+			MUtPAx[6*t+4, 3*t+0] = x[4]
+			MUtPAx[6*t+4, 3*t+2] = x[5]
+			MUtPAx[6*t+5, 3*t+1] = x[5]
+			MUtPAx[6*t+5, 3*t+2] = x[4]
+		MUtPAx.tocsc()
+		MUtPAxsW = MUtPAx.dot(self.mesh.sW)
+		DSUtPAxMUtPAxsW = MUtPAxsW.T.dot(self.constErs_Terms[0])
+		self.constEsTerms.append(DSUtPAxMUtPAxsW)
+
+		U_PAx = sparse.lil_matrix((6*len(self.mesh.T), 2*len(self.mesh.T)))
+		for t in range(len(self.mesh.T)):
+			u1, u2 = np.cos(self.mesh.u[t]), np.sin(self.mesh.u[t])
+			p = self.PAx[6*t:6*t+6]
+			U_PAx[6*t+0, 2*t+0] = p[0]*u1 + p[1]*u2
+			U_PAx[6*t+0, 2*t+1] = p[1]*u1 - p[0]*u2
+			U_PAx[6*t+1, 2*t+0] = p[1]*u1 - p[0]*u2
+			U_PAx[6*t+1, 2*t+1] = -p[0]*u1 - p[1]*u2
+
+			U_PAx[6*t+2, 2*t+0] = p[2]*u1 + p[3]*u2
+			U_PAx[6*t+2, 2*t+1] = p[3]*u1 - p[2]*u2
+			U_PAx[6*t+3, 2*t+0] = p[3]*u1 - p[2]*u2
+			U_PAx[6*t+3, 2*t+1] = -p[2]*u1 - p[3]*u2
+
+			U_PAx[6*t+4, 2*t+0] = p[4]*u1 + p[5]*u2
+			U_PAx[6*t+4, 2*t+1] = p[5]*u1 - p[4]*u2
+			U_PAx[6*t+5, 2*t+0] = p[5]*u1 - p[4]*u2
+			U_PAx[6*t+5, 2*t+1] = -p[4]*u1 - p[5]*u2
+
+		self.constEsTerms.append((U_PAx.dot(Wr)).T.dot(self.constErs_Terms[0]))
+
+		U_PAG = []
+		
+		for i in range(len(self.mesh.z)):
+			U_PAG_i = sparse.lil_matrix((6*len(self.mesh.T), 2*len(self.mesh.T)))
+			for t in range(len(self.mesh.T)):
+				u1, u2 = np.cos(self.mesh.u[t]), np.sin(self.mesh.u[t])
+				p = self.PAG[6*t:6*t+6, i]
+				U_PAG_i[6*t+0, 2*t+0] = p[0]*u1 + p[1]*u2
+				U_PAG_i[6*t+0, 2*t+1] = p[1]*u1 - p[0]*u2
+				U_PAG_i[6*t+1, 2*t+0] = p[1]*u1 - p[0]*u2
+				U_PAG_i[6*t+1, 2*t+1] = -p[0]*u1 - p[1]*u2
+
+				U_PAG_i[6*t+2, 2*t+0] = p[2]*u1 + p[3]*u2
+				U_PAG_i[6*t+2, 2*t+1] = p[3]*u1 - p[2]*u2
+				U_PAG_i[6*t+3, 2*t+0] = p[3]*u1 - p[2]*u2
+				U_PAG_i[6*t+3, 2*t+1] = -p[2]*u1 - p[3]*u2
+
+				U_PAG_i[6*t+4, 2*t+0] = p[4]*u1 + p[5]*u2
+				U_PAG_i[6*t+4, 2*t+1] = p[5]*u1 - p[4]*u2
+				U_PAG_i[6*t+5, 2*t+0] = p[5]*u1 - p[4]*u2
+				U_PAG_i[6*t+5, 2*t+1] = -p[4]*u1 - p[5]*u2
+			U_PAG_i.tocsc()
+			U_PAG.append((U_PAG_i.dot(Wr)).T.dot(self.constErs_Terms[0]))
+
+
+		self.constEsTerms.append(U_PAG)
+
+
+
+	def setupConstUSUtPAxTerms(self):
+		UtPAx = self.mesh.GU.T.dot(self.PAx)
+
+		wr_cols = []
+		for i in range(len(self.mesh.red_r)):
+			ce_map = np.array(self.mesh.r_cluster_element_map[i])
+			wr_c1 = np.zeros(2*len(self.mesh.T))
+			wr_c2 = np.zeros(2*len(self.mesh.T))
+			wr_c1[2*ce_map] = 1
+			wr_c2[2*ce_map+1] = 1
+			wr_cols.append(wr_c1)
+			wr_cols.append(wr_c2)
+		Wr = np.vstack(wr_cols).T
+
+		UUtPAx_6tx3 = np.zeros((6*len(self.mesh.T), 3))
+		for t in range(len(self.mesh.T)):
+			u1, u2 = np.cos(self.mesh.u[t]), np.sin(self.mesh.u[t])
+			x = UtPAx[6*t:6*t+6]
+
+			UUtPAx_6tx3[6*t+0, 0] = u1*x[0]
+			UUtPAx_6tx3[6*t+0, 1] = -u2*x[1]
+			UUtPAx_6tx3[6*t+0, 2] = u1*x[1] - u2*x[0]
+			UUtPAx_6tx3[6*t+1, 0] = u2*x[0]
+			UUtPAx_6tx3[6*t+1, 1] = u1*x[1]
+			UUtPAx_6tx3[6*t+1, 2] = u1*x[0] + u2*x[1]
+
+			UUtPAx_6tx3[6*t+2, 0] = u1*x[2]
+			UUtPAx_6tx3[6*t+2, 1] = -u2*x[3]
+			UUtPAx_6tx3[6*t+2, 2] = u1*x[3] - u2*x[2]
+			UUtPAx_6tx3[6*t+3, 0] = u2*x[2]
+			UUtPAx_6tx3[6*t+3, 1] = u1*x[3]
+			UUtPAx_6tx3[6*t+3, 2] = u1*x[2] + u2*x[3]
+
+			UUtPAx_6tx3[6*t+4, 0] = u1*x[4]
+			UUtPAx_6tx3[6*t+4, 1] = -u2*x[5]
+			UUtPAx_6tx3[6*t+4, 2] = u1*x[5] - u2*x[4]
+			UUtPAx_6tx3[6*t+5, 0] = u2*x[4]
+			UUtPAx_6tx3[6*t+5, 1] = u1*x[5]
+			UUtPAx_6tx3[6*t+5, 2] = u1*x[4] + u2*x[5]
+
+		UUtPAxWr = []
+		transform_matrix = np.kron(np.eye(3), np.array([[0,-1],[1,0]]))
+		for i in range(3):
+			P_matrix_i = sparse.lil_matrix((6*len(self.mesh.T), 2*len(self.mesh.T)))
+			for t in range(len(self.mesh.T)):
+
+				p123456 = UUtPAx_6tx3[6*t:6*t+6, i]
+				p_21_43_65 = transform_matrix.dot(p123456)
+				P_matrix_i[6*t:6*t+6, 2*t+0] = p123456[:,np.newaxis]
+				P_matrix_i[6*t:6*t+6, 2*t+1] = p_21_43_65[:,np.newaxis]
+			P_matrix_i.tocsc()
+			UUtPAxWr.append(P_matrix_i.dot(Wr))
+		
+
+		S123_matrices = []
+		S_1 = sparse.kron(sparse.eye(len(self.mesh.T)), np.kron(np.ones((6,1)), np.array([1,0,0])))
+		S_2 = sparse.kron(sparse.eye(len(self.mesh.T)), np.kron(np.ones((6,1)), np.array([0,1,0])))
+		S_3 = sparse.kron(sparse.eye(len(self.mesh.T)), np.kron(np.ones((6,1)), np.array([0,0,1])))
+		S123_matrices.append(S_1)
+		S123_matrices.append(S_2)
+		S123_matrices.append(S_3)
+
+		self.constUUtPaxTerms.append(UUtPAxWr)
+		self.constUUtPaxTerms.append(S123_matrices)
+		self.constUUtPaxTerms.append(None)
+		self.updateConstUSUtPAx()
+		
+	def updateConstUSUtPAx(self):
+		s = self.mesh.sW.dot(self.mesh.red_s)
+		s0 = self.constUUtPaxTerms[1][0].dot(s)
+		s1 = self.constUUtPaxTerms[1][1].dot(s)
+		s2 = self.constUUtPaxTerms[1][2].dot(s)
+
+		USUtPAxWr = np.multiply(self.constUUtPaxTerms[0][0], s0[:,np.newaxis])
+		USUtPAxWr += np.multiply(self.constUUtPaxTerms[0][1], s1[:,np.newaxis])
+		USUtPAxWr += np.multiply(self.constUUtPaxTerms[0][2], s2[:,np.newaxis])
+		self.constUUtPaxTerms[2] = USUtPAxWr
+
+	def constTimeFPAx(self):
+		c_vec = []
+		for i in range(len(self.mesh.red_r)):
+			c1, c2 = np.cos(self.mesh.red_r[i]), np.sin(self.mesh.red_r[i])
+			c_vec.append(c1)
+			c_vec.append(c2)
+		c = np.array(c_vec)
+		FPAx = self.constUUtPaxTerms[2].dot(c)
+		return FPAx
+	
+	def constTimeEs(self):
+		c_vec = []
+		for i in range(len(self.mesh.red_r)):
+			c1, c2 = np.cos(self.mesh.red_r[i]), np.sin(self.mesh.red_r[i])
+			c_vec.append(c1)
+			c_vec.append(c2)
+		c = np.array(c_vec)
+
+		ans = self.constEsTerms[1].T.dot(c)
+		for i in range(len(self.mesh.z)):
+			ans += self.constEsTerms[2][i].T.dot(c)*self.mesh.z[i]
+
+		return self.constEsTerms[0].T.dot(self.mesh.red_s) - ans
+
 	def constTimeEgs(self):
 		c_vec = []
 		for i in range(len(self.mesh.red_r)):
@@ -514,46 +679,6 @@ class ARAP:
 
 		return dEdr
 
-	def setupConstEsTerms(self):
-		UU = sparse.lil_matrix((4*len(self.mesh.T), 3*len(self.mesh.T)))
-		for t in range(len(self.mesh.T)):
-			u = self.mesh.getU(t)
-			u1, u2 = u[0,0], u[0,1]
-			UU[4*t+0, 3*t+0] = u1
-			UU[4*t+0, 3*t+2] = u2
-			UU[4*t+1, 3*t+0] =-u2
-			UU[4*t+1, 3*t+2] = u1
-
-			UU[4*t+2, 3*t+1] = u2
-			UU[4*t+2, 3*t+2] = u1
-			UU[4*t+3, 3*t+1] = u1
-			UU[4*t+3, 3*t+2] =-u2
-
-		UUW = UU.dot(self.mesh.sW)
-
-		MPAx = sparse.lil_matrix((6*len(self.mesh.T), 4*len(self.mesh.T)))
-		for t in range(len(self.mesh.T)):
-			x1, x2, x3 = self.PAx[6*t+0], self.PAx[6*t+1], self.PAx[6*t+2]
-			x4, x5, x6 = self.PAx[6*t+3], self.PAx[6*t+4], self.PAx[6*t+5]
-
-			MPAx[6*t+0, 4*t+0]=x1
-			MPAx[6*t+0, 4*t+1]=x2
-			MPAx[6*t+1, 4*t+2]=x1
-			MPAx[6*t+1, 4*t+3]=x2
-
-			MPAx[6*t+2, 4*t+0]=x3
-			MPAx[6*t+2, 4*t+1]=x4
-			MPAx[6*t+3, 4*t+2]=x3
-			MPAx[6*t+3, 4*t+3]=x4
-			
-			MPAx[6*t+4, 4*t+0]=x5
-			MPAx[6*t+4, 4*t+1]=x6
-			MPAx[6*t+5, 4*t+2]=x5
-			MPAx[6*t+5, 4*t+3]=x6
-
-		MPAxUUW = MPAx.tocsc().dot(UUW)
-		UtPAx = self.mesh.GU.T.dot(self.PAx)
-		
 	def Gradients(self):
 		PAg = self.PA.dot(self.mesh.getg())
 		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
@@ -566,15 +691,17 @@ class ARAP:
 		# 	dEdr[i] = DR[i].multiply(dEdR).sum()
 		dEdr = self.constTimeEr()
 
-		FPAx = self.mesh.GF.dot(self.PAx)
+		FPAx = self.constTimeFPAx()
 		dEdg = self.PAG.T.dot(PAg - FPAx)
 
-		UtPAx = self.mesh.GU.T.dot(self.PAx)
-		RU = self.mesh.GR.dot(self.mesh.GU)
-		dEdS =  self.sparseOuterProdDiags(self.mesh.GS.dot(UtPAx), UtPAx) - self.sparseOuterProdDiags(RU.T.dot(PAg), UtPAx)
-		dEds = np.zeros(len(self.mesh.red_s))
-		for i in range(len(dEds)):
-			dEds[i] = DS[i].multiply(dEdS).sum()
+		# UtPAx = self.mesh.GU.T.dot(self.PAx)
+		# RU = self.mesh.GR.dot(self.mesh.GU)
+		# dEdS =  self.sparseOuterProdDiags(self.mesh.GS.dot(UtPAx), UtPAx) -self.sparseOuterProdDiags(RU.T.dot(PAg), UtPAx)
+		# dEds = np.zeros(len(self.mesh.red_s))
+		# for i in range(len(dEds)):
+		# 	dEds[i] = DS[i].multiply(dEdS).sum()
+
+		dEds =self.constTimeEs()
 
 		return dEdg, dEdr, dEds
 
@@ -665,7 +792,7 @@ class ARAP:
 
 	def dEdg(self):
 		PAg = self.PA.dot(self.mesh.getg())
-		FPAx = self.mesh.GF.dot(self.PAx)
+		FPAx = self.constTimeFPAx()
 		res =  self.PAG.T.dot(PAg - FPAx)
 		return res
 
@@ -716,7 +843,7 @@ class ARAP:
 		return 1
 
 	def itT(self):
-		FPAx = self.mesh.GF.dot(self.PAx)
+		FPAx = self.constTimeFPAx()
 		
 		deltaAbtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
 		GtAtPtFPAx = self.PAG.T.dot(FPAx)
@@ -756,17 +883,17 @@ class ARAP:
 			
 		Eg0 = self.dEdg()
 		for i in range(its):
-			print("		itT")
+			# print("		itT")
 			g = self.itT()
-			print("		itR")
+			# print("		itR")
 			r = self.itR()
-			print("		GF")
-			self.mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
-			print("		dEdg")
+			# print("		GF")
+			# print("		dEdg")
 			Eg = self.dEdg()
 
 			if(1e-8 > np.linalg.norm(Eg-Eg0)):
 				# print("En",self.Energy(), self.mesh.red_r, self.mesh.z)
+				# self.mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
 				print("	-ARAP iterate "+str(i))
 				# print("ARAP converged", np.linalg.norm(Eg))
 				return

@@ -64,7 +64,7 @@ class Mesh:
 		# Modal analysis
 		if modes_used is None:
 			self.Q = None 
-			self.G = sparse.eye(2*len(self.V))
+			self.G = np.eye(2*len(self.V))
 		else:
 			self.Q =self.setupModes(modes_used=modes_used)
 			self.G = self.Q[:,:]
@@ -88,6 +88,11 @@ class Mesh:
 		print("\n+ Setup GF")
 		self.getGlobalF(updateR = True, updateS = True, updateU=True)
 		print("- Done with GF")
+
+		Ax = self.getA().dot(self.x0)
+		self.areas = []
+		for t in range(len(self.T)):
+			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
 
 	def init_from_file(self, V=None, T=None, u=None, Q=None, fix=None, mov=None, r_element_cluster_map=None, s_handles_ind=None, u_clusters_element_map=None, modes_used=None):
 		self.youngs = 60000
@@ -130,7 +135,7 @@ class Mesh:
 		if modes_used is not None and len(Q) != 0:
 			self.G = Q[:, :modes_used]
 		else:
-			self.G = sparse.eye(2*len(self.V))
+			self.G = np.eye(2*len(self.V))
 
 		self.z = np.zeros(self.G.shape[1])
 		
@@ -153,6 +158,10 @@ class Mesh:
 		print("\n+ Setup GF")
 		self.getGlobalF(updateR = True, updateS = True, updateU=True)
 		print("- Done with GF")
+		Ax = self.getA().dot(self.x0)
+		self.areas = []
+		for t in range(len(self.T)):
+			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
 
 	def setupModes(self, modes_used=None):
 		A = self.getA()
@@ -293,7 +302,7 @@ class Mesh:
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
 		if rclusters is False:
-			nrc =  10
+			nrc =  5
 			self.r_element_cluster_map = self.kmeans_rotationclustering(clusters=nrc)
 
 		for i in range(len(self.T)):			
@@ -322,7 +331,7 @@ class Mesh:
 		A = self.getA()
 		C = self.getC()
 		print(self.G.shape, self.x0)
-		G = np.add(self.G.toarray().T, self.x0)
+		G = np.add(self.G.T, self.x0)
 		#all modes at once
 		CAG = C.dot(A.dot(G.T))#scipy wants data in format: observations(elem) x features (modes)
 
@@ -467,7 +476,6 @@ class Mesh:
 
 		#cluster-wise update of R
 		if updateR:
-			print("			+upR")
 			diag = np.zeros(6*len(self.T))
 			offdiag = np.zeros(6*len(self.T))
 			for t in range(len(self.red_r)):
@@ -477,7 +485,6 @@ class Mesh:
 				offdiag += B.dot(c2*np.kron(np.ones(3*len(self.r_cluster_element_map[t])), np.array([1,0])))
 
 			self.GR = sparse.diags([offdiag[:-1], diag, -1*offdiag[:-1]],[-1,0,1]).tocsc()
-			print("			-upR")
 
 		if updateS:
 			s = self.sW.dot(self.red_s)
@@ -503,9 +510,7 @@ class Mesh:
 		if (updateR or updateS or updateU):
 			if (updateS or updateU):
 				self.GUSUt = self.GU.dot(self.GS.dot(self.GU.T))
-		print("			+*F")
 		self.GF = self.GR.dot(self.GUSUt)
-		print("			-*F")
 		return
 
 	def getDiscontinuousVT(self):

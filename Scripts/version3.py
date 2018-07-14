@@ -16,7 +16,7 @@ from iglhelpers import *
 # F = igl.eigen.MatrixXi()
 # igl.readOFF("./MeshSetups/woman/mid_woman.off", V, F)
 # VTU = [np.array(e2p(V)[:,:2]/100.0), np.array(e2p(F))]
-# VTU = Meshwork.rectangle_mesh(x=100, y=100, step=0.1)
+# VTU = Meshwork.rectangle_mesh(x=50, y=50, step=0.1)
 # mw = Meshwork.Preprocessing(_VT = VTU, modes_used=15)
 # mw.display()
 # exit()

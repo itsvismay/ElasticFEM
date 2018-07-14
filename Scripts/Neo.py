@@ -50,7 +50,7 @@ class NeohookeanElastic:
 		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.getg()))
 
 		for t in range(len(self.mesh.T)):
-			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
+			area = self.mesh.areas[t]
 			Ug = self.mesh.getU(t).dot(self.grav)
 			Eg += self.GravityElementEnergy(self.rho, Ug, CAg[6*t:6*t+2], area, t)
 
@@ -67,7 +67,7 @@ class NeohookeanElastic:
 		CAdzds = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.G.dot(dzds)))
 
 		for t in range(len(self.mesh.T)):
-			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
+			area = self.mesh.areas[t]
 			gv = self.mesh.getU(t).dot(self.grav)
 			fg += self.GravityElementForce(self.rho, area, gv, CAdzds[6*t:6*t+2, :], t)
 
@@ -94,7 +94,7 @@ class NeohookeanElastic:
 		force = np.zeros(len(self.mesh.red_s))
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 		for t in range(len(self.mesh.T)):
-			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
+			area = self.mesh.areas[t]
 			force += self.WikipediaPrinStretchElementForce(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:] )
 
 		return force
@@ -128,7 +128,7 @@ class NeohookeanElastic:
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 
 		for t in range(len(self.mesh.T)):
-			area = get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6])
+			area = self.mesh.areas[t]
 			E += self.WikipediaPrinStretchElementEnergy(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:],self.mesh.sW[3*t+2,:])
 
 		return E
