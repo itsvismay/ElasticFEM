@@ -16,10 +16,12 @@ from iglhelpers import *
 # F = igl.eigen.MatrixXi()
 # igl.readOFF("./MeshSetups/woman/mid_woman.off", V, F)
 # VTU = [np.array(e2p(V)[:,:2]/100.0), np.array(e2p(F))]
-# VTU = Meshwork.rectangle_mesh(x=50, y=50, step=0.1)
-# mw = Meshwork.Preprocessing(_VT = VTU, modes_used=15)
-# mw.display()
-# exit()
+VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
+mw = Meshwork.Preprocessing(_VT = VTU)
+mw.Fix = Meshwork.get_max(mw.V, a=1, eps=1e-2)		
+mw.Mov = Meshwork.get_min(mw.V, a=1, eps=1e-2)
+mw.display()
+exit()
 
 
 #Read-in mesh: read V, T, U, rot-clusters, skinning handles, Modes (if reduced)
@@ -38,5 +40,5 @@ ti = Solvers.TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neo)
 #Running
 disp = Display.Display(isolve = ti)
 disp.headless()
-# disp.display()
+disp.display()
 

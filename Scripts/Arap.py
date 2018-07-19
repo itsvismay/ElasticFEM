@@ -71,30 +71,33 @@ class ARAP:
 		self.constEgsTerms = []
 		self.constUUtPaxTerms = []
 		self.constEsTerms = []
+		self.constItRTerms = []
+
 		self.setupConstErTerms()
 		self.setupConstErsTerms()
 		self.setupConstEgsTerms()
 		self.setupConstEsTerms()
 		self.setupConstUSUtPAxTerms()
+		self.setupConstItRTerms()
 		print("Done with ARAP init")
 
 	def energy(self, _z, _R, _S, _U):
-		self.updateConstUSUtPAx()
+		# self.updateConstUSUtPAx()
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G.dot(_z) + self.mesh.x0)) 
 		FPAx = _R.dot(_U.dot(_S.dot(_U.T.dot(self.PAx))))
-		# print(_z)
 		# print(PAg)
+		# print(FPAx)
 		return 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
 
 	def Energy(self):
 		PAg = self.PA.dot(self.mesh.getg())
-		FPAx0 = self.constTimeFPAx()
+		FPAx0 = self.mesh.GF.dot(self.PAx) #self.constTimeFPAx()
 		en = 0.5*(np.dot(PAg - FPAx0, PAg - FPAx0))
 		return en
 
 	def Jacobian(self, block = False, kkt= True, useSparse=True):
 		print("		Jacobian")
-		self.mesh.getGlobalF(updateR=True, updateS=True, updateU=False)
+		# self.mesh.getGlobalF(updateR=True, updateS=True, updateU=False)
 		Egg, Erg, Err, Egs, Ers = self.Hessians(useSparse=useSparse)
 
 		lhs_left = np.vstack((Egg, Erg.T))
@@ -501,8 +504,6 @@ class ARAP:
 
 		self.constEsTerms.append(U_PAG)
 
-
-
 	def setupConstUSUtPAxTerms(self):
 		UtPAx = self.mesh.GU.T.dot(self.PAx)
 
@@ -570,6 +571,43 @@ class ARAP:
 		self.constUUtPaxTerms.append(None)
 		self.updateConstUSUtPAx()
 		
+	def setupConstItRTerms(self):
+		
+		UtPAx = self.mesh.GU.T.dot(self.PAx)
+		MUtPAx = sparse.lil_matrix((6*len(self.mesh.T), 3*len(self.mesh.T)))
+		for t in range(len(self.mesh.T)):
+			x = UtPAx[6*t:6*t+6]
+			u1, u2 = np.cos(self.mesh.u[t]), np.sin(self.mesh.u[t])
+
+			MUtPAx[6*t+0, 3*t+0] = x[0]*u1
+			MUtPAx[6*t+0, 3*t+1] = -x[1]*u2
+			MUtPAx[6*t+0, 3*t+2] = x[1]*u1 - x[0]*u2
+			MUtPAx[6*t+1, 3*t+0] = x[0]*u2
+			MUtPAx[6*t+1, 3*t+1] = x[1]*u1
+			MUtPAx[6*t+1, 3*t+2] = x[0]*u1 - x[1]*u2
+
+			MUtPAx[6*t+2, 3*t+0] = x[2]*u1
+			MUtPAx[6*t+2, 3*t+1] = -x[3]*u2
+			MUtPAx[6*t+2, 3*t+2] = x[3]*u1 - x[2]*u2
+			MUtPAx[6*t+3, 3*t+0] = x[2]*u2
+			MUtPAx[6*t+3, 3*t+1] = x[3]*u1
+			MUtPAx[6*t+3, 3*t+2] = x[2]*u1 - x[3]*u2
+			
+			MUtPAx[6*t+4, 3*t+0] = x[4]*u1
+			MUtPAx[6*t+4, 3*t+1] = -x[5]*u2
+			MUtPAx[6*t+4, 3*t+2] = x[5]*u1 - x[4]*u2
+			MUtPAx[6*t+5, 3*t+0] = x[4]*u2
+			MUtPAx[6*t+5, 3*t+1] = x[5]*u1
+			MUtPAx[6*t+5, 3*t+2] = x[4]*u1 - x[5]*u2
+
+		MUtPAx.tocsc()
+		MUtPAxsW = MUtPAx.dot(self.mesh.sW)
+
+		wr_cols = []
+		for i in range(len(self.mesh.red_r)):
+			B = self.mesh.RotationBLOCK[i]
+			self.constItRTerms.append(B.T.dot(MUtPAxsW))
+
 	def updateConstUSUtPAx(self):
 		s = self.mesh.sW.dot(self.mesh.red_s)
 		s0 = self.constUUtPaxTerms[1][0].dot(s)
@@ -681,9 +719,9 @@ class ARAP:
 
 	def Gradients(self):
 		PAg = self.PA.dot(self.mesh.getg())
-		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
-		DR = self.sparseDRdr()
-		DS = self.sparseDSds()
+		# USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
+		# DR = self.sparseDRdr()
+		# DS = self.sparseDSds()
 
 		# dEdR = -1*self.sparseOuterProdDiags(PAg, USUt.dot(self.PAx))
 		# dEdr = np.zeros(len(self.mesh.red_r))
@@ -691,7 +729,7 @@ class ARAP:
 		# 	dEdr[i] = DR[i].multiply(dEdR).sum()
 		dEdr = self.constTimeEr()
 
-		FPAx = self.constTimeFPAx()
+		FPAx = self.mesh.GF.dot(self.PAx)#self.constTimeFPAx()
 		dEdg = self.PAG.T.dot(PAg - FPAx)
 
 		# UtPAx = self.mesh.GU.T.dot(self.PAx)
@@ -792,7 +830,7 @@ class ARAP:
 
 	def dEdg(self):
 		PAg = self.PA.dot(self.mesh.getg())
-		FPAx = self.constTimeFPAx()
+		FPAx = self.mesh.GF.dot(self.PAx)#self.constTimeFPAx()
 		res =  self.PAG.T.dot(PAg - FPAx)
 		return res
 
@@ -843,7 +881,7 @@ class ARAP:
 		return 1
 
 	def itT(self):
-		FPAx = self.constTimeFPAx()
+		FPAx = self.mesh.GF.dot(self.PAx)# self.constTimeFPAx()
 		
 		deltaAbtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
 		GtAtPtFPAx = self.PAG.T.dot(FPAx)
@@ -868,27 +906,28 @@ class ARAP:
 
 	def iterate(self, its=100):
 		print("	+ARAP iterate")
+		# self.USUtPAx_E = []
+		# for i in range(len(self.mesh.red_r)):
+		# 	B = self.mesh.RotationBLOCK[i]
+		# 	PAx_e = B.T.dot(self.PAx)
+		# 	Ue = B.T.dot(self.mesh.GU.dot(B))
+		# 	Se = B.T.dot(self.mesh.GS.dot(B))
+		# 	USUPAx = Ue.dot(Se.dot(Ue.T.dot(PAx_e.T)))
+
+		# 	self.USUtPAx_E.append(USUPAx)
+
+
 		self.USUtPAx_E = []
 		for i in range(len(self.mesh.red_r)):
-			B = self.mesh.RotationBLOCK[i]
-			PAx_e = B.T.dot(self.PAx)
-
-			Ue = B.T.dot(self.mesh.GU.dot(B))
-			Se = B.T.dot(self.mesh.GS.dot(B))
-
-			USUPAx = Ue.dot(Se.dot(Ue.T.dot(PAx_e.T)))
-
+			USUPAx = self.constItRTerms[i].dot(self.mesh.red_s)
 			self.USUtPAx_E.append(USUPAx)
 
 			
 		Eg0 = self.dEdg()
 		for i in range(its):
-			# print("		itT")
 			g = self.itT()
-			# print("		itR")
 			r = self.itR()
-			# print("		GF")
-			# print("		dEdg")
+			self.mesh.getGlobalF(updateR=True, updateS=False)
 			Eg = self.dEdg()
 
 			if(1e-8 > np.linalg.norm(Eg-Eg0)):

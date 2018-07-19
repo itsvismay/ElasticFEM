@@ -4,10 +4,10 @@ import Arap
 import Neo
 import Display
 import Solvers
-np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.3f}'.format(x)})
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.8f}'.format(x)})
 
 def FiniteDifferencesARAP():
-	eps = 1e-4
+	eps = 1e-6
 	its = 100
 	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
 	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
@@ -16,11 +16,11 @@ def FiniteDifferencesARAP():
 	mw.Mov = get_min(mw.V, a=1, eps=1e-2)
 	mesh = mw.getMesh()
 	arap = Arap.ARAP(imesh = mesh, filen="crap/")
-	# mesh.red_r[1]= 0.1
-	mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
+
 	E0 = arap.energy(_z=mesh.z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 	print("Default Energy ", E0)
-	
+	# print(mesh.red_s)
+	# exit()
 	def check_dEdg():
 		real = arap.dEdg()
 		dEdz = []
@@ -43,6 +43,7 @@ def FiniteDifferencesARAP():
 		dEds = []
 		for i in range(len(mesh.red_s)):
 			mesh.red_s[i] += eps
+			arap.updateConstUSUtPAx()
 			mesh.getGlobalF()
 			Ei = arap.energy(_z =mesh.z, _R=mesh.GR, _S=mesh.GS, _U=mesh.GU)
 			dEds.append((Ei - E0)/eps)
@@ -306,11 +307,11 @@ def FiniteDifferencesARAP():
 				
 
 		print("FD")
-		print(np.array(dgds))
+		print(np.array(dgds).T)
 		print(np.array(drds).T)
 		print("")
 		print("real")
-		print(real1.T)
+		print(real1)
 		print(real2)
 		print("DIFF")
 		# print("T: ", len(mesh.T))
@@ -343,12 +344,12 @@ def FiniteDifferencesElasticity():
 	mw.Mov = get_min(mw.V, a=1, eps=1e-2)
 	mesh = mw.getMesh()
 	arap = Arap.ARAP(imesh = mesh, filen="crap/")
+	# mesh.red_s[2] = 0.1
 	ne = Neo.NeohookeanElastic(imesh = mesh)
 
 	def check_PrinStretchForce():
 		e0 = ne.WikipediaEnergy(_rs = mesh.red_s)
 		real = -ne.WikipediaForce(_rs = mesh.red_s)
-		print("e0", e0)
 		dEds = []
 		for i in range(len(mesh.red_s)):
 			mesh.red_s[i] += 0.5*eps
@@ -389,9 +390,10 @@ def FiniteDifferencesElasticity():
 		print("Diff", np.sum(real - np.array(dEgds)))
 
 	def check_muscleForce():
+		
 		e0 = ne.MuscleEnergy(_rs = mesh.red_s)
 		real = -ne.MuscleForce(_rs = mesh.red_s)
-		# print("e0", e0)
+		print("e0", e0)
 		dEds = []
 		for i in range(len(mesh.red_s)):
 			mesh.red_s[i] += 0.5*eps
@@ -408,8 +410,8 @@ def FiniteDifferencesElasticity():
 		print("fake", dEds)
 		print("Diff", np.sum(real - np.array(dEds)))
 
-	check_PrinStretchForce()
-	# check_gravityForce()
+	# check_PrinStretchForce()
+	check_gravityForce()
 	# check_muscleForce()
 
 # FiniteDifferencesElasticity()

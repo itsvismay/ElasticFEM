@@ -145,7 +145,18 @@ class Preprocessing:
 		# 					[t for t in range(len(self.T)) if CAg[6*t]>=0.9]]
 
 		self.mesh.u_clusters_element_map = [np.array(list(e), dtype="int32") for e in self.uClusters]
-		self.mesh.getGlobalF(updateU=True)
+		# self.mesh.red_r[1]= 0.1
+		# self.mesh.red_s[1]=1.2
+		# self.mesh.getGlobalF(updateR=True, updateS=True, updateU=True)
+		# print(self.mesh.u)
+		# print(self.mesh.red_r)
+		# print(self.mesh.red_s)
+		# print(self.mesh.z)
+		# # print(self.mesh.GR)
+		# # print(self.mesh.GS)
+		# # print(self.mesh.GU)
+		# E0 = arap.energy(_z=self.mesh.z, _R =self.mesh.GR, _S=self.mesh.GS, _U=self.mesh.GU)
+		# print("Default Energy ", E0)
 
 	def getMesh(self, name=None, modes_used=None):
 		if name is not None:

@@ -39,6 +39,23 @@ class NeohookeanElastic:
 		self.muscle_fiber_mag_target = 100
 		self.muscle_fibre_mag = 50000
 
+		self.fastMuscleEnergy = []
+
+		self.preComputeFastMatrices()
+
+	def preComputeFastMatrices(self):
+		ME = sparse.kron(sparse.eye(len(self.mesh.T)), np.array([[1,0,0],[0,0,1]]))
+		MEsW = ME.dot(self.mesh.sW)
+		U_tog = 0.5*self.muscle_fibre_mag*sparse.diags(np.kron(self.mesh.u_toggle, np.array([1,1]))).tocsc()
+		fastMusc = MEsW.T.dot(U_tog.dot(MEsW))
+		# s = self.mesh.sW.dot(self.mesh.red_s)
+		# # print(s)
+		# print(ME.dot(s))
+		# print(MEsW.dot(self.mesh.red_s))
+		# print(s*s)
+		# print(self.mesh.red_s.T.dot(MEsW.T.dot(U_tog.dot(MEsW.dot(self.mesh.red_s)))))
+		self.fastMuscleEnergy.append(fastMusc) 
+
 	def GravityElementEnergy(self, rho, grav, cag, area, t):
 		e = rho*area*grav.dot(cag)
 		return e
@@ -46,13 +63,10 @@ class NeohookeanElastic:
 	def GravityEnergy(self):
 		Eg = 0
 
-		Ax = self.mesh.getA().dot(self.mesh.x0)
 		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.getg()))
-
 		for t in range(len(self.mesh.T)):
 			area = self.mesh.areas[t]
-			Ug = self.mesh.getU(t).dot(self.grav)
-			Eg += self.GravityElementEnergy(self.rho, Ug, CAg[6*t:6*t+2], area, t)
+			Eg += self.GravityElementEnergy(self.rho, self.grav, CAg[6*t:6*t+2], area, t)
 
 		return Eg
 
@@ -89,7 +103,6 @@ class NeohookeanElastic:
 		gradient = ((((((mc * wx) + (mc * wy)) - ((((t_7 * t_3) * wx) + ((t_7 * t_4) * wy)) - ((((2 * mc) / t_6) * t_5) * wo))) + ((t_9 * t_3) * wx)) + ((t_9 * t_4) * wy)) - ((((md * t_8) / t_6) * t_5) * wo))
 		return -gradient
 	
-
 	def WikipediaForce(self, _rs):
 		force = np.zeros(len(self.mesh.red_s))
 		Ax = self.mesh.getA().dot(self.mesh.x0)
@@ -106,20 +119,16 @@ class NeohookeanElastic:
 
 		#MATH version
 		#E = mc*((wx'*rs) + (wy'*rs)-2 - log(wx'*rs*wy'*rs - (wo'*rs)^2)) + (md/4)*(log(wx'*rs*wy'*rs - (wo'*rs)^2)^2)
-		t_0 = np.dot(wx, rs)
-		t_1 = np.dot(wy, rs)
-		t_2 = np.log(((t_0 * t_1) - (np.dot(wo, rs) ** 2)))
-		t_3 = np.dot(rs, wy)
-		t_4 = np.dot(rs, wx)
-		t_5 = np.dot(rs, wo)
-		t_6 = ((t_4 * t_3) - (t_5 ** 2))
-		t_7 = (mc / t_6)
-		t_8 = np.log(t_6)
-		t_9 = (((2 * md) * t_8) / (4 * t_6))
-		if(t_0<=0 or t_1<=0 or t_0*t_1-t_5*t_5<=0):
+		
+		sx = np.dot(wx, rs)
+		sy = np.dot(wy, rs)
+		so = np.dot(rs, wo)
+		t_2 = np.log(((sx * sy) - (so ** 2)))
+		
+		if(sx<=0 or sy<=0 or sx*sy-so*so<=0):
 			return 1e40
 
-		functionValue = ((mc * (((t_0 - 2) + t_1) - t_2)) + ((md * (t_2 ** 2)) / 4))
+		functionValue = ((mc * (((sx - 2) + sy) - t_2) ) + ((md * (t_2 ** 2)) / 4))
 		return functionValue
 
 	def WikipediaEnergy(self,_rs):
@@ -146,13 +155,17 @@ class NeohookeanElastic:
 
 	def MuscleEnergy(self, _rs):
 		En = 0
-		for t in range(len(self.mesh.T)):
-			alpha = self.mesh.u[t]
-			c, s = np.cos(alpha), np.sin(alpha)
-			u = np.array([c,s]).dot(np.array([[c,-s],[s, c]]))
-			toggle = self.mesh.u_toggle[t]
-			E = self.MuscleElementEnergy(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u, toggle)
-			En += E
+		En = self.mesh.red_s.T.dot(self.fastMuscleEnergy[0].dot(self.mesh.red_s))
+		
+
+		# for t in range(len(self.mesh.T)):
+		# 	alpha = self.mesh.u[t]
+		# 	c, s = np.cos(alpha), np.sin(alpha)
+		# 	u = np.array([c,s]).dot(np.array([[c,-s],[s, c]]))
+		# 	toggle = self.mesh.u_toggle[t]
+		# 	E = self.MuscleElementEnergy(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u, toggle)
+		# 	En += E
+
 		return En
 
 	def MuscleElementForce(self, rs, wx, wy, wo, u1, u2, tog):
@@ -172,12 +185,13 @@ class NeohookeanElastic:
 
 	def MuscleForce(self, _rs):
 		force = np.zeros(len(self.mesh.red_s))
-		for t in range(len(self.mesh.T)):
-			alpha = self.mesh.u[t]
-			c, s = np.cos(alpha), np.sin(alpha)
-			u = np.array([c,s]).dot(np.array([[c,-s],[s, c]]))
-			toggle = self.mesh.u_toggle[t]
-			force += self.MuscleElementForce(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u[0], u[1], toggle)
+		force -= 2*self.fastMuscleEnergy[0].dot(self.mesh.red_s)
+		# for t in range(len(self.mesh.T)):
+		# 	alpha = self.mesh.u[t]
+		# 	c, s = np.cos(alpha), np.sin(alpha)
+		# 	u = np.array([c,s]).dot(np.array([[c,-s],[s, c]]))
+		# 	toggle = self.mesh.u_toggle[t]
+		# 	force += self.MuscleElementForce(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u[0], u[1], toggle)
 
 		return force
 
