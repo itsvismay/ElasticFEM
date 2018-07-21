@@ -303,8 +303,10 @@ class Mesh:
 		t_set = Set([i for i in range(len(self.T))])
 		if rclusters is False:
 			nrc =  len(self.T)
-			self.r_element_cluster_map = self.kmeans_rotationclustering(clusters=nrc)
-
+			if nrc == len(self.T):
+				self.r_element_cluster_map = np.arange(nrc)
+			else:
+				self.r_element_cluster_map = self.kmeans_rotationclustering(clusters=nrc)
 		for i in range(len(self.T)):			
 			self.r_cluster_element_map[self.r_element_cluster_map[i]].append(i)
 

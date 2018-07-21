@@ -4,10 +4,10 @@ import Arap
 import Neo
 import Display
 import Solvers
-np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.8f}'.format(x)})
+np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 
 def FiniteDifferencesARAP():
-	eps = 1e-6
+	eps = 1e-1
 	its = 100
 	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
 	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
@@ -16,11 +16,9 @@ def FiniteDifferencesARAP():
 	mw.Mov = get_min(mw.V, a=1, eps=1e-2)
 	mesh = mw.getMesh()
 	arap = Arap.ARAP(imesh = mesh, filen="crap/")
-
 	E0 = arap.energy(_z=mesh.z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 	print("Default Energy ", E0)
-	# print(mesh.red_s)
-	# exit()
+
 	def check_dEdg():
 		real = arap.dEdg()
 		dEdz = []
@@ -98,7 +96,7 @@ def FiniteDifferencesARAP():
 				Egg[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 		
 		# print("Egg")
-		# print(Egg)
+		print(real)
 		print("Egg ", np.sum(np.array(Egg) - real))
 
 	def check_Hessian_dEdrdg():
@@ -129,7 +127,7 @@ def FiniteDifferencesARAP():
 
 				Erg[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 
-		# print(real)
+		print(real)
 		print("Erg ",np.sum(np.array(Erg) - real))
 
 	def check_Hessian_dEdrdr():
@@ -163,7 +161,6 @@ def FiniteDifferencesARAP():
 	
 	def check_Hessian_dEdrds():
 		real = arap.Hess_Ers()
-
 		Ers = []
 		for i in range(len(mesh.red_r)):
 			Ers.append([])
@@ -258,28 +255,28 @@ def FiniteDifferencesARAP():
 		print("Egs ", np.linalg.norm(np.array(Egs) - real))
 
 	def check_dgds_drds():
-		Jac, real1, real2 = arap.Jacobian()
 
+
+		Jac, real1, real2 = arap.Jacobian()
 		dgds = []
 		drds = []
 
 		z0 = np.zeros(len(mesh.z)) + mesh.z
 		g0 = np.zeros(len(mesh.g)) + mesh.g
 		r0 = np.array(mesh.red_r) 
-		for i in range(len(mesh.red_s)):
+		for i in range(0,len(mesh.red_s)):
 			mesh.z = np.zeros(len(mesh.z)) + z0
 
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
 			arap.updateConstUSUtPAx()
-
 			arap.iterate()
+			# print(mesh.red_r)
+			# print(arap.Energy())
+			# exit()
 			drds_left = np.array(mesh.red_r)
-			# if(mesh.reduced_g):
 			dgds_left =mesh.z + np.zeros(len(mesh.z))
-			# else:
-			# 	dgds_left =mesh.g + np.zeros(len(mesh.g))
-
+	
 			mesh.red_s[i] -= 0.5*eps
 			mesh.getGlobalF()
 			arap.updateConstUSUtPAx()
@@ -290,11 +287,8 @@ def FiniteDifferencesARAP():
 			arap.updateConstUSUtPAx()
 			arap.iterate()
 			drds_right = np.array(mesh.red_r)
-			# if(mesh.reduced_g):
 			dgds_right =mesh.z + np.zeros(len(mesh.z))
-			# else:
-			# 	dgds_right =mesh.g + np.zeros(len(mesh.g))
-
+	
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
 			arap.updateConstUSUtPAx()
@@ -330,7 +324,7 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrdr()
 	# check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
-	# check_dgds_drds()
+	check_dgds_drds()
 
 FiniteDifferencesARAP()
 

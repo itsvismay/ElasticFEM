@@ -37,7 +37,7 @@ class NeohookeanElastic:
 		self.rho = 10
 
 		self.muscle_fiber_mag_target = 100
-		self.muscle_fibre_mag = 50000
+		self.muscle_fibre_mag = 5000
 
 		self.fastMuscleEnergy = []
 

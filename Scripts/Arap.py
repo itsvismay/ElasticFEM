@@ -86,12 +86,13 @@ class ARAP:
 		PAg = self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.G.dot(_z) + self.mesh.x0)) 
 		FPAx = _R.dot(_U.dot(_S.dot(_U.T.dot(self.PAx))))
 		# print(PAg)
-		# print(FPAx)
+		# print(self.mesh.red_r)
+		# print(self.mesh.red_s)
 		return 0.5*(np.dot(PAg - FPAx, PAg - FPAx))
 
 	def Energy(self):
 		PAg = self.PA.dot(self.mesh.getg())
-		FPAx0 = self.mesh.GF.dot(self.PAx) #self.constTimeFPAx()
+		FPAx0 = self.constTimeFPAx() #self.mesh.GF.dot(self.PAx)
 		en = 0.5*(np.dot(PAg - FPAx0, PAg - FPAx0))
 		return en
 
@@ -155,14 +156,14 @@ class ARAP:
 		# s_size = len(self.mesh.red_s)
 		# DR = self.sparseDRdr()
 		# DS = self.sparseDSds()
-
 		Ezz = self.Egg
+
 		
 		# ###############ERG
-		# # sample = self.sparseErg_first(-1*self.PAG, USUtPAx)
-		# # for j in range(self.Erg.shape[1]):
-		# # 	for i in range(self.Erg.shape[0]):
-		# # 		self.Erg[i,j] = DR[j].multiply(sample[i]).sum()
+		# sample = self.sparseErg_first(-1*sparse.csc_matrix(self.PAG), USUtPAx)
+		# for j in range(self.Erg.shape[1]):
+		# 	for i in range(self.Erg.shape[0]):
+		# 		self.Erg[i,j] = DR[j].multiply(sample[i]).sum()
 		self.Erg = self.constTimeErz()
 
 
@@ -183,6 +184,7 @@ class ARAP:
 		# 		self.Egs[i,j] = DS[j].multiply(d_gEgdS[i]).sum()
 		# print(self.Egs)
 		self.Egs = self.constTimeEgs()
+		
 		# print(self.Egs)
 		# exit()
 		mid = self.constTimeErs_mid()
@@ -455,6 +457,13 @@ class ARAP:
 		MUtPAxsW = MUtPAx.dot(self.mesh.sW)
 		DSUtPAxMUtPAxsW = MUtPAxsW.T.dot(self.constErs_Terms[0])
 		self.constEsTerms.append(DSUtPAxMUtPAxsW)
+		
+
+		# print(MUtPAxsW.dot(self.mesh.red_s) - self.mesh.GS.dot(UtPAx))
+		# DS = self.sparseDSds()
+		# out = self.sparseOuterProdDiags(self.mesh.GS.dot(UtPAx), UtPAx)
+		# print(DS[0].multiply(out).sum())
+		# exit()
 
 		U_PAx = sparse.lil_matrix((6*len(self.mesh.T), 2*len(self.mesh.T)))
 		for t in range(len(self.mesh.T)):
@@ -584,26 +593,25 @@ class ARAP:
 			MUtPAx[6*t+0, 3*t+2] = x[1]*u1 - x[0]*u2
 			MUtPAx[6*t+1, 3*t+0] = x[0]*u2
 			MUtPAx[6*t+1, 3*t+1] = x[1]*u1
-			MUtPAx[6*t+1, 3*t+2] = x[0]*u1 - x[1]*u2
+			MUtPAx[6*t+1, 3*t+2] = x[0]*u1 + x[1]*u2
 
 			MUtPAx[6*t+2, 3*t+0] = x[2]*u1
 			MUtPAx[6*t+2, 3*t+1] = -x[3]*u2
 			MUtPAx[6*t+2, 3*t+2] = x[3]*u1 - x[2]*u2
 			MUtPAx[6*t+3, 3*t+0] = x[2]*u2
 			MUtPAx[6*t+3, 3*t+1] = x[3]*u1
-			MUtPAx[6*t+3, 3*t+2] = x[2]*u1 - x[3]*u2
+			MUtPAx[6*t+3, 3*t+2] = x[2]*u1 + x[3]*u2
 			
 			MUtPAx[6*t+4, 3*t+0] = x[4]*u1
 			MUtPAx[6*t+4, 3*t+1] = -x[5]*u2
 			MUtPAx[6*t+4, 3*t+2] = x[5]*u1 - x[4]*u2
 			MUtPAx[6*t+5, 3*t+0] = x[4]*u2
 			MUtPAx[6*t+5, 3*t+1] = x[5]*u1
-			MUtPAx[6*t+5, 3*t+2] = x[4]*u1 - x[5]*u2
+			MUtPAx[6*t+5, 3*t+2] = x[4]*u1 + x[5]*u2
 
 		MUtPAx.tocsc()
 		MUtPAxsW = MUtPAx.dot(self.mesh.sW)
-
-		wr_cols = []
+		
 		for i in range(len(self.mesh.red_r)):
 			B = self.mesh.RotationBLOCK[i]
 			self.constItRTerms.append(B.T.dot(MUtPAxsW))
@@ -641,7 +649,8 @@ class ARAP:
 		for i in range(len(self.mesh.z)):
 			ans += self.constEsTerms[2][i].T.dot(c)*self.mesh.z[i]
 
-		return self.constEsTerms[0].T.dot(self.mesh.red_s) - ans
+		t1 =  self.constEsTerms[0].T.dot(self.mesh.red_s)
+		return t1- ans
 
 	def constTimeEgs(self):
 		c_vec = []
@@ -659,7 +668,7 @@ class ARAP:
 			Egs[i,:] = UtRtPAGi
 
 		cc = datetime.datetime.now()
-		print("TIME, ", (bb-aa).microseconds, (cc-bb).microseconds)
+		# print("TIME, ", (bb-aa).microseconds, (cc-bb).microseconds)
 		return Egs
 
 	def constTimeErs_mid(self):
@@ -729,17 +738,21 @@ class ARAP:
 		# 	dEdr[i] = DR[i].multiply(dEdR).sum()
 		dEdr = self.constTimeEr()
 
-		FPAx = self.mesh.GF.dot(self.PAx)#self.constTimeFPAx()
+		FPAx = self.constTimeFPAx() #self.mesh.GF.dot(self.PAx)
 		dEdg = self.PAG.T.dot(PAg - FPAx)
 
 		# UtPAx = self.mesh.GU.T.dot(self.PAx)
 		# RU = self.mesh.GR.dot(self.mesh.GU)
-		# dEdS =  self.sparseOuterProdDiags(self.mesh.GS.dot(UtPAx), UtPAx) -self.sparseOuterProdDiags(RU.T.dot(PAg), UtPAx)
+		# dEdS = self.sparseOuterProdDiags(self.mesh.GS.dot(UtPAx), UtPAx) -self.sparseOuterProdDiags(RU.T.dot(PAg), UtPAx)
 		# dEds = np.zeros(len(self.mesh.red_s))
 		# for i in range(len(dEds)):
 		# 	dEds[i] = DS[i].multiply(dEdS).sum()
-
+		
+		# print("deds")
+		# print(dEds)
 		dEds =self.constTimeEs()
+		# print(dEds)
+		# exit()
 
 		return dEdg, dEdr, dEds
 
@@ -830,7 +843,7 @@ class ARAP:
 
 	def dEdg(self):
 		PAg = self.PA.dot(self.mesh.getg())
-		FPAx = self.mesh.GF.dot(self.PAx)#self.constTimeFPAx()
+		FPAx = self.constTimeFPAx() #self.mesh.GF.dot(self.PAx)
 		res =  self.PAG.T.dot(PAg - FPAx)
 		return res
 
@@ -862,7 +875,6 @@ class ARAP:
 			m_PAg = np.reshape(one, (len(one)/2,2))
 			m_USUPAx = np.reshape(two, (len(two)/2,2))
 			F = np.matmul(m_PAg.T,m_USUPAx)
-
 			u, s, vt = np.linalg.svd(F, full_matrices=True)
 			R = np.matmul(vt.T, u.T)
 
@@ -881,7 +893,7 @@ class ARAP:
 		return 1
 
 	def itT(self):
-		FPAx = self.mesh.GF.dot(self.PAx)# self.constTimeFPAx()
+		FPAx = self.constTimeFPAx() #self.mesh.GF.dot(self.PAx)
 		
 		deltaAbtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
 		GtAtPtFPAx = self.PAG.T.dot(FPAx)
