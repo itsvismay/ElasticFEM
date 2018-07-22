@@ -324,12 +324,12 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrdr()
 	# check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
-	check_dgds_drds()
+	# check_dgds_drds()
 
-FiniteDifferencesARAP()
+# FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-4
+	eps = 1e-1
 	its = 100
 	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
 	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
@@ -372,11 +372,13 @@ def FiniteDifferencesElasticity():
 			mesh.z = np.zeros(len(mesh.z))	
 			mesh.red_s[i] += eps
 			mesh.getGlobalF(updateR=False, updateS=True)
+			arap.updateConstUSUtPAx()
 			arap.iterate()
 			e1 = ne.GravityEnergy()
 			dEgds.append((e1 - e0)/eps)
 			mesh.red_s[i] -= eps
 			mesh.getGlobalF(updateR=False, updateS=True)
+			arap.updateConstUSUtPAx()
 			arap.iterate()
 
 		print("real", real)
@@ -408,4 +410,4 @@ def FiniteDifferencesElasticity():
 	check_gravityForce()
 	# check_muscleForce()
 
-# FiniteDifferencesElasticity()
+FiniteDifferencesElasticity()

@@ -66,7 +66,7 @@ class NeohookeanElastic:
 		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.getg()))
 		for t in range(len(self.mesh.T)):
 			area = self.mesh.areas[t]
-			Eg += self.GravityElementEnergy(self.rho, self.grav, CAg[6*t:6*t+2], area, t)
+			Eg += self.GravityElementEnergy(self.rho, self.mesh.getU(t).dot(self.grav), CAg[6*t:6*t+2], area, t)
 
 		return Eg
 
