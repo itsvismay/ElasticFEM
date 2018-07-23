@@ -39,6 +39,6 @@ ti = Solvers.TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neo)
 
 #Running
 disp = Display.Display(isolve = ti)
-disp.headless()
-# disp.display()
+# disp.headless()
+disp.display()
 

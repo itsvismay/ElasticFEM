@@ -146,8 +146,10 @@ class Display:
 		pr.enable()
 
 		# self.time_integrator.mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
-		self.time_integrator.static_solve()
 		
+		self.time_integrator.static_solve()
+		# self.time_integrator.move_g()
+		# self.time_integrator.arap.iterate()
 		pr.disable()
 		s = StringIO.StringIO()
 		sortby = 'cumulative'

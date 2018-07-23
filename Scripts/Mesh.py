@@ -38,7 +38,7 @@ class Mesh:
 		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
 		self.u = iVTU[2] if iVTU[2] is not None else np.zeros(len(self.T))
 		self.u_clusters_element_map = None 
-		self.u_toggle = np.ones(len(self.T))
+		self.u_toggle = np.zeros(len(self.T))
 
 		self.number_of_verts_fixed_on_element = None
 		self.P = None
@@ -107,7 +107,7 @@ class Mesh:
 		self.x0 = np.ravel(self.V)
 		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
 		self.u = u[0,:]
-		self.u_toggle = np.ones(len(self.T))
+		self.u_toggle = np.zeros(len(self.T))
 
 		self.number_of_verts_fixed_on_element = None
 		self.P = None
@@ -302,7 +302,7 @@ class Mesh:
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
 		if rclusters is False:
-			nrc =  len(self.T)
+			nrc =  10#len(self.T)
 			if nrc == len(self.T):
 				self.r_element_cluster_map = np.arange(nrc)
 			else:

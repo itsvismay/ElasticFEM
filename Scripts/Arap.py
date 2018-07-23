@@ -939,12 +939,12 @@ class ARAP:
 		for i in range(its):
 			g = self.itT()
 			r = self.itR()
-			self.mesh.getGlobalF(updateR=True, updateS=False)
+			# self.mesh.getGlobalF(updateR=True, updateS=False)
 			Eg = self.dEdg()
 
-			if(1e-8 > np.linalg.norm(Eg-Eg0)):
-				# print("En",self.Energy(), self.mesh.red_r, self.mesh.z)
+			if(1e-3 > np.linalg.norm(Eg-Eg0)):
 				# self.mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
+				print("En",self.Energy())
 				print("	-ARAP iterate "+str(i))
 				# print("ARAP converged", np.linalg.norm(Eg))
 				return

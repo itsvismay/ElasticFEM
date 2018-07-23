@@ -7,7 +7,7 @@ import Solvers
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 
 def FiniteDifferencesARAP():
-	eps = 1e-1
+	eps = 1e-5
 	its = 100
 	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
 	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
@@ -324,12 +324,12 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrdr()
 	# check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
-	# check_dgds_drds()
+	check_dgds_drds()
 
 # FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
-	eps = 1e-1
+	eps = 1e-4
 	its = 100
 	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
 	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
@@ -407,7 +407,7 @@ def FiniteDifferencesElasticity():
 		print("Diff", np.sum(real - np.array(dEds)))
 
 	# check_PrinStretchForce()
-	check_gravityForce()
+	# check_gravityForce()
 	# check_muscleForce()
 
 FiniteDifferencesElasticity()
