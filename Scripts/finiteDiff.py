@@ -9,7 +9,7 @@ np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all
 def FiniteDifferencesARAP():
 	eps = 1e-1
 	its = 100
-	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
+
 	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
 	mw = Meshwork.Preprocessing(_VT = VTU)
 	mw.Fix = get_max(mw.V, a=1, eps=1e-2)		
@@ -324,9 +324,9 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrdr()
 	# check_Hessian_dEdgds()
 	# check_Hessian_dEdrds()
-	# check_dgds_drds()
+	check_dgds_drds()
 
-# FiniteDifferencesARAP()
+FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-1
@@ -410,4 +410,4 @@ def FiniteDifferencesElasticity():
 	check_gravityForce()
 	# check_muscleForce()
 
-FiniteDifferencesElasticity()
+# FiniteDifferencesElasticity()
