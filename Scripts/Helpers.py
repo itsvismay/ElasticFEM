@@ -21,9 +21,9 @@ def general_eig_solve(A, B=None, modes=None):
 			print("Too many modes")
 			exit()
 		e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), k= modes+2, which="SM")
-
 	print("-Done with Eig Solve")
 	return e, ev
+
 
 def snapshot_basis(filen):
 	

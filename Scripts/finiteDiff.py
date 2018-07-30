@@ -14,7 +14,7 @@ def FiniteDifferencesARAP():
 	mw = Meshwork.Preprocessing(_VT = VTU)
 	mw.Fix = get_max(mw.V, a=1, eps=1e-2)		
 	mw.Mov = get_min(mw.V, a=1, eps=1e-2)
-	mesh = mw.getMesh()
+	mesh = mw.getMesh(modes_used=15)
 	arap = Arap.ARAP(imesh = mesh, filen="crap/")
 	E0 = arap.energy(_z=mesh.z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
 	print("Default Energy ", E0)

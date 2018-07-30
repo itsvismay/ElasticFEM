@@ -77,8 +77,6 @@ class Mesh:
 		self.RotationBLOCK = None
 		self.setupRotClusters()
 
-
-		# self.readInRotClusters()
 		#S skinnings
 		self.red_s = None
 		self.s_handles_ind = None
@@ -170,7 +168,6 @@ class Mesh:
 		C = AB.T
 		M = self.getMassMatrix()
 		K = A.T.dot(P.T.dot(P.dot(A)))
-
 		eig, ev = general_eig_solve(A=K, B = M, modes=modes_used)
 
 		ev *= np.logical_or(1e-10<ev , ev<-1e-10)
@@ -190,11 +187,14 @@ class Mesh:
 		#######################################
 		###############QR get orth basis#######
 		eHeV = sparse.hstack((eH, ev))
+		# print(eH.shape, ev.shape)
+		# exit()
 		# eVN = np.append(eVeH, np.zeros((len(self.self.x0),1)),1)
 		# eVN[:,-1] = self.self.x0
-		# Q, QR1 = np.linalg.qr(eVeH, mode="reduced")
-		Q = eHeV
-		return Q
+		Q1, QR1 = np.linalg.qr(eHeV.toarray(), mode="reduced")
+
+		# Q = eHeV
+		return Q1
 
 	def setupStrainSkinnings(self, shandles = False):
 		print("Setting up skinnings")
@@ -332,7 +332,6 @@ class Mesh:
 	def kmeans_rotationclustering(self, clusters = 5):
 		A = self.getA()
 		C = self.getC()
-		print(self.G.shape, self.x0)
 		G = np.add(self.G.T, self.x0)
 		#all modes at once
 		CAG = C.dot(A.dot(G.T))#scipy wants data in format: observations(elem) x features (modes)
