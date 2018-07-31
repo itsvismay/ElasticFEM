@@ -114,8 +114,8 @@ class TimeIntegrator:
 
 		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
 
-		print("r1", self.mesh.red_r)
-		print("s1", res.x)
-		print("g1", self.mesh.z)
-		print(res)
-		print("static solve")
+		# print("r1", self.mesh.red_r)
+		# print("s1", res.x)
+		# print("g1", self.mesh.z)
+		# print(res)
+		# print("static solve")

@@ -72,7 +72,7 @@ class Preprocessing:
 			igl.writeDMAT(folder+"Uvec.dmat", igl.eigen.MatrixXd(np.array([self.mesh.u])), True)
 
 			if self.mesh.Q is not None:
-				igl.writeDMAT(folder+"Modes.dmat", igl.eigen.MatrixXd(self.mesh.Q.toarray()), True)
+				igl.writeDMAT(folder+"Modes.dmat", igl.eigen.MatrixXd(self.mesh.Q), True)
 				# igl.writeDMAT(folder+"Eigs.dmat")
 			if self.mesh.r_element_cluster_map is not None:
 				igl.writeDMAT(folder+"Rclusters.dmat", igl.eigen.MatrixXi(self.mesh.r_element_cluster_map), True)
@@ -228,7 +228,7 @@ class Preprocessing:
 			if(aaa == 65):
 				self.createMesh(modes=self.modes_used)
 			if(aaa == 83):
-				self.save_mesh_setup(name="test")
+				self.save_mesh_setup(name="3koval")
 
 			viewer.data().clear()
 			if self.uvec is None:
@@ -264,7 +264,7 @@ class Preprocessing:
 				CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
 				for i in range(len(self.T)):
 					C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-					U = np.multiply(self.mesh.getU(i), np.array([[0.03],[0.03]])) + C
+					U = np.multiply(self.mesh.getU(i), np.array([[0.003],[0.003]])) + C
 					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 
 		def pre_draw(viewer):

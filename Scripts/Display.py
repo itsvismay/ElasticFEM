@@ -46,7 +46,7 @@ class Display:
 		tempG = igl.eigen.MatrixXuc(1280, 800)
 		tempB = igl.eigen.MatrixXuc(1280, 800)
 		tempA = igl.eigen.MatrixXuc(1280, 800)
-		randc = [[random.uniform(0,1), random.uniform(0,1), random.uniform(0,1)] for i in range(10)]
+		randc = [[random.uniform(0,1), random.uniform(0,1), random.uniform(0,1)] for i in range(1000)]
 
 		def mouse_up(viewer, btn, bbb):
 			return False
@@ -98,7 +98,7 @@ class Display:
 			for i in range(len(self.time_integrator.mesh.T)):
 				S = self.time_integrator.mesh.getS(i)
 				C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-				U = 0.03*self.time_integrator.mesh.getU(i).transpose()+C
+				U = 0.003*self.time_integrator.mesh.getU(i)+C
 				viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 
 			Colors = np.ones(self.time_integrator.mesh.T.shape)
@@ -152,6 +152,7 @@ class Display:
 		s = StringIO.StringIO()
 		sortby = 'cumulative'
 		ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-		ps.print_stats(100)
+		ps.print_stats(1)
 		print(s.getvalue())
+
 		return

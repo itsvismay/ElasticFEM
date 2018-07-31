@@ -206,32 +206,40 @@ class Mesh:
 
 		t_set = Set([i for i in range(len(self.T))])
 
-		if shandles is False:
+		if shandles is False or True:
 			print("No reduced skinning handles")
 			# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
-			# self.s_handles_ind = [0]
-			self.s_handles_ind = []
-			CAx0 = self.getC().dot(self.getA().dot(self.x0))
-			for k in range(len(self.r_cluster_element_map.keys())):
-				els = np.array(self.r_cluster_element_map[k], dtype='int32')
-				centx = CAx0[6*els]
-				centy = CAx0[6*els+1]
-				avc = np.array([np.sum(centx)/len(els), np.sum(centy)/len(els)]) 
-				minind = els[0]
-				mindist = np.linalg.norm(avc-np.array([centx[0], centy[0]]))
-				for i in range(1,len(els)):
-					dist = np.linalg.norm(avc-np.array([centx[i], centy[i]]))
-					if dist<=mindist:
-						mindist = dist 
-						minind = els[i]
+			self.s_handles_ind = [0]
+			# nsh = 5
+			# skinning_r_cluster_element_map = defaultdict(list)
+			# skinning_r_element_cluster_map = self.kmeans_rotationclustering(clusters=nsh)
+			
+			# for i in range(len(self.T)):			
+			# 	skinning_r_cluster_element_map[skinning_r_element_cluster_map[i]].append(i)
+		
+			# self.s_handles_ind = []
+			# CAx0 = self.getC().dot(self.getA().dot(self.x0))
+			# for k in range(len(skinning_r_cluster_element_map.keys())):
+			# 	els = np.array(skinning_r_cluster_element_map[k], dtype='int32')
+			# 	centx = CAx0[6*els]
+			# 	centy = CAx0[6*els+1]
+			# 	avc = np.array([np.sum(centx)/len(els), np.sum(centy)/len(els)]) 
+			# 	minind = els[0]
+			# 	mindist = np.linalg.norm(avc-np.array([centx[0], centy[0]]))
+			# 	for i in range(1,len(els)):
+			# 		dist = np.linalg.norm(avc-np.array([centx[i], centy[i]]))
+			# 		if dist<=mindist:
+			# 			mindist = dist 
+			# 			minind = els[i]
 
-				self.s_handles_ind.append(minind)
+			# 	self.s_handles_ind.append(minind)
 
 
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
 
+
 		#generate weights by euclidean dist
-		self.sW = self.bbw_strain_skinning_matrix(self.s_handles_ind)
+		self.sW = self.bbw_strain_skinning_matrix(handles = self.s_handles_ind)
 
 		print("Done setting up skinnings")
 		return
@@ -261,7 +269,10 @@ class Mesh:
 		b = igl.eigen.MatrixXi()
 		# List of boundary conditions of each weight function
 		bc = igl.eigen.MatrixXd()
-
+		# print(unique_vert_handles)
+		# print(self.V[np.array([989, 1450, 1610])])
+		# print(C)
+		# exit()
 		igl.boundary_conditions(V, T, C, P, igl.eigen.MatrixXi(), igl.eigen.MatrixXi(), b, bc)	
 
 		
@@ -301,17 +312,17 @@ class Mesh:
 		print("Setting up rotation clusters")
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
-		if rclusters is False:
-			nrc =  5#len(self.T)
+		if rclusters is False or True:
+			nrc =  500 #len(self.T)
 			if nrc == len(self.T):
 				self.r_element_cluster_map = np.arange(nrc)
 			else:
+				print(nrc)	
 				self.r_element_cluster_map = self.kmeans_rotationclustering(clusters=nrc)
 		for i in range(len(self.T)):			
 			self.r_cluster_element_map[self.r_element_cluster_map[i]].append(i)
-
-		if rclusters is True:
-			nrc = len(self.r_cluster_element_map.keys())
+		# if rclusters is True:
+		# 	nrc = len(self.r_cluster_element_map.keys())
 		self.red_r = np.zeros(nrc)
 	
 		self.RotationBLOCK = []
@@ -342,6 +353,7 @@ class Mesh:
 			point = CAG[6*i:6*i+2, :]
 			Data[i,:] = np.ravel(point) #triangle by x1,y1,x2,y2, x3,y3....
 
+		print(clusters, Data.shape)
 		centroids,_ = kmeans(Data, clusters)
 		idx,_ = vq(Data,centroids)
 		return idx

@@ -45,6 +45,9 @@ class ARAP:
 		col1 = sparse.vstack((self.Egg, CQ))
 		col2 = sparse.vstack((CQ.T, sparse.csc_matrix((CQ.shape[0], CQ.shape[0]))))
 		KKT = sparse.hstack((col1, col2))
+		# print(self.mesh.G.shape)
+		# print(self.Egg)
+		# exit()
 		self.CholFac = scipy.sparse.linalg.splu(KKT.tocsc())
 
 		r_size = len(self.mesh.red_r)
@@ -942,7 +945,7 @@ class ARAP:
 			self.mesh.getGlobalF(updateR=True, updateS=False)
 			Eg = self.dEdg()
 
-			if(1e-8 > np.linalg.norm(Eg-Eg0)):
+			if(1e-7 > np.linalg.norm(Eg-Eg0)):
 				# print("En",self.Energy(), self.mesh.red_r, self.mesh.z)
 				# self.mesh.getGlobalF(updateR=True, updateS=False, updateU=False)
 				print("	-ARAP iterate "+str(i))
