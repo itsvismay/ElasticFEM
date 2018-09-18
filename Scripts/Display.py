@@ -98,7 +98,7 @@ class Display:
 			for i in range(len(self.time_integrator.mesh.T)):
 				S = self.time_integrator.mesh.getS(i)
 				C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-				U = 0.003*self.time_integrator.mesh.getU(i)+C
+				U = 0.3*self.time_integrator.mesh.getU(i)+C
 				viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 
 			Colors = np.ones(self.time_integrator.mesh.T.shape)

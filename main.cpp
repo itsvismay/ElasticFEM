@@ -1,4 +1,4 @@
-#include <igl/viewer/Viewer.h>
+#include <igl/opengl/glfw/Viewer.h>
 #include <igl/writeOBJ.h>
 #include <igl/barycenter.h>
 #include <igl/readOFF.h>
@@ -82,23 +82,23 @@ int main(int argc, char *argv[])
     // nmrk->step();
     Euler *elr = new Euler(SM, j_input["timestep"]);
     elr->bfgs_step();
-	igl::viewer::Viewer viewer;
-    viewer.callback_pre_draw = [&](igl::viewer::Viewer & viewer)
+	igl::opengl::glfw::Viewer viewer;
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer & viewer)
     {   
         if(viewer.core.is_animating)
         {
             elr->bfgs_step();
             MatrixXd newV = SM->getCurrentVerts();
-            viewer.data.set_vertices(newV);
+            viewer.data().set_vertices(newV);
     	}
         return false;
     };
 
-	viewer.data.set_mesh(V,F);
-    viewer.core.show_lines = true;
-    viewer.core.invert_normals = true;
+	viewer.data().set_mesh(V,F);
+    viewer.data().show_lines = true;
+    viewer.data().invert_normals = true;
     viewer.core.is_animating = false;
-    viewer.data.face_based = true;
+    viewer.data().face_based = true;
     // viewer.data.set_colors(C);
 
     viewer.launch();

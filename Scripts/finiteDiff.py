@@ -328,7 +328,7 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrds()
 	check_dgds_drds()
 
-FiniteDifferencesARAP()
+# FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-1
@@ -413,3 +413,66 @@ def FiniteDifferencesElasticity():
 	# check_muscleForce()
 
 # FiniteDifferencesElasticity()
+
+def FiniteDifferencePositions():
+	eps = 1e-5
+	its = 100
+	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
+	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
+	mw = Meshwork.Preprocessing(_VT = VTU)
+	mw.Fix = get_max(mw.V, a=1, eps=1e-2)		
+	mw.Mov = get_min(mw.V, a=1, eps=1e-2)
+	mesh = mw.getMesh()
+	arap = Arap.ARAP(imesh = mesh, filen="crap/")
+
+	# mesh.red_s[2] = 0.1
+	ne = Neo.NeohookeanElastic(imesh = mesh)
+	arap.iterate()
+	J_arap, dgds, drds = arap.Jacobian()
+	dRdr = arap.sparseDRdr()
+	dSds = arap.sparseDSds()	
+	dxdR, dxdS = ne.JMJ_MassMatrix(idrds=drds, idRdr =dRdr, idSds=dSds)
+	# print(dxdR.shape)
+	# print(len(dRdr), dRdr[0].shape)
+	# print(drds.shape)
+
+	# print(len(dSds), dSds[0].shape)
+	# print(dxdS.shape)
+	J = np.zeros((dxdR.shape[0], len(dSds)))
+	J1 = np.zeros((dxdR.shape[0], len(dRdr)))
+	J2 = np.zeros((dxdS.shape[0], len(dSds)))
+	for i in range(dxdR.shape[0]):
+		for j in range(len(dRdr)):
+			J1[i, j] = dRdr[j].multiply(dxdR[:,:,i]).sum()
+
+	for i in range(dxdS.shape[0]):
+		for j in range(len(dSds)):
+			J2[i, j] = dSds[j].multiply(dxdS[i,:,:]).sum()
+
+	J = J1.dot(drds) + J2
+
+	x_0 = mesh.GF.dot(mesh.getP().dot(mesh.getA().dot(mesh.x0)))
+	dxds = []
+	for i in range(len(mesh.red_s)):
+		mesh.red_s[i] += 0.5*eps
+		mesh.getGlobalF(updateR=False, updateS=True)
+		left = mesh.GF.dot(mesh.getP().dot(mesh.getA().dot(mesh.x0)))
+		mesh.red_s[i] -= 0.5*eps
+		
+		mesh.red_s[i] -= 0.5*eps
+		mesh.getGlobalF(updateR=False, updateS=True)
+		right = mesh.GF.dot(mesh.getP().dot(mesh.getA().dot(mesh.x0)))
+		mesh.red_s[i] += 0.5*eps
+
+		dxds.append((left - right)/(eps))
+
+	print("dxds")
+	print(np.array(dxds))
+	print("J.T")
+	print(J.T)
+	# print(np.array(dxds).shape)
+	print("ERROR:")
+	print(np.linalg.norm(np.array(dxds) - J.T))
+	exit()
+
+FiniteDifferencePositions()

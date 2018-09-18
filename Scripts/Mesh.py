@@ -25,7 +25,7 @@ class Mesh:
 		if read_in:
 			return
 		#Get Variables setup
-		self.youngs = 60000
+		self.youngs = 600000 #g/cm*s^2
 		self.poissons = 0.45
 		self.fixed = list(set(ito_fix))#.union(set(ito_mov)))
 		self.V = np.array(iVTU[0])
@@ -61,6 +61,7 @@ class Mesh:
 		self.GU = sparse.diags([np.ones(6*t_size)],[0]).tolil()
 		self.GUSUt = sparse.diags([np.zeros(6*t_size-1), np.ones(6*t_size), np.zeros(6*t_size-1)],[-1,0,1]).tocsc()
 
+
 		# Modal analysis
 		if modes_used is None:
 			self.Q = None 
@@ -91,7 +92,7 @@ class Mesh:
 		self.areas = []
 		for t in range(len(self.T)):
 			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
-
+	
 	def init_from_file(self, V=None, T=None, u=None, Q=None, fix=None, mov=None, r_element_cluster_map=None, s_handles_ind=None, u_clusters_element_map=None, modes_used=None):
 		self.youngs = 60000
 		self.poissons = 0.45
@@ -209,30 +210,30 @@ class Mesh:
 		if shandles is False or True:
 			print("No reduced skinning handles")
 			# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
-			self.s_handles_ind = [0]
-			# nsh = 5
-			# skinning_r_cluster_element_map = defaultdict(list)
-			# skinning_r_element_cluster_map = self.kmeans_rotationclustering(clusters=nsh)
+			# self.s_handles_ind = [0]
+			nsh = 3
+			skinning_r_cluster_element_map = defaultdict(list)
+			skinning_r_element_cluster_map = self.kmeans_rotationclustering(clusters=nsh)
 			
-			# for i in range(len(self.T)):			
-			# 	skinning_r_cluster_element_map[skinning_r_element_cluster_map[i]].append(i)
+			for i in range(len(self.T)):			
+				skinning_r_cluster_element_map[skinning_r_element_cluster_map[i]].append(i)
 		
-			# self.s_handles_ind = []
-			# CAx0 = self.getC().dot(self.getA().dot(self.x0))
-			# for k in range(len(skinning_r_cluster_element_map.keys())):
-			# 	els = np.array(skinning_r_cluster_element_map[k], dtype='int32')
-			# 	centx = CAx0[6*els]
-			# 	centy = CAx0[6*els+1]
-			# 	avc = np.array([np.sum(centx)/len(els), np.sum(centy)/len(els)]) 
-			# 	minind = els[0]
-			# 	mindist = np.linalg.norm(avc-np.array([centx[0], centy[0]]))
-			# 	for i in range(1,len(els)):
-			# 		dist = np.linalg.norm(avc-np.array([centx[i], centy[i]]))
-			# 		if dist<=mindist:
-			# 			mindist = dist 
-			# 			minind = els[i]
+			self.s_handles_ind = []
+			CAx0 = self.getC().dot(self.getA().dot(self.x0))
+			for k in range(len(skinning_r_cluster_element_map.keys())):
+				els = np.array(skinning_r_cluster_element_map[k], dtype='int32')
+				centx = CAx0[6*els]
+				centy = CAx0[6*els+1]
+				avc = np.array([np.sum(centx)/len(els), np.sum(centy)/len(els)]) 
+				minind = els[0]
+				mindist = np.linalg.norm(avc-np.array([centx[0], centy[0]]))
+				for i in range(1,len(els)):
+					dist = np.linalg.norm(avc-np.array([centx[i], centy[i]]))
+					if dist<=mindist:
+						mindist = dist 
+						minind = els[i]
 
-			# 	self.s_handles_ind.append(minind)
+				self.s_handles_ind.append(minind)
 
 
 		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
@@ -313,7 +314,7 @@ class Mesh:
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
 		if rclusters is False or True:
-			nrc =  500 #len(self.T)
+			nrc =  len(self.T)
 			if nrc == len(self.T):
 				self.r_element_cluster_map = np.arange(nrc)
 			else:

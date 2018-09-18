@@ -264,7 +264,7 @@ class Preprocessing:
 				CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
 				for i in range(len(self.T)):
 					C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-					U = np.multiply(self.mesh.getU(i), np.array([[0.003],[0.003]])) + C
+					U = np.multiply(self.mesh.getU(i), np.array([[0.3],[0.3]])) + C
 					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 
 		def pre_draw(viewer):
@@ -276,7 +276,13 @@ class Preprocessing:
 			for i in range(len(self.Mov)):
 				mov_pts.append(self.V[self.Mov[i]])
 			viewer.data().add_points(igl.eigen.MatrixXd(np.array(mov_pts)), green)
-
+			# shit = []
+			# shit.append(self.V[96])
+			# shit.append(self.V[55])
+			# shit.append(self.V[56])
+			# shit.append(self.V[85])
+			
+			# viewer.data().add_points(igl.eigen.MatrixXd(np.array(shit)), purple)
 
 		key_down(viewer, "b", 123)
 		viewer.callback_mouse_down = mouse_down

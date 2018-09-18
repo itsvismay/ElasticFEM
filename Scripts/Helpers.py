@@ -17,11 +17,10 @@ def general_eig_solve(A, B=None, modes=None):
 	if modes is None:
 		e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), which="SM")
 	else:
-		print(B.shape, A.shape)
 		if(A.shape[0]<= modes):
 			print("Too many modes")
 			exit()
-		e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), k= modes+2, which="SM")
+		e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), k=modes+2, which="SM")
 
 	print("-Done with Eig Solve")
 	return e, ev
@@ -55,6 +54,9 @@ def generate_euclidean_weights(CAx, handles, others):
 	return np.kron(W, np.eye(3))
 
 def get_area(p1, p2, p3):
+	# print(p1- p2)
+	# print(p1 - p3)
+	# print(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))
 	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))*0.5
 
 def get_centroid(p1, p2, p3):
@@ -185,7 +187,6 @@ def heat_method(mesh):
 	eLc = igl.eigen.SparseMatrixd()
 	igl.cotmatrix(igl.eigen.MatrixXd(mesh.V), igl.eigen.MatrixXi(mesh.T), eLc)
 	Lc = e2p(eLc)
-
 	M = mesh.getMassMatrix()
 	Mdiag = M.diagonal()[2*np.arange(Lc.shape[0])]
 	Mc = sparse.diags(Mdiag)
@@ -201,8 +202,9 @@ def heat_method(mesh):
 	fixedverts = [i for i in range(len(u0)) if u0[i]!=0]
 	C = Id[:,fixedverts]
 
+	# print(Lc.shape)
+	# print(mesh.V.shape)
 	A = (Mc - t*Lc)
-	# u = sparse.linalg.spsolve(A.tocsc(), u0)
 	col1 = sparse.vstack((A, C.T))
 	col2 = sparse.vstack((C, sparse.csc_matrix((C.shape[1], C.shape[1]))))
 	KKT = sparse.hstack((col1, col2))

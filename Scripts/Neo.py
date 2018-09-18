@@ -33,11 +33,11 @@ class NeohookeanElastic:
 		self.mC = 0.5*self.mesh.youngs/(2.0*(1.0+self.mesh.poissons))
 		self.dimensions = 2
 
-		self.grav = np.array([0, 9.81])
-		self.rho = 10
+		self.grav = np.array([0, 981]) #cm/s^2
+		self.rho = 6.4 #in Grams/cm^2
 
 		self.muscle_fiber_mag_target = 100
-		self.muscle_fibre_mag = 5000
+		self.muscle_fibre_mag = 100000 #g*cm/s^2
 
 		self.fastMuscleEnergy = []
 
@@ -207,3 +207,14 @@ class NeohookeanElastic:
 		# f1 =  -1*self.GravityForce(idgds)
 		f3 = self.MuscleForce(_rs=irs)
 		return f2 + f3
+
+	def JMJ_MassMatrix(self, idrds, idRdr, idSds):
+		self.mesh.getGlobalF(updateR = True, updateS = True, updateU = False)
+		RU = self.mesh.GR.dot(self.mesh.GU).toarray()
+		UtPAx0 = self.mesh.GU.T.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
+		USUtPAx0 = self.mesh.GU.dot(self.mesh.GS.dot(UtPAx0))
+
+		dxdR = np.einsum("ij, k", np.eye(len(USUtPAx0), len(USUtPAx0)), USUtPAx0)
+		dxdS = np.einsum("ij, k", RU, UtPAx0)
+		return dxdR, dxdS
+				

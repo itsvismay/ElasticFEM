@@ -104,7 +104,10 @@ class TimeIntegrator:
 			# self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()
 
-			J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
+			J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds, idrds = drds)
+			dRdr = self.arap.sparseDRdr()
+			dSds = self.arap.sparseDSds()	
+			JMJ_Mass = self.elastic.JMJ_MassMatrix(idrds=drds, idRdr =dRdr, idSds=dSds)
 			return  alpha1*J_arap + alpha2*J_elastic
 
 		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
