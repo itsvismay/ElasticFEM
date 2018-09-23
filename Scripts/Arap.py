@@ -75,6 +75,7 @@ class ARAP:
 		self.constUUtPaxTerms = []
 		self.constEsTerms = []
 		self.constItRTerms = []
+		self.PreProcJ = []
 
 		self.setupConstErTerms()
 		self.setupConstErsTerms()
@@ -82,6 +83,7 @@ class ARAP:
 		self.setupConstEsTerms()
 		self.setupConstUSUtPAxTerms()
 		self.setupConstItRTerms()
+		self.Preprocess_Mass_J()
 		print("Done with ARAP init")
 
 	def energy(self, _z, _R, _S, _U):
@@ -100,7 +102,7 @@ class ARAP:
 		return en
 
 	def Jacobian(self, block = False, kkt= True, useSparse=True):
-		print("		Jacobian")
+		# print("		Jacobian")
 		# self.mesh.getGlobalF(updateR=True, updateS=True, updateU=False)
 		Egg, Erg, Err, Egs, Ers = self.Hessians(useSparse=useSparse)
 
@@ -145,11 +147,11 @@ class ARAP:
 		drds = results[lhs_left.shape[1]:,:]
 		Eg,Er,Es = self.Gradients()
 		dEds = np.matmul(Eg, dgds) + np.matmul(Er, drds) + Es
-		print("		Jacobian")
+		# print("		Jacobian")
 		return dEds, dgds, drds
 
 	def Hessians(self, useSparse=True):
-		print("			Hessians")
+		# print("			Hessians")
 		# PAg = self.PA.dot(self.mesh.getg())
 		# USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
 		# USUtPAx = USUt.dot(self.PAx)
@@ -193,7 +195,7 @@ class ARAP:
 		mid = self.constTimeErs_mid()
 		self.Ers = self.constTimeErs_second(mid)
 			
-		print("			Hessians")
+		# print("			Hessians")
 		return Ezz, self.Erg, self.Err, self.Egs, self.Ers
 
 	def sparseErg_first(self, nPAT, USUtPAx):
@@ -367,11 +369,13 @@ class ARAP:
 				diag_x = np.kron(sWx[3*np.arange(len(sWx)/3)], np.array([1,0,1,0,1,0]))
 				diag_y = np.kron(sWy[3*np.arange(len(sWy)/3)+1], np.array([0,1,0,1,0,1]))
 				diag_o = np.kron(sWo[3*np.arange(len(sWo)/3)+2], np.array([1,0,1,0,1,0]))
-				UtPAxDS[:,3*t+0] += np.multiply(diag_x, UtPAx)
-				UtPAxDS[:,3*t+1] += np.multiply(diag_y, UtPAx)
-				UtPAxDS[1:,3*t+2] += np.multiply(diag_o[:-1], UtPAx[:-1]) 
+				UtPAxDS[:,   3*t+0] += np.multiply(diag_x, UtPAx)
+				UtPAxDS[:,   3*t+1] += np.multiply(diag_y, UtPAx)
+				UtPAxDS[1:,  3*t+2] += np.multiply(diag_o[:-1], UtPAx[:-1]) 
 				UtPAxDS[:-1, 3*t+2] += np.multiply(diag_o[:-1], UtPAx[1:])
 		self.constErs_Terms.append(UtPAxDS)
+		print(UtPAxDS[0])
+		# exit()
 
 	def setupConstEgsTerms(self):
 		wr_cols = []
@@ -629,6 +633,60 @@ class ARAP:
 		USUtPAxWr += np.multiply(self.constUUtPaxTerms[0][1], s1[:,np.newaxis])
 		USUtPAxWr += np.multiply(self.constUUtPaxTerms[0][2], s2[:,np.newaxis])
 		self.constUUtPaxTerms[2] = USUtPAxWr
+
+	def Preprocess_Mass_J(self):
+		UU = sparse.lil_matrix((3*len(self.mesh.T), 3*len(self.mesh.T))) 
+
+		for t in range(len(self.mesh.T)):
+			u = self.mesh.getU(t)
+			u1, u2 = u[0,0], u[0,1]
+			UU[3*t+0, 3*t+0] = u1*u1
+			UU[3*t+0, 3*t+1] = u2*u2
+			UU[3*t+0, 3*t+2] = 2*u1*u2
+
+			UU[3*t+1, 3*t+0] = -u1*u2
+			UU[3*t+1, 3*t+1] = u1*u2
+			UU[3*t+1, 3*t+2] = u1*u1 - u2*u2
+
+			UU[3*t+2, 3*t+0] = u2*u2
+			UU[3*t+2, 3*t+1] = u1*u1
+			UU[3*t+2, 3*t+2] = -2*u1*u2
+
+		UUW = UU.tocsc().dot(self.mesh.sW)
+
+		MPAx = sparse.lil_matrix((6*len(self.mesh.T), 3*len(self.mesh.T)))
+		for t in range(len(self.mesh.T)):
+			x1, x2, x3 = self.PAx[6*t+0], self.PAx[6*t+1], self.PAx[6*t+2]
+			x4, x5, x6 = self.PAx[6*t+3], self.PAx[6*t+4], self.PAx[6*t+5]
+
+			MPAx[6*t+0, 3*t+0] = x1
+			MPAx[6*t+0, 3*t+1] = x2
+			MPAx[6*t+1, 3*t+1] = x1
+			MPAx[6*t+1, 3*t+2] = x2
+
+			MPAx[6*t+2, 3*t+0] = x3
+			MPAx[6*t+2, 3*t+1] = x4
+			MPAx[6*t+3, 3*t+1] = x3
+			MPAx[6*t+3, 3*t+2] = x4
+
+			MPAx[6*t+4, 3*t+0] = x5
+			MPAx[6*t+4, 3*t+1] = x6
+			MPAx[6*t+5, 3*t+1] = x5
+			MPAx[6*t+5, 3*t+2] = x6
+
+		PAxUUtW = MPAx.tocsc().dot(UUW)
+
+		
+		PreProcJ1 = []
+		for j in range(len(self.mesh.red_r)):
+			PreProcJ1.append(6*len(self.mesh.r_cluster_element_map[j])*PAxUUtW)
+
+
+		PreProcJ2 = []
+
+		self.PreProcJ.append(PreProcJ1)
+		self.PreProcJ.append(PreProcJ2)
+
 
 	def constTimeFPAx(self):
 		c_vec = []

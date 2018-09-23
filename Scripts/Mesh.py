@@ -83,6 +83,7 @@ class Mesh:
 		self.s_handles_ind = None
 		self.sW = None
 		self.setupStrainSkinnings()
+		self.red_s_dot = np.zeros(len(self.red_s))
 
 		print("\n+ Setup GF")
 		self.getGlobalF(updateR = True, updateS = True, updateU=True)
@@ -152,6 +153,7 @@ class Mesh:
 		self.s_handles_ind = s_handles_ind[0,:]
 		self.sW = None
 		self.setupStrainSkinnings(shandles = True)
+		self.red_s_dot = np.zeros(len(self.red_s))
 
 		
 		print("\n+ Setup GF")
@@ -314,7 +316,7 @@ class Mesh:
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
 		if rclusters is False or True:
-			nrc =  len(self.T)
+			nrc =  2#len(self.T)
 			if nrc == len(self.T):
 				self.r_element_cluster_map = np.arange(nrc)
 			else:
@@ -563,19 +565,20 @@ class Mesh:
 	def getMassMatrix(self):
 		if(self.Mass is None):
 			print("Creating Mass Matrix")
-			mass_diag = np.zeros(2*len(self.V))
-			density = 1.0
+			mass_diag = np.zeros(6*len(self.T))
+			density = 1000.0
 			for i in range(len(self.T)):
 				e = self.T[i]
 				undef_area = density*get_area(self.V[e[0]], self.V[e[1]], self.V[e[2]])
-				mass_diag[2*e[0]+0] += undef_area/3.0
-				mass_diag[2*e[0]+1] += undef_area/3.0
+				mass_diag[6*i+0] += undef_area/3.0
+				mass_diag[6*i+1] += undef_area/3.0
 
-				mass_diag[2*e[1]+0] += undef_area/3.0
-				mass_diag[2*e[1]+1] += undef_area/3.0
+				mass_diag[6*i+2] += undef_area/3.0
+				mass_diag[6*i+3] += undef_area/3.0
 
-				mass_diag[2*e[2]+0] += undef_area/3.0
-				mass_diag[2*e[2]+1] += undef_area/3.0
+				mass_diag[6*i+4] += undef_area/3.0
+				mass_diag[6*i+5] += undef_area/3.0
+			
 			print("Done with Mass matrix")
 			self.Mass = sparse.diags(mass_diag)
 		return self.Mass

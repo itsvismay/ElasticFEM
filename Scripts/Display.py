@@ -140,6 +140,90 @@ class Display:
 		viewer.core.is_animating = False
 		viewer.launch()
 
+	def display_dynamics(self):
+		viewer = igl.glfw.Viewer()
+
+		red = igl.eigen.MatrixXd([[1,0,0]])
+		purple = igl.eigen.MatrixXd([[1,0,1]])
+		green = igl.eigen.MatrixXd([[0,1,0]])
+		black = igl.eigen.MatrixXd([[0,0,0]])
+
+		randc = [[random.uniform(0,1), random.uniform(0,1), random.uniform(0,1)] for i in range(1000)]
+
+		def key_down(viewer,aaa, bbb):
+			viewer.data().clear()
+		
+			if(aaa==65):
+				# self.time_integrator.move_g()
+				# self.time_integrator.arap.iterate()
+				self.time_integrator.dynamics()
+				self.time_integrator.time +=1
+
+			if(aaa>=49 and aaa<=57):
+				self.time_integrator.toggle_muscle_group(aaa-49)
+
+			# DV, DT = self.time_integrator.mesh.getDiscontinuousVT()
+			RV, RT = self.time_integrator.mesh.getContinuousVT()
+			V2 = igl.eigen.MatrixXd(RV)
+			T2 = igl.eigen.MatrixXi(RT)
+			viewer.data().set_mesh(V2, T2)
+
+			# for e in DT:
+			# 	P = DV[e]
+			# 	DP = np.array([P[1], P[2], P[0]])
+			# 	viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
+
+
+			MOV = []
+			disp_g = self.time_integrator.mesh.getg()
+			for i in range(len(self.time_integrator.mesh.mov)):
+				MOV.append(disp_g[2*self.time_integrator.mesh.mov[i]:2*self.time_integrator.mesh.mov[i]+2])
+			viewer.data().add_points(igl.eigen.MatrixXd(np.array(MOV)), green)
+
+
+			FIXED = []
+			disp_g = self.time_integrator.mesh.getg()
+			for i in range(len(self.time_integrator.mesh.fixed)):
+				FIXED.append(disp_g[2*self.time_integrator.mesh.fixed[i]:2*self.time_integrator.mesh.fixed[i]+2])
+			viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
+
+
+			#Muscle fiber directions
+			CAg = self.time_integrator.mesh.getC().dot(self.time_integrator.mesh.getA().dot(self.time_integrator.mesh.getg()))
+			for i in range(len(self.time_integrator.mesh.T)):
+				S = self.time_integrator.mesh.getS(i)
+				C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
+				U = 0.3*self.time_integrator.mesh.getU(i)+C
+				viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
+
+			Colors = np.ones(self.time_integrator.mesh.T.shape)
+			if aaa==67:
+				for i in range(len(self.time_integrator.mesh.u_clusters_element_map)):
+					for j in range(len(self.time_integrator.mesh.u_clusters_element_map[i])):
+						k = self.time_integrator.mesh.u_clusters_element_map[i][j]
+						Colors[k,:] = randc[i]
+			elif aaa==82:
+				for i in range(len(self.time_integrator.mesh.T)): 
+					color = black
+					Colors[i,:] = randc[self.time_integrator.mesh.r_element_cluster_map[i]]
+			elif aaa>=49 and aaa<=57:
+				for j in range(len(self.time_integrator.mesh.u_clusters_element_map[aaa-49])):
+					k = self.time_integrator.mesh.u_clusters_element_map[aaa-49][j]
+					Colors[k,:] = randc[aaa-49]
+			Colors[np.array([self.time_integrator.mesh.s_handles_ind]),:] = np.array([0,0,0])
+			viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
+	
+
+
+			return True
+
+		# for clicks in range(40):
+		key_down(viewer, 'b', 123)
+		viewer.callback_key_down = key_down
+		viewer.core.is_animating = False
+		viewer.launch()
+
+
 	def headless(self):
 
 		pr = cProfile.Profile()

@@ -228,7 +228,7 @@ class Preprocessing:
 			if(aaa == 65):
 				self.createMesh(modes=self.modes_used)
 			if(aaa == 83):
-				self.save_mesh_setup(name="3koval")
+				self.save_mesh_setup(name="test2x2")
 
 			viewer.data().clear()
 			if self.uvec is None:
