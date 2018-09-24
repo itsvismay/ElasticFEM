@@ -148,6 +148,11 @@ class Display:
 		green = igl.eigen.MatrixXd([[0,1,0]])
 		black = igl.eigen.MatrixXd([[0,0,0]])
 
+		tempR = igl.eigen.MatrixXuc(1280, 800)
+		tempG = igl.eigen.MatrixXuc(1280, 800)
+		tempB = igl.eigen.MatrixXuc(1280, 800)
+		tempA = igl.eigen.MatrixXuc(1280, 800)
+
 		randc = [[random.uniform(0,1), random.uniform(0,1), random.uniform(0,1)] for i in range(1000)]
 
 		def key_down(viewer,aaa, bbb):
@@ -213,6 +218,10 @@ class Display:
 			Colors[np.array([self.time_integrator.mesh.s_handles_ind]),:] = np.array([0,0,0])
 			viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
 	
+			#Write image
+			if(aaa==65):
+				viewer.core.draw_buffer(viewer.data(), False, tempR, tempG, tempB, tempA)
+				igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(self.time_integrator.time)+".png")
 
 
 			return True

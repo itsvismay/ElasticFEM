@@ -328,7 +328,7 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrds()
 	check_dgds_drds()
 
-# FiniteDifferencesARAP()
+FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-1
@@ -481,4 +481,4 @@ def FiniteDifferencePositions():
 	print(np.linalg.norm(np.array(dxds) - J.T))
 	exit()
 
-FiniteDifferencePositions()
+# FiniteDifferencePositions()
