@@ -19,6 +19,7 @@ from scipy.spatial import Delaunay
 # mw.Mov = Meshwork.get_min(mw.V, a=1, eps=1e-2)
 # mw.display()
 # exit()
+
 mw = Meshwork.Preprocessing()
 mesh = mw.getMesh(name= "test2x2", modes_used=30)
 
