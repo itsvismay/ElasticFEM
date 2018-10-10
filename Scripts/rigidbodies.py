@@ -137,7 +137,7 @@ class Solver:
 		self.time = 0
 		self.rbds = rbds
 		self.joints = joints
-		self.grav = np.array([0,0,-1])*98
+		self.grav = np.array([0,-1,0])*98
 
 		self.sysM = np.zeros((6*len(self.rbds), 6*len(self.rbds)))
 		self.sysK = np.zeros((6*len(self.rbds), 6*len(self.rbds)))
@@ -202,18 +202,34 @@ class Solver:
 		tempB = igl.eigen.MatrixXuc(1280, 800)
 		tempA = igl.eigen.MatrixXuc(1280, 800)
 		randc = [[random.uniform(0,1), random.uniform(0,1), random.uniform(0,1)] for i in range(1000)]
+
+		V = np.zeros((4, 8))
 		
 		def key_down(viewer):
 			viewer.data().clear()
 			# if (aaa == 65):
-			self.step()
+			# self.step()
 
 			for i in range(len(self.joints)):
 				if(self.joints[i].rbs[0] == -1):
-					viewer.data().add_points(igl.eigen.MatrixXd(self.joints[i].E[0:3, 3]), black)
+					viewer.data().add_points(igl.eigen.MatrixXd(np.array([self.joints[i].E[0:3, 3]])), black)
 				
 
 			for i in range(len(self.rbds)):
+				# F = np.zeros((12, 3), dtype="int32")
+				F[0,:] = np.array([0,1,2])
+				F[1,:] = np.array([0,2,3])
+				F[2,:] = np.array([0,3,4])
+				F[3,:] = np.array([0,5,4])
+				F[4,:] = np.array([0,1,5])
+				F[5,:] = np.array([0,1,2])
+				F[6,:] = np.array([0,1,2])
+				F[7,:] = np.array([0,1,2])
+				F[8,:] = np.array([0,1,2])
+				F[9,:] = np.array([0,1,2])
+				F[10,:]= np.array([0,1,2])
+				F[11,:]= np.array([0,1,2])
+
 				PTS = np.ones((4, 8))
 				whd = self.rbds[i].whd/2.0
 				PTS[0:3, 0] = np.array([-whd[0], -whd[1] , -whd[2]])
@@ -225,16 +241,16 @@ class Solver:
 				PTS[0:3, 5] = np.array([whd[0], -whd[1] , whd[2]])
 				PTS[0:3, 6] = np.array([whd[0], whd[1] , whd[2]])
 				PTS[0:3, 7] = np.array([-whd[0], whd[1] , whd[2]])
+
 				PTS = self.rbds[i].E.dot(PTS)[0:3, :]
-				viewer.data().add_points(igl.eigen.MatrixXd(PTS.T), green)
-				
+				# viewer.data().set_mesh(igl.eigen.MatrixXd(PTS.T), igl.eigen.MatrixXi(F))
 				viewer.data().add_edges(igl.eigen.MatrixXd([PTS[:,0]]), igl.eigen.MatrixXd([PTS[:,1]]), black)
 				viewer.data().add_edges(igl.eigen.MatrixXd([PTS[:,0]]), igl.eigen.MatrixXd([PTS[:,3]]), black)
 				viewer.data().add_edges(igl.eigen.MatrixXd([PTS[:,0]]), igl.eigen.MatrixXd([PTS[:,4]]), black)
-				viewer.data().add_edges(igl.eigen.MatrixXd([PTS[:,1]]), igl.eigen.MatrixXd([PTS[:,2]]), black)
 
 				viewer.data().add_edges(igl.eigen.MatrixXd([PTS[:,2]]), igl.eigen.MatrixXd([PTS[:,3]]), black)
 				viewer.data().add_edges(igl.eigen.MatrixXd([PTS[:,2]]), igl.eigen.MatrixXd([PTS[:,6]]), black)
+				viewer.data().add_edges(igl.eigen.MatrixXd([PTS[:,1]]), igl.eigen.MatrixXd([PTS[:,2]]), black)
 				viewer.data().add_edges(igl.eigen.MatrixXd([PTS[:,1]]), igl.eigen.MatrixXd([PTS[:,5]]), black)
 				viewer.data().add_edges(igl.eigen.MatrixXd([PTS[:,5]]), igl.eigen.MatrixXd([PTS[:,6]]), black)
 				
@@ -267,11 +283,11 @@ class Solver:
 def test():
 
 	body1 = Body(whd = np.array([10,1,1]), R = np.eye(3), p= np.array([0,0,0]), phi = np.array([0,0,0,0,0,0]))
-	body2 = Body(whd = np.array([1,1,10]), R = np.eye(3), p = np.array([5, 0, -5]), phi = np.array([0,0,0,0,0,0]))
+	body2 = Body(whd = np.array([1,10,1]), R = np.eye(3), p = np.array([5, -1, 0]), phi = np.array([0,0,0,0,0,0]))
 	rbds = [body1, body2]
 
-	joint1 = Joint(R = np.eye(3), p = np.zeros(3), rbs=[-1,0], rows= np.array([0,2,3,4,5]), rigids=rbds)
-	joint2 = Joint(R = np.eye(3), p = np.array([5, 0 , 0]), rbs=[0,1], rows= np.array([0,2,3,4,5]), rigids=rbds)
+	joint1 = Joint(R = np.eye(3), p = np.zeros(3), rbs=[-1,0], rows= np.array([0,1,3,4,5]), rigids=rbds)
+	joint2 = Joint(R = np.eye(3), p = np.array([5, 0 , 0]), rbs=[0,1], rows= np.array([0,1,3,4,5]), rigids=rbds)
 	joints=[joint1, joint2]
 	solv = Solver(rbds=rbds, joints=joints)
 

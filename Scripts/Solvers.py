@@ -22,14 +22,14 @@ class TimeIntegrator:
 
 	def __init__(self, imesh, iarap, ielastic = None):
 		self.time = 1
-		self.timestep = 0.05
+		self.timestep = 0.01
 		self.mesh = imesh
 		self.arap = iarap
 		self.elastic = ielastic
 		self.adder = .3
 		# self.set_random_strain()
 		self.mov = self.mesh.mov
-		self.bnds = [(0, None) if i%3==2 else (1e-5, 1e6) for i in range(len(self.mesh.red_s)) ]
+		self.bnds = [(None, None) if i%3==2 else (1e-5, 1e6) for i in range(len(self.mesh.red_s)) ]
 		self.add_on = 10
 
 	def constTimeMassJ(self, idrds):
@@ -154,53 +154,62 @@ class TimeIntegrator:
 		alpha1 =1e5
 		alpha2 =1e1
 
-		def energy(s):
+		def energy(s_dot):
+			for i in range(len(s_dot)):
+				self.mesh.red_s[i] = s0[i] + self.timestep*s_dot[i]
+				self.mesh.red_s_dot[i] = s_dot[i]
 			# for i in range(len(s)):
-			# 	self.mesh.red_s[i] = s0[i] + self.timestep*s_dot[i]
-			for i in range(len(s)):
-				self.mesh.red_s[i] = s[i]
+				# self.mesh.red_s[i] = s[i]
+
 			self.arap.updateConstUSUtPAx()
 
 			self.arap.iterate()
 			E_arap = self.arap.Energy()
 			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
 			V_energy = alpha1*E_arap + alpha2*E_elastic
+			print("arap, elastic ", E_arap, E_elastic)
 			
 			J_arap, dgds, drds = self.arap.Jacobian()
 			JMJ = self.constTimeMassJ(idrds=drds)
 
-			K_energy = s.T.dot(JMJ.dot(s)) - s.T.dot(JMJ.dot(s0)) - self.timestep*s.T.dot(JMJ.dot(s_dot0))
-
-			TotEn = self.timestep*self.timestep*V_energy + K_energy
+			K_energy = 0.5*s_dot.T.dot(JMJ.dot(s_dot)) - s_dot.T.dot(JMJ.dot(s_dot0))
+			TotEn = V_energy + K_energy
+			# K_energy = s.T.dot(JMJ.dot(s)) - s.T.dot(JMJ.dot(s0)) - self.timestep*s.T.dot(JMJ.dot(s_dot0))
+			# TotEn = self.timestep*self.timestep*V_energy + K_energy
 			print("Energy: ", K_energy, TotEn)
 			return TotEn
 
 
-		def jacobian(s):
+		def jacobian(s_dot):
+			for i in range(len(s_dot)):
+				self.mesh.red_s[i] = s0[i] + self.timestep*s_dot[i]
+				self.mesh.red_s_dot[i] = s_dot[i]
 			# for i in range(len(s)):
-			# 	self.mesh.red_s[i] = s0[i] + self.timestep*s_dot[i]
-			for i in range(len(s)):
-				self.mesh.red_s[i] = s[i]
+			# 	self.mesh.red_s[i] = s[i]
 			self.arap.updateConstUSUtPAx()
 			print("s")
-			print(s)
+			print(self.mesh.red_s)
 			
 			dgds = None
 			# self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()
-			J_elastic = -1*self.elastic.Forces(irs = self.mesh.red_s, idgds=dgds)
+			J_elastic = self.elastic.PEGradient(irs = self.mesh.red_s, idgds=dgds)
 			PEGradient =  alpha1*J_arap + alpha2*J_elastic
 
 			JMJ = self.constTimeMassJ(idrds=drds)
-			KEGradient =  JMJ.dot(s) - JMJ.dot(s0) - self.timestep*JMJ.dot(s_dot0)
+			# KEGradient =  JMJ.dot(s) - JMJ.dot(s0) - self.timestep*JMJ.dot(s_dot0)
+			# return self.timestep*self.timestep*PEGradient + KEGradient
+			KEGradient = JMJ.dot(s_dot) - JMJ.dot(s_dot0)
+			totGrad = KEGradient + self.timestep*PEGradient
+			print(totGrad)
+			return totGrad
 
-			return self.timestep*self.timestep*PEGradient + KEGradient
-
-		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
+		res = scipy.optimize.minimize(energy, s_dot0, method='L-BFGS-B',  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
 		
 		for i in range(len(s0)):
-			self.mesh.red_s[i] = res.x[i]
-			self.mesh.red_s_dot[i] = (self.mesh.red_s[i] - s0[i])/self.timestep
+			self.mesh.red_s_dot[i] = res.x[i]
+			self.mesh.red_s[i] = s0[i]+self.timestep*self.mesh.red_s_dot[i]
+			# self.mesh.red_s_dot[i] = (self.mesh.red_s[i] - s0[i])*self.timestep
 		
 		self.arap.updateConstUSUtPAx()
 		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)

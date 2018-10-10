@@ -201,11 +201,11 @@ class NeohookeanElastic:
 		print("e123", e2, e3)
 		return e2 + e3
 
-	def Forces(self, irs, idgds):
+	def PEGradient(self, irs, idgds):
 		f2 = self.WikipediaForce(_rs=irs)
 		# f1 =  -1*self.GravityForce(idgds)
 		f3 = self.MuscleForce(_rs=irs)
-		return f2 + f3
+		return -(f2 + f3)
 
 	def JMJ_MassMatrix(self, idrds, idRdr, idSds):
 		self.mesh.getGlobalF(updateR = True, updateS = True, updateU = False)
