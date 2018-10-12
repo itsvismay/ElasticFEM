@@ -23,9 +23,6 @@ from scipy.spatial import Delaunay
 mw = Meshwork.Preprocessing()
 mesh = mw.getMesh(name= "test2x2", modes_used=30)
 
-
-
-
 #ARAP setup
 arap = Arap.ARAP(imesh=mesh, filen="snapshots/")
 
