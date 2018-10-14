@@ -34,7 +34,7 @@ class Display:
 		self.mode = 0
 		self.time_integrator = isolve
 
-	def display(self):
+	def display_statics(self):
 		viewer = igl.glfw.Viewer()
 
 		red = igl.eigen.MatrixXd([[1,0,0]])
@@ -232,6 +232,98 @@ class Display:
 		viewer.core.is_animating = False
 		viewer.launch()
 
+	def display_arap(self):
+		viewer = igl.glfw.Viewer()
+
+		red = igl.eigen.MatrixXd([[1,0,0]])
+		purple = igl.eigen.MatrixXd([[1,0,1]])
+		green = igl.eigen.MatrixXd([[0,1,0]])
+		black = igl.eigen.MatrixXd([[0,0,0]])
+
+		tempR = igl.eigen.MatrixXuc(1280, 800)
+		tempG = igl.eigen.MatrixXuc(1280, 800)
+		tempB = igl.eigen.MatrixXuc(1280, 800)
+		tempA = igl.eigen.MatrixXuc(1280, 800)
+		randc = [[random.uniform(0,1), random.uniform(0,1), random.uniform(0,1)] for i in range(1000)]
+
+		def mouse_up(viewer, btn, bbb):
+			return False
+
+		def mouse_down(viewer, btn, bbb):
+			return False
+
+		def key_down(viewer,aaa, bbb):
+			viewer.data().clear()
+		
+			if(aaa==65):
+				for im in range(len(self.time_integrator.meshes)):
+					self.time_integrator.move_g(im)
+					self.time_integrator.araps[im].iterate()
+
+			for im in range(len(self.time_integrator.meshes)):
+				print("DRAWING--------")
+				DV, DT = self.time_integrator.meshes[im].getDiscontinuousVT()
+				RV, RT = self.time_integrator.meshes[im].getContinuousVT()
+				V2 = igl.eigen.MatrixXd(RV)
+				T2 = igl.eigen.MatrixXi(RT)
+				# viewer.data().set_mesh(V2, T2)
+
+				for e in DT:
+					P = DV[e]
+					DP = np.array([P[1], P[2], P[0]])
+					viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
+
+
+				MOV = []
+				disp_g = self.time_integrator.meshes[im].getg()
+				for i in range(len(self.time_integrator.meshes[im].mov)):
+					MOV.append(disp_g[2*self.time_integrator.meshes[im].mov[i]:2*self.time_integrator.meshes[im].mov[i]+2])
+				viewer.data().add_points(igl.eigen.MatrixXd(np.array(MOV)), green)
+
+
+				FIXED = []
+				disp_g = self.time_integrator.meshes[im].getg()
+				for i in range(len(self.time_integrator.meshes[im].fixed)):
+					FIXED.append(disp_g[2*self.time_integrator.meshes[im].fixed[i]:2*self.time_integrator.meshes[im].fixed[i]+2])
+				viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
+
+
+				#Muscle fiber directions
+				CAg = self.time_integrator.meshes[im].getC().dot(self.time_integrator.meshes[im].getA().dot(self.time_integrator.meshes[im].getg()))
+				for i in range(len(self.time_integrator.meshes[im].T)):
+					S = self.time_integrator.meshes[im].getS(i)
+					C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
+					U = 0.3*self.time_integrator.meshes[im].getU(i)+C
+					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
+
+				Colors = np.ones(self.time_integrator.meshes[im].T.shape)
+				if aaa==67:
+					for i in range(len(self.time_integrator.meshes[im].u_clusters_element_map)):
+						for j in range(len(self.time_integrator.meshes[im].u_clusters_element_map[i])):
+							k = self.time_integrator.meshes[im].u_clusters_element_map[i][j]
+							Colors[k,:] = randc[i]
+				elif aaa==82:
+					for i in range(len(self.time_integrator.meshes[im].T)): 
+						color = black
+						Colors[i,:] = randc[self.time_integrator.meshes[im].r_element_cluster_map[i]]
+				elif aaa>=49 and aaa<=57:
+					for j in range(len(self.time_integrator.meshes[im].u_clusters_element_map[aaa-49])):
+						k = self.time_integrator.meshes[im].u_clusters_element_map[aaa-49][j]
+						Colors[k,:] = randc[aaa-49]
+				Colors[np.array([self.time_integrator.meshes[im].s_handles_ind]),:] = np.array([0,0,0])
+				# viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
+				print("Done drawing--------")
+
+
+			return True
+
+		# for clicks in range(40):
+		key_down(viewer, 'b', 123)
+		viewer.callback_key_down = key_down
+		viewer.callback_mouse_down = mouse_down
+		viewer.callback_mouse_up = mouse_up
+		viewer.core.is_animating = False
+		viewer.launch()
 
 	def headless(self):
 

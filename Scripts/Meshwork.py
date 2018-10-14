@@ -37,7 +37,6 @@ class Preprocessing:
 		if _VT is not None:
 			self.V = _VT[0]
 			self.T = _VT[1]
-			print(self.V.shape, self.T.shape)
 
 			self.U = np.zeros(len(self.T))
 			self.Fix = []# get_max(self.V, a=1, eps=1e-2)		
@@ -134,11 +133,11 @@ class Preprocessing:
 
 			print("Done reading DMAT")
 
-	def createMesh(self, modes=None):
+	def createMesh(self, modes=None, muscle=True):
 		to_fix = self.Fix
 		to_mov = self.Mov
-		
-		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, read_in= False, modes_used=modes)
+
+		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, read_in= False, modes_used=modes, muscle=muscle)
 		self.mesh.u, self.uvec, self.eGu, self.UVECS = heat_method(self.mesh)
 		self.mesh.getGlobalF(updateR=False, updateS=False, updateU=True)
 		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
@@ -146,24 +145,12 @@ class Preprocessing:
 		# 					[t for t in range(len(self.T)) if CAg[6*t]>=0.9]]
 
 		self.mesh.u_clusters_element_map = [np.array(list(e), dtype="int32") for e in self.uClusters]
-		# self.mesh.red_r[1]= 0.1
-		# self.mesh.red_s[1]=1.2
-		# self.mesh.getGlobalF(updateR=True, updateS=True, updateU=True)
-		# print(self.mesh.u)
-		# print(self.mesh.red_r)
-		# print(self.mesh.red_s)
-		# print(self.mesh.z)
-		# # print(self.mesh.GR)
-		# # print(self.mesh.GS)
-		# # print(self.mesh.GU)
-		# E0 = arap.energy(_z=self.mesh.z, _R =self.mesh.GR, _S=self.mesh.GS, _U=self.mesh.GU)
-		# print("Default Energy ", E0)
 
-	def getMesh(self, name=None, modes_used=None):
+	def getMesh(self, name=None, modes_used=None, muscle=True):
 		if name is not None:
-			self.read_mesh_setup(name = name, modes_used=modes_used)
+			self.read_mesh_setup(name = name, modes_used=modes_used, muscle=muscle)
 		else:
-			self.createMesh(modes=modes_used)
+			self.createMesh(modes=modes_used, muscle=muscle)
 		return self.mesh
 
 	def display(self):

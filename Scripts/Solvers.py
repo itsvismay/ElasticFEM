@@ -23,80 +23,66 @@ class TimeIntegrator:
 	def __init__(self, imesh, iarap, ielastic = None):
 		self.time = 1
 		self.timestep = 0.01
-		self.mesh = imesh
-		self.arap = iarap
-		self.elastic = ielastic
+		self.meshes = imesh
+		self.araps = iarap
+		self.elastics = ielastic
 		self.adder = .3
 		# self.set_random_strain()
-		self.mov = self.mesh.mov
-		self.bnds = [(None, None) if i%3==2 else (1e-5, 1e6) for i in range(len(self.mesh.red_s)) ]
+		# self.bnds = [(None, None) if i%3==2 else (1e-5, 1e6) for i in range(len(self.meshes[i.red_s)) ]
 		self.add_on = 10
 
-	def constTimeMassJ(self, idrds):
-		self.mesh.getGlobalF(updateR = True, updateS = True, updateU = False)
-		RU = self.mesh.GR.dot(self.mesh.GU).toarray()
-		UtPAx0 = self.mesh.GU.T.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
+	def constTimeMassJ(self, idrds, im):
+		self.meshes[im].getGlobalF(updateR = True, updateS = True, updateU = False)
+		RU = self.meshes[im].GR.dot(self.meshes[im].GU).toarray()
+		UtPAx0 = self.meshes[im].GU.T.dot(self.meshes[im].getP().dot(self.meshes[im].getA().dot(self.meshes[im].x0)))
 		dxdS = np.einsum("ij, k", RU, UtPAx0)
-		dSds = self.arap.sparseDSds()
+		dSds = self.araps[im].sparseDSds()
 
-		J = np.zeros((6*len(self.mesh.T), len(dSds)))
-		J1 = np.zeros((6*len(self.mesh.T), len(self.mesh.red_r)))
+		J = np.zeros((6*len(self.meshes[im].T), len(dSds)))
+		J1 = np.zeros((6*len(self.meshes[im].T), len(self.meshes[im].red_r)))
 
-		for i in range(len(self.mesh.red_r)):
-			c1, c2 = -np.sin(self.mesh.red_r[i]), -np.cos(self.mesh.red_r[i])
-			self.arap.PreProcJ[0][i].dot(self.mesh.red_s)*c1
+		for i in range(len(self.meshes[im].red_r)):
+			c1, c2 = -np.sin(self.meshes[im].red_r[i]), -np.cos(self.meshes[im].red_r[i])
+			self.araps[im].PreProcJ[0][i].dot(self.meshes[im].red_s)*c1
 
 
-		J2 = np.zeros((6*len(self.mesh.T), len(self.mesh.red_s)))
+		J2 = np.zeros((6*len(self.meshes[im].T), len(self.meshes[im].red_s)))
 		dxdS = np.einsum("ij, k", RU, UtPAx0)
 		for i in range(dxdS.shape[0]):
 			for j in range(len(dSds)):
 				J2[i, j] = dSds[j].multiply(dxdS[i,:,:]).sum()
 
 		J = J1.dot(idrds) + J2
-		M = self.mesh.getMassMatrix()
+		M = self.meshes[im].getMassMatrix()
 
 		return J.T.dot(M.dot(J))
 	
-	def set_strain(self):
-		for i in range(len(self.mesh.T)):
-			pass
-			# self.mesh.q[3*i+1] =1.01+ np.sin(self.time)
-			# self.mesh.q[3*i +2] = 1.01 + np.sin(self.time)
-
-	def set_random_strain(self):
-		for i in range(len(self.mesh.T)):
-			# self.mesh.q[3*i + 1] = 1.01 + np.random.uniform(0,2)
-			self.mesh.q[3*i + 2] = 1.0 + np.random.uniform(0.001,0.1)
 
 	def iterate(self):
+		pass
+		# self.elastic.muscle_fibre_mag += 100
+		# print(self.elastic.muscle_fibre_mag)
+		# self.time += 1
 
-		# if(self.time%10 == 0):
-		# 	self.adder *= -1
-
-		# self.mesh.g[2*self.mov+1] -= self.adder
-		self.elastic.muscle_fibre_mag += 100
-		print(self.elastic.muscle_fibre_mag)
-		self.time += 1
-
-	def move_g(self):
+	def move_g(self, im):
 		if(self.time%self.add_on == 0):
 			if(self.add_on==25):
 				exit()
 			self.adder *= -1
 			self.add_on = 25
 
-		for i in range(len(self.mov)):
-			self.mesh.g[2*self.mov[i]] += self.adder
+		for i in range(len(self.meshes[im].mov)):
+			self.meshes[im].g[2*self.meshes[im].mov[i]+1] += self.adder
 			# self.mesh.g[2*self.mov[i]+1] += self.adder
 		# print("moved")
 		# self.mesh.red_s[3*np.arange(len(self.mesh.red_s)/3)+1] += 0.2
 		# self.mesh.red_s[4] += 0.2
 		# self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
+		
 
 	def toggle_muscle_group(self, num):
 		#toggle 1 to 0 and 0 to 1
-		self.mesh.u_toggle[self.mesh.u_clusters_element_map[num]] = self.mesh.u_toggle[self.mesh.u_clusters_element_map[num]] == 0
+		self.meshes[0].u_toggle[self.mesh.u_clusters_element_map[num]] = self.mesh.u_toggle[self.mesh.u_clusters_element_map[num]] == 0
 		self.static_solve()
 		
 	def static_solve(self):
@@ -147,29 +133,29 @@ class TimeIntegrator:
 		# print(res)
 		# print("static solve")
 
-	def dynamics(self):
+	def dynamics(self, im):
 		print("Dynamics Solve")
-		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
-		s_dot0 = self.mesh.red_s_dot + np.zeros(len(self.mesh.red_s))
+		s0 = self.meshes[im].red_s + np.zeros(len(self.meshes[im].red_s))
+		s_dot0 = self.meshes[im].red_s_dot + np.zeros(len(self.meshes[im].red_s))
 		alpha1 =1e5
 		alpha2 =1e1
 
 		def energy(s_dot):
 			for i in range(len(s_dot)):
-				self.mesh.red_s[i] = s0[i] + self.timestep*s_dot[i]
-				self.mesh.red_s_dot[i] = s_dot[i]
+				self.meshes[im].red_s[i] = s0[i] + self.timestep*s_dot[i]
+				self.meshes[im].red_s_dot[i] = s_dot[i]
 			# for i in range(len(s)):
-				# self.mesh.red_s[i] = s[i]
+				# self.meshes[im].red_s[i] = s[i]
 
-			self.arap.updateConstUSUtPAx()
+			self.araps[im].updateConstUSUtPAx()
 
-			self.arap.iterate()
-			E_arap = self.arap.Energy()
-			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
+			self.araps[im].iterate()
+			E_arap = self.araps[im].Energy()
+			E_elastic =  self.elastics[im].Energy(irs=self.meshes[im].red_s)
 			V_energy = alpha1*E_arap + alpha2*E_elastic
 			print("arap, elastic ", E_arap, E_elastic)
 			
-			J_arap, dgds, drds = self.arap.Jacobian()
+			J_arap, dgds, drds = self.araps[im].Jacobian()
 			JMJ = self.constTimeMassJ(idrds=drds)
 
 			K_energy = 0.5*s_dot.T.dot(JMJ.dot(s_dot)) - s_dot.T.dot(JMJ.dot(s_dot0))
@@ -182,18 +168,18 @@ class TimeIntegrator:
 
 		def jacobian(s_dot):
 			for i in range(len(s_dot)):
-				self.mesh.red_s[i] = s0[i] + self.timestep*s_dot[i]
-				self.mesh.red_s_dot[i] = s_dot[i]
+				self.meshes[im].red_s[i] = s0[i] + self.timestep*s_dot[i]
+				self.meshes[im].red_s_dot[i] = s_dot[i]
 			# for i in range(len(s)):
-			# 	self.mesh.red_s[i] = s[i]
-			self.arap.updateConstUSUtPAx()
+			# 	self.meshes[im].red_s[i] = s[i]
+			self.araps[im].updateConstUSUtPAx()
 			print("s")
-			print(self.mesh.red_s)
+			print(self.meshes[im].red_s)
 			
 			dgds = None
-			# self.arap.iterate()
-			J_arap, dgds, drds = self.arap.Jacobian()
-			J_elastic = self.elastic.PEGradient(irs = self.mesh.red_s, idgds=dgds)
+			# self.araps[im].iterate()
+			J_arap, dgds, drds = self.araps[im].Jacobian()
+			J_elastic = self.elastics[im].PEGradient(irs = self.meshes[im].red_s, idgds=dgds)
 			PEGradient =  alpha1*J_arap + alpha2*J_elastic
 
 			JMJ = self.constTimeMassJ(idrds=drds)
@@ -207,15 +193,9 @@ class TimeIntegrator:
 		res = scipy.optimize.minimize(energy, s_dot0, method='L-BFGS-B',  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
 		
 		for i in range(len(s0)):
-			self.mesh.red_s_dot[i] = res.x[i]
-			self.mesh.red_s[i] = s0[i]+self.timestep*self.mesh.red_s_dot[i]
-			# self.mesh.red_s_dot[i] = (self.mesh.red_s[i] - s0[i])*self.timestep
+			self.meshes[im].red_s_dot[i] = res.x[i]
+			self.meshes[im].red_s[i] = s0[i]+self.timestep*self.meshes[im].red_s_dot[i]
+			# self.meshes[im].red_s_dot[i] = (self.meshes[im].red_s[i] - s0[i])*self.timestep
 		
-		self.arap.updateConstUSUtPAx()
-		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
-
-		# print("r1", self.mesh.red_r)
-		# print("s1", res.x)
-		# print("g1", self.mesh.z)
-		# print(res)
-		# print("static solve")
+		self.araps[im].updateConstUSUtPAx()
+		self.meshes[im].getGlobalF(updateR=False, updateS=True, updateU=False)

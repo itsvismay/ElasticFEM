@@ -62,23 +62,23 @@ def get_area(p1, p2, p3):
 def get_centroid(p1, p2, p3):
 	return (np.array(p1)+np.array(p2)+np.array(p3))/3.0
 
-def torus_mesh(r1, r2, r3, step):
+def torus_mesh(r1, r2, r3, step, offset=(0,0)):
 	V = []
 	T = []
-	for theta in range(0, 80):
-		angle = theta*np.pi/69
+	for theta in range(0, 20):
+		angle = theta*np.pi/19
 		if(angle<=np.pi):
-			V.append([step*r1*np.cos(angle), step*r1*np.sin(angle)])
-			V.append([step*r2*np.cos(angle), step*r2*np.sin(angle)])
-			V.append([step*r3*np.cos(angle), step*r3*np.sin(angle)])
+			V.append([step*r1*np.cos(angle)+offset[0], step*r1*np.sin(angle) + offset[1]])
+			V.append([step*r2*np.cos(angle)+offset[0], step*r2*np.sin(angle) + offset[1]])
+			V.append([step*r3*np.cos(angle)+offset[0], step*r3*np.sin(angle) + offset[1]])
 
 	V.append([0,0])
 	for e in Delaunay(V).simplices:
-		if e[0]!=len(V)-1 and e[1]!=len(V)-1 and e[2]!=len(V)-1 and get_area(V[e[0]], V[e[1]], V[e[2]])<5:
+		if e[0]!=len(V)-1 and e[1]!=len(V)-1 and e[2]!=len(V)-1 and get_area(V[e[0]], V[e[1]], V[e[2]])<1:
 			T.append([e[0], e[1], e[2]])
 			# T.append(list(e))
 
-	return np.array(V[:len(V)-1]), np.array(T), None
+	return [np.array(V[:len(V)-1]), np.array(T), None]
 
 def triangle_mesh():
 	V = [[0,0], [1,0], [1,1]]
@@ -133,14 +133,15 @@ def get_unit_normal(p1, p2, p3):
 	n = np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3)))
 	return n/np.linalg.norm(n)
 
-def rectangle_mesh(x, y, step=1):
+def rectangle_mesh(x, y, step=1, offset=(0,0)):
 	V = []
+
 	for i in range(0,x+1):
 		for j in range(0,y+1):
-			V.append([step*i, step*j])
+			V.append([step*i + offset[0], step*j + offset[1]])
 	
 	T = Delaunay(V).simplices
-	return np.array(V), T
+	return [np.array(V), T]
 
 def feather_muscle1_test_setup(x = 3, y = 2):
 	step = 0.1

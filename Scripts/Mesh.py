@@ -21,13 +21,23 @@ from Helpers import *
 
 class Mesh:
 
-	def __init__(self, iVTU=None, ito_fix=[], ito_mov=[], modes_used=None, read_in=False):
+	def __init__(self, iVTU=None, ito_fix=[], ito_mov=[], modes_used=None, read_in=False, muscle=True):
 		if read_in:
 			return
 		#Get Variables setup
-		self.youngs = 600000 #g/cm*s^2
-		self.poissons = 0.45
-		self.fixed = list(set(ito_fix))#.union(set(ito_mov)))
+		if muscle:
+			self.youngs = 600000 #g/cm*s^2
+			self.poissons = 0.45
+			self.fixed = list(set(ito_fix))#.union(set(ito_mov)))
+			nrc = 3
+			nsh = 3
+		else:
+			self.youngs = 6e8
+			self.poissons = 0.45
+			self.fixed = list(set(ito_fix).union(set(ito_mov)))
+			nrc = 1
+			nsh = 1
+
 		self.V = np.array(iVTU[0])
 		self.T = iVTU[1]
 		print("MeshSize:")
@@ -76,13 +86,13 @@ class Mesh:
 		self.r_element_cluster_map = None
 		self.r_cluster_element_map = defaultdict(list)
 		self.RotationBLOCK = None
-		self.setupRotClusters()
+		self.setupRotClusters(rclusters=False, nrc=nrc)
 
 		#S skinnings
 		self.red_s = None
 		self.s_handles_ind = None
 		self.sW = None
-		self.setupStrainSkinnings()
+		self.setupStrainSkinnings(shandles=False, nsh=nsh)
 		self.red_s_dot = np.zeros(len(self.red_s))
 
 		print("\n+ Setup GF")
@@ -144,7 +154,7 @@ class Mesh:
 		self.r_element_cluster_map = r_element_cluster_map[:,0]
 		self.r_cluster_element_map = defaultdict(list)
 		self.RotationBLOCK = None
-		self.setupRotClusters( rclusters=True)
+		self.setupRotClusters(rclusters=True, nrc=1)
 
 
 		# self.readInRotClusters()
@@ -199,7 +209,7 @@ class Mesh:
 		# Q = eHeV
 		return Q1
 
-	def setupStrainSkinnings(self, shandles = False):
+	def setupStrainSkinnings(self, shandles = False, nsh=1):
 		print("Setting up skinnings")
 		if len(self.T) == 1:
 			self.s_handles_ind = [0]
@@ -209,11 +219,10 @@ class Mesh:
 
 		t_set = Set([i for i in range(len(self.T))])
 
-		if shandles is False or True:
+		if shandles is False:
 			print("No reduced skinning handles")
 			# self.s_handles_ind =[i for i in range(len(self.T)) if i%1==0]
 			# self.s_handles_ind = [0]
-			nsh = 3
 			skinning_r_cluster_element_map = defaultdict(list)
 			skinning_r_element_cluster_map = self.kmeans_rotationclustering(clusters=nsh)
 			
@@ -311,19 +320,19 @@ class Mesh:
 		tW /= np.sum(tW, axis =1)[:, np.newaxis] #normalize rows to sum to 1
 		return np.kron(tW, np.eye(3))
 
-	def setupRotClusters(self, rclusters=False):
+	def setupRotClusters(self, rclusters=False, nrc=1):
 		print("Setting up rotation clusters")
 		# of rotation clusters
 		t_set = Set([i for i in range(len(self.T))])
-		if rclusters is False or True:
-			nrc =  2#len(self.T)
+		if rclusters is False:
 			if nrc == len(self.T):
 				self.r_element_cluster_map = np.arange(nrc)
 			else:
-				print(nrc)	
 				self.r_element_cluster_map = self.kmeans_rotationclustering(clusters=nrc)
+		
 		for i in range(len(self.T)):			
 			self.r_cluster_element_map[self.r_element_cluster_map[i]].append(i)
+		
 		# if rclusters is True:
 		# 	nrc = len(self.r_cluster_element_map.keys())
 		self.red_r = np.zeros(nrc)
@@ -367,6 +376,7 @@ class Mesh:
 			if(fix==None):
 				fix = self.fixed
 
+			
 			if(len(fix) == len(self.V)):
 				self.BLOCK =  sparse.csc_matrix(np.array([[]]))
 				self.ANTI_BLOCK = sparse.eye(2*len(self.V)).tocsc()

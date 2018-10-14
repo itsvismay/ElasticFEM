@@ -957,6 +957,7 @@ class ARAP:
 		FPAx = self.constTimeFPAx() #self.mesh.GF.dot(self.PAx)
 		
 		deltaAbtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
+
 		GtAtPtFPAx = self.PAG.T.dot(FPAx)
 		GtAtPtPAx = self.PAG.T.dot(self.PA.dot(self.mesh.x0))
 		gb =  GtAtPtFPAx - GtAtPtPAx
