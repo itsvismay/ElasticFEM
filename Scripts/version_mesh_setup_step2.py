@@ -1,10 +1,8 @@
 #running the code version 3
-import Meshwork
-import Arap
-import Display
-import Solvers
-import Neo
 import sys, os
+import scipy
+from scipy import sparse
+from scipy.sparse import linalg
 sys.path.insert(0, os.getcwd()+"/../../libigl/python/")
 import pyigl as igl
 from iglhelpers import *
@@ -43,45 +41,60 @@ def get_area(p1, p2, p3):
 	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))*0.5
 
 def getMassDiags(iV, iT):
-		print("Creating Mass Matrix")
-		mass_diag = np.zeros(6*len(iT))
-		density = 1000.0
-		for i in range(len(iT)):
-			e = iT[i]
-			undef_area = density*get_area(iV[e[0]], iV[e[1]], iV[e[2]])
-			mass_diag[6*i+0] += undef_area/3.0
-			mass_diag[6*i+1] += undef_area/3.0
+	mass_diag = np.zeros(2*len(iV))
+	density = 1000
+	for i in range(len(iT)):
+		e = iT[i]
+		undef_area = density*get_area(iV[e[0]], iV[e[1]], iV[e[2]])
+		mass_diag[2*e[0]+0] += undef_area/3.0
+		mass_diag[2*e[0]+1] += undef_area/3.0
 
-			mass_diag[6*i+2] += undef_area/3.0
-			mass_diag[6*i+3] += undef_area/3.0
+		mass_diag[2*e[1]+0] += undef_area/3.0
+		mass_diag[2*e[1]+1] += undef_area/3.0
 
-			mass_diag[6*i+4] += undef_area/3.0
-			mass_diag[6*i+5] += undef_area/3.0
+		mass_diag[2*e[2]+0] += undef_area/3.0
+		mass_diag[2*e[2]+1] += undef_area/3.0
+
+
+		# print("Creating Mass Matrix")
+		# mass_diag = np.zeros(6*len(iT))
+		# density = 1000.0
+		# for i in range(len(iT)):
+		# 	e = iT[i]
+		# 	undef_area = density*get_area(iV[e[0]], iV[e[1]], iV[e[2]])
+		# 	mass_diag[6*i+0] += undef_area/3.0
+		# 	mass_diag[6*i+1] += undef_area/3.0
+
+		# 	mass_diag[6*i+2] += undef_area/3.0
+		# 	mass_diag[6*i+3] += undef_area/3.0
+
+		# 	mass_diag[6*i+4] += undef_area/3.0
+		# 	mass_diag[6*i+5] += undef_area/3.0
 		
-		print("Done with Mass matrix")
-		return mass_diag
+		# print("Done with Mass matrix")
+	return mass_diag
 
-def heat_method(V, T, Fix, Mov):
+def heat_method(iV, iT, iFix, iMov):
 	t = 1e-1
 	eLc = igl.eigen.SparseMatrixd()
-	igl.cotmatrix(igl.eigen.MatrixXd(V), igl.eigen.MatrixXi(T), eLc)
+	igl.cotmatrix(igl.eigen.MatrixXd(iV), igl.eigen.MatrixXi(iT), eLc)
 	Lc = e2p(eLc)
-	Mdiag = getMassDiags(V, T)[2*np.arange(Lc.shape[0])]
+	Mdiag = getMassDiags(iV, iT)[2*np.arange(Lc.shape[0])]
 	Mc = sparse.diags(Mdiag)
 
 
 	#Au = b st. Cu = Cu0
-	u0 = np.zeros(len(V))
-	fixed = list(set(Fix) - set(Mov))
+	u0 = np.zeros(len(iV))
+	fixed = list(set(iFix) - set(iMov))
 	u0[fixed] = 2
-	u0[Mov] = -2
+	u0[iMov] = -2
 
-	Id = sparse.eye(len(V)).tocsc()
+	Id = sparse.eye(len(iV)).tocsc()
 	fixedverts = [i for i in range(len(u0)) if u0[i]!=0]
 	C = Id[:,fixedverts]
 
 	# print(Lc.shape)
-	# print(mesh.V.shape)
+	# print(mesh.iV.shape)
 	A = (Mc - t*Lc)
 	col1 = sparse.vstack((A, C.T))
 	col2 = sparse.vstack((C, sparse.csc_matrix((C.shape[1], C.shape[1]))))
@@ -90,7 +103,7 @@ def heat_method(V, T, Fix, Mov):
 	u = sparse.linalg.spsolve(KKT.tocsc(), lhs)[0:len(u0)]
 	
 	eG = igl.eigen.SparseMatrixd()
-	nV = np.concatenate((V, u[:,np.newaxis]), axis=1)
+	nV = np.concatenate((iV, u[:,np.newaxis]), axis=1)
 	igl.grad(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(T), eG)
 	eu = igl.eigen.MatrixXd(u)
 	eGu = (eG*eu).MapMatrix(len(T), 3)
@@ -139,6 +152,24 @@ def display_full_mesh():
 	x0 = np.ravel(V[:,:2])
 	C = getC(T)
 	A = getA(V, T)
+	middle_button_down = False
+
+	def mouse_move(viewer, mx, my):
+		pass
+		# print(middle_button_down)
+		# if middle_button_down:
+		# 	# Cast a ray in the view direction starting from the mouse position
+		# 	bc = igl.eigen.MatrixXd()
+		# 	fid = igl.eigen.MatrixXi(np.array([-1]))
+		# 	coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
+		# 	hit = igl.unproject_onto_mesh(coord, viewer.core.view * viewer.core.model,
+		# 	viewer.core.proj, viewer.core.viewport, igl.eigen.MatrixXd(V), igl.eigen.MatrixXi(T), fid, bc)
+		# 	ind = e2p(fid)[0][0]
+		# 	muscles[ind] = 0
+		# 	return True
+	
+	def mouse_up(viewer, btn, bbb):
+		middle_button_down = False
 
 	def mouse_down(viewer, btn, bbb):
 		# Cast a ray in the view direction starting from the mouse position
@@ -148,6 +179,9 @@ def display_full_mesh():
 		hit = igl.unproject_onto_mesh(coord, viewer.core.view * viewer.core.model,
 		viewer.core.proj, viewer.core.viewport, igl.eigen.MatrixXd(V), igl.eigen.MatrixXi(T), fid, bc)
 		ind = e2p(fid)[0][0]
+
+		if btn==1:
+			middle_button_down = True
 
 		if hit and btn==0:
 			# paint hit red
@@ -175,8 +209,12 @@ def display_full_mesh():
 			CAx0 = C.dot(A.dot(x0))
 			for i in range(len(T)):
 				c = np.matrix([CAx0[6*i:6*i+2],CAx0[6*i:6*i+2]])
-				U = np.multiply(u[i], np.array([[.1],[.1]])) + c
-				viewer.data().add_edges(igl.eigen.MatrixXd(c[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
+				alpha = u[i]
+				cU, sU = np.cos(alpha), np.sin(alpha)
+				U = np.array(((cU,-sU), (sU, cU)))
+				scaledU = np.multiply(U, np.array([[.1],[.1]])) + c
+				viewer.data().add_edges(igl.eigen.MatrixXd(c[0,:]), igl.eigen.MatrixXd(scaledU[0,:]), black)
+		
 		if (aaa==65):
 			Colors = np.ones(T.shape)
 			for t in range(len(T)):
@@ -196,7 +234,7 @@ def display_full_mesh():
 		
 	key_down(viewer, "b", 123)
 	# viewer.callback_mouse_up = mouse_up
-	# viewer.callback_mouse_move = mouse_move
+	viewer.callback_mouse_move = mouse_move
 	viewer.callback_mouse_down = mouse_down
 	viewer.callback_key_down = key_down
 	viewer.callback_pre_draw = pre_draw

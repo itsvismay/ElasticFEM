@@ -35,8 +35,8 @@ class Preprocessing:
 	def __init__(self, _VT=None, modes_used=None):
 		self.middle_button_down = False
 		if _VT is not None:
-			self.V = _VT[0]
-			self.T = _VT[1]
+			self.V = _VT["V"]
+			self.T = _VT["T"]
 
 			self.U = np.zeros(len(self.T))
 			self.Fix = []# get_max(self.V, a=1, eps=1e-2)		

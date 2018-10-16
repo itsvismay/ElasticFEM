@@ -13,7 +13,7 @@ from iglhelpers import *
 def general_eig_solve(A, B=None, modes=None):
 	#pass in A = K matrix, and B = M matrix
 	print("+General Eig Solve")
-	
+	print(A.shape, B.shape)
 	if modes is None:
 		e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), which="SM")
 	else:
@@ -54,9 +54,6 @@ def generate_euclidean_weights(CAx, handles, others):
 	return np.kron(W, np.eye(3))
 
 def get_area(p1, p2, p3):
-	# print(p1- p2)
-	# print(p1 - p3)
-	# print(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))
 	return np.linalg.norm(np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3))))*0.5
 
 def get_centroid(p1, p2, p3):
@@ -78,7 +75,7 @@ def torus_mesh(r1, r2, r3, step, offset=(0,0)):
 			T.append([e[0], e[1], e[2]])
 			# T.append(list(e))
 
-	return [np.array(V[:len(V)-1]), np.array(T), None]
+	return {"V": np.array(V[:len(V)-1]), "T": np.array(T), "u": np.zeros(len(T))}
 
 def triangle_mesh():
 	V = [[0,0], [1,0], [1,1]]
@@ -141,7 +138,7 @@ def rectangle_mesh(x, y, step=1, offset=(0,0)):
 			V.append([step*i + offset[0], step*j + offset[1]])
 	
 	T = Delaunay(V).simplices
-	return [np.array(V), T]
+	return {"V": np.array(V), "T": T, "u": np.zeros(len(T))}
 
 def feather_muscle1_test_setup(x = 3, y = 2):
 	step = 0.1

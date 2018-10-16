@@ -18,7 +18,7 @@ from scipy.spatial import Delaunay
 # V1 = e2p(V)[:,:]
 # # print(V1.shape)
 # F1 = e2p(F)
-# T = Delaunay(V1[:,:2], incremental=True).simplices[:-2,:]
+# # T = Delaunay(V1[:,:2], incremental=True).simplices[:-2,:]
 # # print(e2p(F)[:10,:])
 # # print(T[:10,:])
 # # exit()
