@@ -5,11 +5,20 @@ import pyigl as igl
 from iglhelpers import *
 from scipy.spatial import Delaunay
 from collections import defaultdict
+import scipy
 from scipy import sparse
 from scipy.sparse import linalg
 from scipy.cluster.vq import vq, kmeans, whiten
 import Helpers
 import random
+
+FOLDER = "./MeshSetups/"+"TestArm/"
+# os.mkdir(FOLDER)
+# os.mkdir(FOLDER+"muscles")
+# os.mkdir(FOLDER+"bones")
+# os.mkdir(FOLDER+"muscle_bone")
+
+print("Writing to folder: "+FOLDER)
 
 mesh1 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,0))
 mesh2 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(5,0))
@@ -18,12 +27,19 @@ mesh3 = Helpers.torus_mesh(r1=2, r2=3, r3=5, step=1.0, offset=(5,1))
 mesh1["isMuscle"]= False
 mesh1["Mov"] = []
 mesh1["Fix"] = []
+mesh1["nrc"] = 1
+mesh1["nsh"] = 1
 mesh2["isMuscle"]= False
 mesh2["Mov"] = []
 mesh2["Fix"] = []
+mesh2["nrc"] = 1
+mesh2["nsh"] = 1
 mesh3["isMuscle"]= True
 mesh3["Mov"] = [59]
 mesh3["Fix"] = [2]
+mesh3["nrc"] = 4
+mesh3["nsh"] = 4
+
 
 def getA(iV, iT):
 	A = sparse.lil_matrix((6*len(iT), 2*len(iV)))
@@ -206,8 +222,7 @@ def skinning_handles(mesh, nsh=1):
 				minind = els[i]
 
 		shandles.append(minind)
-	print(shandles)
-	return shandles
+	return np.array(shandles)
 
 def bbw_skinning_matrix(mesh, handles):
 	vertex_handles = mesh["T"][handles]
@@ -274,6 +289,17 @@ def bbw_skinning_matrix(mesh, handles):
 	return np.kron(tW, np.eye(3))
 
 def setup_meshes(meshes):
+	#For muscles:
+	# - Fix points, Mov points
+	# -> Heat flow (u)
+	# -> Modal Analysis (G)
+	# -> Kmeans Rotation Clusters ()
+	# -> Skinning handles, BBW
+
+	#For bones:
+	# - One rotation cluster per bone
+	# - One skinning handle per bone (for now, one total later)
+	# - Skinning weights all 1
 	for mesh in meshes:
 		if mesh["isMuscle"]:
 			# muscle
@@ -284,8 +310,8 @@ def setup_meshes(meshes):
 			mesh["BLOCK"], mesh["ANTI_BLOCK"] = getBlockingMatrices(mesh["V"], mesh["Fix"]) 
 			mesh["u"] = heat_method(mesh["V"], mesh["T"], mesh["Fix"], mesh["Mov"])
 			mesh["G"] = modal_analysis(mesh)
-			mesh["e_to_c"] = rotation_clusters(mesh, nrc=5)
-			mesh["shandles_ind"] = skinning_handles(mesh, nsh = 5)
+			mesh["e_to_c"] = rotation_clusters(mesh, nrc=mesh["nrc"])
+			mesh["shandles_ind"] = skinning_handles(mesh, nsh = mesh["nsh"])
 			mesh["sW"] = bbw_skinning_matrix(mesh, handles = mesh["shandles_ind"])
 
 		else:
@@ -294,42 +320,82 @@ def setup_meshes(meshes):
 			mesh["A"] = getA(mesh["V"], mesh["T"])
 			mesh["P"] = getP(mesh["T"])
 			mesh["e_to_c"] = np.zeros(len(mesh["T"]), dtype='int32')
-			mesh["shandles_ind"] = [0]
+			mesh["shandles_ind"] = np.array([0])
 			mesh["sW"] = bbw_skinning_matrix(mesh, handles = mesh["shandles_ind"])
-
-
-
 
 def output_meshes(meshes):
 	#Output all individually.
+	#For muscles:
+	# - mesh V, F
+	# - Heat flow (u)
+	# - Kmeans Rotation Clusters ()
+	# - Skinning handles, BBW
+
 	#For bones:
 	# - One rotation cluster per bone
 	# - One skinning handle per bone (for now, one total later)
 	# - Skinning weights all 1
-	
-	#For muscles:
-	# - Fix points, Mov points
-	# -> Heat flow (u)
-	# -> Modal Analysis (G)
-	# -> Kmeans Rotation Clusters ()
-	# -> Skinning handles, BBW
+	muscle_count = 0
+	bone_count = 0
+	for mesh in meshes:
+		if mesh["isMuscle"]:
+			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"V.dmat", igl.eigen.MatrixXd(np.array(mesh["V"])), True)
+			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"F.dmat", igl.eigen.MatrixXi(mesh["T"]), True)
+			igl.writeOBJ(FOLDER+"muscles/"+str(muscle_count)+"muscle.obj",igl.eigen.MatrixXd(np.array(mesh["V"])),igl.eigen.MatrixXi(mesh["T"]))
+			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"u.dmat", igl.eigen.MatrixXd(np.array([mesh["u"]])), True)
+			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"e_to_c.dmat", igl.eigen.MatrixXi(mesh["e_to_c"]), True)
+			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"s_handles.dmat", igl.eigen.MatrixXi(np.array([mesh["shandles_ind"]], dtype='int32')), True)
+			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"skinning_weights.dmat", igl.eigen.MatrixXd(mesh["sW"]), True)
+			muscle_count += 1
+
+		else:
+			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"V.dmat", igl.eigen.MatrixXd(np.array(mesh["V"])), True)
+			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"F.dmat", igl.eigen.MatrixXi(mesh["T"]), True)
+			igl.writeOBJ(FOLDER+"bones/"+str(bone_count)+"bone.obj",igl.eigen.MatrixXd(np.array(mesh["V"])),igl.eigen.MatrixXi(mesh["T"]))
+			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"u.dmat", igl.eigen.MatrixXd(np.array([mesh["u"]])), True)
+			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"e_to_c.dmat", igl.eigen.MatrixXi(mesh["e_to_c"]), True)
+			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"s_handles.dmat", igl.eigen.MatrixXi(np.array([mesh["shandles_ind"]], dtype='int32')), True)
+			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"skinning_weights.dmat", igl.eigen.MatrixXd(mesh["sW"]), True)
+			bone_count += 1
 
 	#Output combined
 	# - [V1 V2, V3] -> remove duplicates in Meshlab
 	# - [T1, T2, T3]
 	# - [u1, u2, u3]
 	# - [[s1.1, s1.2, 0, 0],[0, 0, 1, 0],[0,0,0,1]]
-	# V = meshes[0]["V"]
-	# T = meshes[0]["T"]
-	# for im in range(1,len(meshes)):
-	# 	T = np.vstack((T, np.add(meshes[im]["T"], len(V))))
-	# 	V = np.vstack((V, meshes[im]["V"]))
-	# V = np.hstack((V, np.zeros((len(V),1))))
-	# V2 = igl.eigen.MatrixXd(V)
-	# T2 = igl.eigen.MatrixXi(T)
-	# igl.writeOBJ("./MeshSetups/step1.obj",V2,T2)
-	return
 
+	V = meshes[0]["V"]
+	T = meshes[0]["T"]
+	for im in range(1,len(meshes)):
+		T = np.vstack((T, np.add(meshes[im]["T"], len(V))))
+		V = np.vstack((V, meshes[im]["V"]))
+	V = np.hstack((V, np.zeros((len(V),1))))
+	V2 = igl.eigen.MatrixXd(V)
+	T2 = igl.eigen.MatrixXi(T)
+
+	u = meshes[0]["u"]
+	sW_blocks = [meshes[0]["sW"]]
+	shandles = meshes[0]["shandles_ind"]
+	v = meshes[0]["V"].shape[0]
+	e_to_c = meshes[0]["e_to_c"]
+	tot_clusters = meshes[0]["nrc"]
+	for im in range(1, len(meshes)):
+		u = np.concatenate((u, meshes[im]["u"]))
+		sW_blocks.append(meshes[im]["sW"])
+		shandles = np.concatenate((shandles, np.add(meshes[im]["shandles_ind"], v)))
+		e_to_c = np.concatenate((e_to_c, np.add(meshes[im]["e_to_c"], tot_clusters)))
+		v += meshes[im]["V"].shape[0]
+		tot_clusters += meshes[im]["nrc"]
+	
+	sW = scipy.linalg.block_diag(*sW_blocks)
+
+	igl.writeOBJ(FOLDER + "muscle_bone/" + "combined.obj",V2,T2)
+	igl.writeDMAT(FOLDER + "muscle_bone/" + "u.dmat", igl.eigen.MatrixXd(np.array(u)), True)
+	igl.writeDMAT(FOLDER + "muscle_bone/" + "shandles.dmat", igl.eigen.MatrixXi(np.array(shandles, dtype="int32")), True)
+	igl.writeDMAT(FOLDER + "muscle_bone/" + "e_to_c.dmat", igl.eigen.MatrixXi(np.array(e_to_c, dtype="int32")), True)
+	igl.writeDMAT(FOLDER + "muscle_bone/" + "sW.dmat", igl.eigen.MatrixXd(sW), True)
+
+	return
 
 def display_mesh(meshes):
 	red = igl.eigen.MatrixXd([[1,0,0]])
