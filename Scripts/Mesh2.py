@@ -20,70 +20,16 @@ temp_png = os.path.join(os.getcwd(),"out.png")
 from Helpers import *
 
 class Mesh2:
-	def __init__(self, iVTU=None, ito_fix=[], ito_mov=[], modes_used=None, read_in=False, muscle=True):
-		self.V = np.array(iVTU[0])
-		self.T = iVTU[1]
-		print("MeshSize:")
-		print(self.V.shape, self.T.shape)
-		self.mov = list(set(ito_mov))
-
-		self.x0 = np.ravel(self.V)
-		self.g = np.zeros(len(self.V)*2)#+np.ravel(self.V)
-		self.u = iVTU[2] if iVTU[2] is not None else np.zeros(len(self.T))
-		self.u_clusters_element_map = None 
-		self.u_toggle = np.ones(len(self.T))
-
-		self.number_of_verts_fixed_on_element = None
-		self.P = None
-		self.A = None
-		self.C = None
-		self.N = None
-		self.BLOCK = None
-		self.ANTI_BLOCK = None
-		self.Mass = None
-
-		self.G = None
-		self.Q = None
-		self.Eigvals = None
-		self.z = None
+	def __init__(self, V, T, u, s_ind, r_ind, sW, emat, fix, mov):
+		self.V = V
+		self.T = T
+		self.FIX = fix
+		self.MOV = mov
+		self.elem_youngs = np.array([600000 if e<0.5 else 6e8 for e in emat])
+		self.elem_poisson = np.array([0.45 if e<0.5 else 0.45 for e in emat])
 		
-		t_size = len(self.T)
-		self.GF = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
-		self.GR = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
-		self.GS = sparse.diags([np.zeros(6*t_size-1), np.ones(6*t_size), np.zeros(6*t_size-1)],[-1,0,1]).tolil()
-		self.GU = sparse.diags([np.ones(6*t_size)],[0]).tolil()
-		self.GUSUt = sparse.diags([np.zeros(6*t_size-1), np.ones(6*t_size), np.zeros(6*t_size-1)],[-1,0,1]).tocsc()
+		self.x0 = np.ravel(self.V)
+		self.g = np.zeros(len(self.V)*2)
+		self.u = u
+		
 
-
-		# Modal analysis
-		if modes_used is None:
-			self.Q = None 
-			self.G = np.eye(2*len(self.V))
-		else:
-			self.Q =self.setupModes(modes_used=modes_used)
-			self.G = self.Q[:,:]
-		self.z = np.zeros(self.G.shape[1])
-
-		# Rotation clusterings
-		self.red_r = None
-		self.r_element_cluster_map = None
-		self.r_cluster_element_map = defaultdict(list)
-		self.RotationBLOCK = None
-		self.setupRotClusters(rclusters=False, nrc=nrc)
-
-		#S skinnings
-		self.red_s = None
-		self.s_handles_ind = None
-		self.sW = None
-		self.setupStrainSkinnings(shandles=False, nsh=nsh)
-		self.red_s_dot = np.zeros(len(self.red_s))
-
-		print("\n+ Setup GF")
-		self.getGlobalF(updateR = True, updateS = True, updateU=True)
-		print("- Done with GF")
-
-		Ax = self.getA().dot(self.x0)
-		self.areas = []
-		for t in range(len(self.T)):
-			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
-	

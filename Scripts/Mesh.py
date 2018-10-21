@@ -174,6 +174,76 @@ class Mesh:
 		for t in range(len(self.T)):
 			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
 
+	def init_muscle_bone(self, V, T, u, s_ind, r_ind, sW, emat, fix, mov, modes_used=None):
+		self.elem_youngs = np.array([600000 if e<0.5 else 6e8 for e in emat])
+		self.elem_poisson = np.array([0.45 if e<0.5 else 0.45 for e in emat])
+
+		self.V = V
+		self.T = T
+
+		self.fixed = fix
+		self.mov = mov
+		
+		self.x0 = np.ravel(self.V)
+		self.g = np.zeros(len(self.V)*2)
+		self.u = u
+
+		self.number_of_verts_fixed_on_element = None
+		self.P = None
+		self.A = None
+		self.C = None
+		self.N = None
+		self.BLOCK = None
+		self.ANTI_BLOCK = None
+		self.Mass = None
+
+		self.Eigvals = None
+		self.z = None
+		
+		t_size = len(self.T)
+		self.GF = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
+		self.GR = sparse.csc_matrix((6*len(self.T), 6*len(self.T)))
+		self.GS = sparse.diags([np.zeros(6*t_size-1), np.ones(6*t_size), np.zeros(6*t_size-1)],[-1,0,1]).tolil()
+		self.GU = sparse.diags([np.ones(6*t_size)],[0]).tolil()
+		
+		# U clusters
+		# self.u_clusters_element_map = u_clusters_element_map
+
+		# Modal analysis
+		if modes_used is not None and len(Q) != 0:
+			self.G = Q[:, :modes_used]
+		else:
+			self.G = np.eye(2*len(self.V))
+
+		self.z = np.zeros(self.G.shape[1])
+		
+		# Rotation clusterings
+		self.red_r = None
+		self.r_element_cluster_map = r_ind
+		self.r_cluster_element_map = defaultdict(list)
+		self.RotationBLOCK = None
+		self.setupRotClusters(rclusters=True, nrc=1)
+
+
+		#S skinnings
+		self.s_handles_ind = s_ind
+		self.sW = sW
+		self.red_s = np.kron(np.ones(len(self.s_handles_ind)), np.array([1,1,0]))
+		self.red_s_dot = np.zeros(len(self.red_s))
+
+		
+		print("\n+ Setup GF")
+		self.getGlobalF(updateR = True, updateS = True, updateU=True)
+		print("- Done with GF")
+	
+		Ax = self.getA().dot(self.x0)
+		self.areas = []
+		for t in range(len(self.T)):
+			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
+
+
+
+
 	def setupModes(self, modes_used=None):
 		A = self.getA()
 		P = self.getP()

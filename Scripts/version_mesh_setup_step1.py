@@ -20,9 +20,34 @@ FOLDER = "./MeshSetups/"+"TestArm/"
 
 print("Writing to folder: "+FOLDER)
 
-mesh1 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,0))
-mesh2 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(5,0))
-mesh3 = Helpers.torus_mesh(r1=2, r2=3, r3=5, step=1.0, offset=(5,1))
+mesh1 = {}
+mesh2 = {}
+mesh3 = {}
+
+# mesh1 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,0))
+# mesh2 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(5,0))
+# mesh3 = Helpers.torus_mesh(r1=2, r2=3, r3=5, step=1.0, offset=(5,1))
+# print(mesh2["V"])
+# print(mesh2["T"])
+# print("")
+
+ev1, et1 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"1mesh.obj", ev1, et1)
+mesh1["V"] = np.array(e2p(ev1)[:, :2])
+mesh1["T"] = np.array(e2p(et1))
+mesh1["u"] = np.zeros(len(mesh1["T"]))
+ev2, et2 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"2mesh.obj", ev2, et2)
+mesh2["V"] = np.array(e2p(ev2)[:, :2])
+mesh2["T"] = np.array(e2p(et2))
+print(mesh2["V"])
+print(mesh2["T"])
+mesh2["u"] = np.zeros(len(mesh2["T"]))
+ev3, et3 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"3mesh.obj", ev3, et3)
+mesh3["V"] = np.array(e2p(ev3)[:, :2])
+mesh3["T"] = np.array(e2p(et3))
+mesh3["u"] = np.zeros(len(mesh3["T"]))
 
 mesh1["isMuscle"]= False
 mesh1["Mov"] = []
@@ -37,8 +62,8 @@ mesh2["nsh"] = 1
 mesh3["isMuscle"]= True
 mesh3["Mov"] = [59]
 mesh3["Fix"] = [2]
-mesh3["nrc"] = 4
-mesh3["nsh"] = 4
+mesh3["nrc"] = 3
+mesh3["nsh"] = 3
 
 
 def getA(iV, iT):
@@ -113,8 +138,7 @@ def heat_method(iV, iT, iFix, iMov):
 	Mdiag = getVertexWiseMassDiags(iV, iT)[2*np.arange(Lc.shape[0])]
 	Mc = sparse.diags(Mdiag)
 
-
-	#Au = b st. Cu = Cu0
+	# #Au = b st. Cu = Cu0
 	u0 = np.zeros(len(iV))
 	fixed = list(set(iFix) - set(iMov))
 	u0[fixed] = 2
@@ -139,7 +163,6 @@ def heat_method(iV, iT, iFix, iMov):
 	eu = igl.eigen.MatrixXd(u)
 	eGu = (eG*eu).MapMatrix(len(iT), 3)
 	Gu = e2p(eGu)
-
 	gradu = np.zeros(len(iT))
 	for i in range(len(iT)):
 		e = iT[i]
@@ -341,7 +364,7 @@ def output_meshes(meshes):
 		if mesh["isMuscle"]:
 			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"V.dmat", igl.eigen.MatrixXd(np.array(mesh["V"])), True)
 			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"F.dmat", igl.eigen.MatrixXi(mesh["T"]), True)
-			igl.writeOBJ(FOLDER+"muscles/"+str(muscle_count)+"muscle.obj",igl.eigen.MatrixXd(np.array(mesh["V"])),igl.eigen.MatrixXi(mesh["T"]))
+			igl.writeOBJ(FOLDER+"muscles/"+str(muscle_count)+"muscle.obj",igl.eigen.MatrixXd(np.array(np.hstack((mesh["V"], np.zeros((len(mesh["V"]),1)))))),igl.eigen.MatrixXi(mesh["T"]))
 			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"u.dmat", igl.eigen.MatrixXd(np.array([mesh["u"]])), True)
 			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"e_to_c.dmat", igl.eigen.MatrixXi(mesh["e_to_c"]), True)
 			igl.writeDMAT(FOLDER+"muscles/"+str(muscle_count)+"s_handles.dmat", igl.eigen.MatrixXi(np.array([mesh["shandles_ind"]], dtype='int32')), True)
@@ -351,7 +374,7 @@ def output_meshes(meshes):
 		else:
 			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"V.dmat", igl.eigen.MatrixXd(np.array(mesh["V"])), True)
 			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"F.dmat", igl.eigen.MatrixXi(mesh["T"]), True)
-			igl.writeOBJ(FOLDER+"bones/"+str(bone_count)+"bone.obj",igl.eigen.MatrixXd(np.array(mesh["V"])),igl.eigen.MatrixXi(mesh["T"]))
+			igl.writeOBJ(FOLDER+"bones/"+str(bone_count)+"bone.obj",igl.eigen.MatrixXd(np.array(np.hstack((mesh["V"], np.zeros((len(mesh["V"]),1)))))),igl.eigen.MatrixXi(mesh["T"]))
 			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"u.dmat", igl.eigen.MatrixXd(np.array([mesh["u"]])), True)
 			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"e_to_c.dmat", igl.eigen.MatrixXi(mesh["e_to_c"]), True)
 			igl.writeDMAT(FOLDER+"bones/"+str(bone_count)+"s_handles.dmat", igl.eigen.MatrixXi(np.array([mesh["shandles_ind"]], dtype='int32')), True)
@@ -376,15 +399,17 @@ def output_meshes(meshes):
 	u = meshes[0]["u"]
 	sW_blocks = [meshes[0]["sW"]]
 	shandles = meshes[0]["shandles_ind"]
-	v = meshes[0]["V"].shape[0]
+	v = meshes[0]["T"].shape[0]
 	e_to_c = meshes[0]["e_to_c"]
 	tot_clusters = meshes[0]["nrc"]
+	elem_material = np.ones(meshes[0]["T"].shape[0])*meshes[0]["isMuscle"]
 	for im in range(1, len(meshes)):
 		u = np.concatenate((u, meshes[im]["u"]))
 		sW_blocks.append(meshes[im]["sW"])
 		shandles = np.concatenate((shandles, np.add(meshes[im]["shandles_ind"], v)))
 		e_to_c = np.concatenate((e_to_c, np.add(meshes[im]["e_to_c"], tot_clusters)))
-		v += meshes[im]["V"].shape[0]
+		elem_material = np.concatenate((elem_material, np.ones(meshes[im]["T"].shape[0])*meshes[im]["isMuscle"]))
+		v += meshes[im]["T"].shape[0]
 		tot_clusters += meshes[im]["nrc"]
 	
 	sW = scipy.linalg.block_diag(*sW_blocks)
@@ -394,7 +419,7 @@ def output_meshes(meshes):
 	igl.writeDMAT(FOLDER + "muscle_bone/" + "shandles.dmat", igl.eigen.MatrixXi(np.array(shandles, dtype="int32")), True)
 	igl.writeDMAT(FOLDER + "muscle_bone/" + "e_to_c.dmat", igl.eigen.MatrixXi(np.array(e_to_c, dtype="int32")), True)
 	igl.writeDMAT(FOLDER + "muscle_bone/" + "sW.dmat", igl.eigen.MatrixXd(sW), True)
-
+	igl.writeDMAT(FOLDER + "muscle_bone/" + "elem_material.dmat", igl.eigen.MatrixXd(elem_material), True)
 	return
 
 def display_mesh(meshes):
@@ -422,11 +447,6 @@ def display_mesh(meshes):
 			hit = igl.unproject_onto_mesh(coord, viewer.core.view * viewer.core.model,
 			viewer.core.proj, viewer.core.viewport, igl.eigen.MatrixXd(meshes[im]["V"]), igl.eigen.MatrixXi(meshes[im]["T"]), fid, bc)
 			ind = e2p(fid)[0][0]
-
-			if hit and btn==1:
-				print(im, ind)
-				meshes[im]["T"] = np.delete(meshes[im]["T"], (ind), axis=0)
-				return True
 			
 			if hit and btn==0:
 				# paint hit red

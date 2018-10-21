@@ -115,6 +115,7 @@ class Display:
 				for j in range(len(self.time_integrator.mesh.u_clusters_element_map[aaa-49])):
 					k = self.time_integrator.mesh.u_clusters_element_map[aaa-49][j]
 					Colors[k,:] = randc[aaa-49]
+			
 			Colors[np.array([self.time_integrator.mesh.s_handles_ind]),:] = np.array([0,0,0])
 			viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
 			print("Done drawing--------")
