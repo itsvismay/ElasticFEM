@@ -82,5 +82,5 @@ ti = Solvers.TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neo)
 disp = Display.Display(isolve = ti)
 
 # disp.headless()
-disp.display_statics()
+disp.display_dynamics()
 

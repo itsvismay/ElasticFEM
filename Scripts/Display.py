@@ -163,7 +163,7 @@ class Display:
 
 		def key_down(viewer,aaa, bbb):
 			viewer.data().clear()
-		
+
 			if(aaa==65):
 				# self.time_integrator.move_g()
 				# self.time_integrator.arap.iterate()
@@ -225,15 +225,14 @@ class Display:
 			viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
 	
 			#Write image
-			if(aaa==65):
+			if(aaa==65 or aaa==66):
 				viewer.core.draw_buffer(viewer.data(), False, tempR, tempG, tempB, tempA)
 				igl.png.writePNG(tempR, tempG, tempB, tempA, "frames/"+str(self.time_integrator.time)+".png")
-
 
 			return True
 
 		# for clicks in range(40):
-		key_down(viewer, 'b', 123)
+		# key_down(viewer, 'b', 123)
 		viewer.callback_key_down = key_down
 		viewer.core.is_animating = False
 		viewer.launch()
