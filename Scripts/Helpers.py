@@ -185,8 +185,7 @@ def heat_method(mesh):
 	eLc = igl.eigen.SparseMatrixd()
 	igl.cotmatrix(igl.eigen.MatrixXd(mesh.V), igl.eigen.MatrixXi(mesh.T), eLc)
 	Lc = e2p(eLc)
-	M = mesh.getMassMatrix()
-	Mdiag = M.diagonal()[2*np.arange(Lc.shape[0])]
+	Mdiag = mesh.getVertexWiseMassDiags()[2*np.arange(Lc.shape[0])]
 	Mc = sparse.diags(Mdiag)
 
 

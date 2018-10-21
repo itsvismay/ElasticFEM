@@ -29,8 +29,7 @@ class NeohookeanElastic:
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix()
 
 
-		self.mD = 0.5*(self.mesh.youngs*self.mesh.poissons)/((1.0+self.mesh.poissons)*(1.0-2.0*self.mesh.poissons))
-		self.mC = 0.5*self.mesh.youngs/(2.0*(1.0+self.mesh.poissons))
+		
 		self.dimensions = 2
 
 		self.grav = np.array([0, 981]) #cm/s^2
@@ -86,9 +85,7 @@ class NeohookeanElastic:
 
 		return fg
 
-	def WikipediaPrinStretchElementForce(self, a, rs, wx, wy, wo):
-		md = self.mD
-		mc = self.mC
+	def WikipediaPrinStretchElementForce(self, a, rs, wx, wy, wo, md, mc):
 		t_0 = np.dot(wx, rs)
 		t_1 = np.dot(wy, rs)
 		t_2 = np.log(((t_0 * t_1) - (np.dot(wo, rs) ** 2)))
@@ -106,16 +103,14 @@ class NeohookeanElastic:
 		force = np.zeros(len(self.mesh.red_s))
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 		for t in range(len(self.mesh.T)):
+			md = 0.5*(self.mesh.elem_youngs[t]*self.mesh.elem_poissons[t])/((1.0+self.mesh.elem_poissons[t])*(1.0-2.0*self.mesh.elem_poissons[t]))
+			mc = 0.5*self.mesh.elem_youngs[t]/(2.0*(1.0+self.mesh.elem_poissons[t]))
 			area = self.mesh.areas[t]
-			force += self.WikipediaPrinStretchElementForce(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:] )
+			force += self.WikipediaPrinStretchElementForce(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:], md, mc)
 
 		return force
 
-	def WikipediaPrinStretchElementEnergy(self, area, rs, wx, wy, wo):
-
-		md = self.mD
-		mc = self.mC
-
+	def WikipediaPrinStretchElementEnergy(self, area, rs, wx, wy, wo, md, mc):
 		#MATH version
 		#E = mc*((wx'*rs) + (wy'*rs)-2 - log(wx'*rs*wy'*rs - (wo'*rs)^2)) + (md/4)*(log(wx'*rs*wy'*rs - (wo'*rs)^2)^2)
 		
@@ -134,10 +129,11 @@ class NeohookeanElastic:
 		E = 0
 
 		Ax = self.mesh.getA().dot(self.mesh.x0)
-
 		for t in range(len(self.mesh.T)):
+			md = 0.5*(self.mesh.elem_youngs[t]*self.mesh.elem_poissons[t])/((1.0+self.mesh.elem_poissons[t])*(1.0-2.0*self.mesh.elem_poissons[t]))
+			mc = 0.5*self.mesh.elem_youngs[t]/(2.0*(1.0+self.mesh.elem_poissons[t]))
 			area = self.mesh.areas[t]
-			E += self.WikipediaPrinStretchElementEnergy(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:],self.mesh.sW[3*t+2,:])
+			E += self.WikipediaPrinStretchElementEnergy(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:],self.mesh.sW[3*t+2,:], md, mc)
 
 		return E
 

@@ -26,14 +26,15 @@ class Mesh:
 			return
 		#Get Variables setup
 		if muscle:
-			self.youngs = 600000 #g/cm*s^2
+			self.elem_youngs = [600000 for i in range(len(iVTU[1]))] #g/cm*s^2
+			self.elem_poissons = [0.45 for i in range(len(iVTU[1]))]
 			self.poissons = 0.45
 			self.fixed = list(set(ito_fix))#.union(set(ito_mov)))
-			nrc = 3
-			nsh = 3
+			nrc = 5
+			nsh = 5
 		else:
-			self.youngs = 6e8
-			self.poissons = 0.45
+			self.elem_youngs = [600000 for i in range(len(T))] #g/cm*s^2
+			self.elem_poissons = [0.45 for i in range(len(T))]
 			self.fixed = list(set(ito_fix).union(set(ito_mov)))
 			nrc = 1
 			nsh = 1
@@ -105,12 +106,12 @@ class Mesh:
 			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
 	
 	def init_from_file(self, V=None, T=None, u=None, Q=None, fix=None, mov=None, r_element_cluster_map=None, s_handles_ind=None, u_clusters_element_map=None, modes_used=None):
-		self.youngs = 60000
-		self.poissons = 0.45
+		self.elem_youngs = [600000 for i in range(len(T))]
+		self.elem_poissons = [0.45 for i in range(len(T))]
 		self.V = V
 		self.T = T
-		print("MeshSize:")
-		print(self.V.shape, self.T.shape)
+		# print("MeshSize:")
+		# print(self.V.shape, self.T.shape)
 		# self.fixed = np.hstack((fix[0,:],mov[0,:]))
 		self.fixed = fix[0,:]
 		self.mov = mov[0,:]
@@ -154,7 +155,7 @@ class Mesh:
 		self.r_element_cluster_map = r_element_cluster_map[:,0]
 		self.r_cluster_element_map = defaultdict(list)
 		self.RotationBLOCK = None
-		self.setupRotClusters(rclusters=True, nrc=1)
+		self.setupRotClusters(rclusters=True, nrc=2)
 
 
 		# self.readInRotClusters()
@@ -175,8 +176,9 @@ class Mesh:
 			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
 
 	def init_muscle_bone(self, V, T, u, s_ind, r_ind, sW, emat, fix, mov, modes_used=None):
-		self.elem_youngs = np.array([600000 if e<0.5 else 6e8 for e in emat])
-		self.elem_poisson = np.array([0.45 if e<0.5 else 0.45 for e in emat])
+		self.elem_youngs = np.array([600000 if e<0.5 else 6e5 for e in emat])
+		self.elem_poissons = np.array([0.45 if e<0.5 else 0.45 for e in emat])
+		self.u_toggle = emat
 
 		self.V = V
 		self.T = T
@@ -249,7 +251,7 @@ class Mesh:
 		P = self.getP()
 		B, AB = self.createBlockingMatrix()
 		C = AB.T
-		M = self.getMassMatrix()
+		M = sparse.diags(self.getVertexWiseMassDiags())
 		K = A.T.dot(P.T.dot(P.dot(A)))
 		eig, ev = general_eig_solve(A=K, B = M, modes=modes_used)
 
@@ -403,8 +405,9 @@ class Mesh:
 		for i in range(len(self.T)):			
 			self.r_cluster_element_map[self.r_element_cluster_map[i]].append(i)
 		
-		# if rclusters is True:
-		# 	nrc = len(self.r_cluster_element_map.keys())
+		if rclusters is True:
+			nrc = len(self.r_cluster_element_map.keys())
+		
 		self.red_r = np.zeros(nrc)
 	
 		self.RotationBLOCK = []
@@ -662,6 +665,22 @@ class Mesh:
 			print("Done with Mass matrix")
 			self.Mass = sparse.diags(mass_diag)
 		return self.Mass
+	def getVertexWiseMassDiags(self):
+		mass_diag = np.zeros(2*len(self.V))
+		density = 1000
+		for i in range(len(self.T)):
+			e = self.T[i]
+			undef_area = density*get_area(self.V[e[0]], self.V[e[1]], self.V[e[2]])
+			mass_diag[2*e[0]+0] += undef_area/3.0
+			mass_diag[2*e[0]+1] += undef_area/3.0
+
+			mass_diag[2*e[1]+0] += undef_area/3.0
+			mass_diag[2*e[1]+1] += undef_area/3.0
+
+			mass_diag[2*e[2]+0] += undef_area/3.0
+			mass_diag[2*e[2]+1] += undef_area/3.0
+
+		return mass_diag
 
 	def getStiffnessMatrix(self):
 		print("Getting stiffness matrix")

@@ -115,7 +115,12 @@ class Display:
 				for j in range(len(self.time_integrator.mesh.u_clusters_element_map[aaa-49])):
 					k = self.time_integrator.mesh.u_clusters_element_map[aaa-49][j]
 					Colors[k,:] = randc[aaa-49]
-			
+			elif aaa==66:
+				for i in range(len(self.time_integrator.mesh.T)):
+					if self.time_integrator.mesh.u_toggle[i]<0.5:
+						Colors[i,:] = black
+
+
 			Colors[np.array([self.time_integrator.mesh.s_handles_ind]),:] = np.array([0,0,0])
 			viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
 			print("Done drawing--------")
@@ -165,8 +170,8 @@ class Display:
 				self.time_integrator.dynamics()
 				self.time_integrator.time +=1
 
-			if(aaa>=49 and aaa<=57):
-				self.time_integrator.toggle_muscle_group(aaa-49)
+			# if(aaa>=49 and aaa<=57):
+			# 	self.time_integrator.toggle_muscle_group(aaa-49)
 
 			# DV, DT = self.time_integrator.mesh.getDiscontinuousVT()
 			RV, RT = self.time_integrator.mesh.getContinuousVT()

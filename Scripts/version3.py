@@ -16,12 +16,7 @@ from scipy.spatial import Delaunay
 # F = igl.eigen.MatrixXi()
 # igl.readOFF("./MeshSetups/3koval/3koval.off", V, F)
 # V1 = e2p(V)[:,:]
-# # print(V1.shape)
 # F1 = e2p(F)
-# # T = Delaunay(V1[:,:2], incremental=True).simplices[:-2,:]
-# # print(e2p(F)[:10,:])
-# # print(T[:10,:])
-# # exit()
 # VTU = [np.array(V1[:,:2]*100.0), F1]
 # mw = Meshwork.Preprocessing(_VT = VTU, modes_used=50)
 # mw.Fix = Meshwork.get_max(mw.V, a=0, eps=2e-1)

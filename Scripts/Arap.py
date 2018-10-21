@@ -97,7 +97,8 @@ class ARAP:
 
 	def Energy(self):
 		PAg = self.PA.dot(self.mesh.getg())
-		FPAx0 = self.constTimeFPAx() #self.mesh.GF.dot(self.PAx)
+		FPAx0 = self.constTimeFPAx()
+		# FPAx0 = self.mesh.GF.dot(self.PAx)
 		en = 0.5*(np.dot(PAg - FPAx0, PAg - FPAx0))
 		return en
 
@@ -954,8 +955,9 @@ class ARAP:
 		return 1
 
 	def itT(self):
-		FPAx = self.constTimeFPAx() #self.mesh.GF.dot(self.PAx)
-		
+		FPAx = self.constTimeFPAx() 
+		# FPAx = self.mesh.GF.dot(self.PAx)
+	
 		deltaAbtg = self.ANTI_BLOCK.T.dot(self.mesh.g)
 
 		GtAtPtFPAx = self.PAG.T.dot(FPAx)
@@ -996,7 +998,6 @@ class ARAP:
 			USUPAx = self.constItRTerms[i].dot(self.mesh.red_s)
 			self.USUtPAx_E.append(USUPAx)
 
-			
 		Eg0 = self.dEdg()
 		for i in range(its):
 			g = self.itT()

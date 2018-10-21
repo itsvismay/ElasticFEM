@@ -137,7 +137,7 @@ class Preprocessing:
 		to_fix = self.Fix
 		to_mov = self.Mov
 
-		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, read_in= False, modes_used=modes, muscle=muscle)
+		self.mesh = Mesh([self.V, self.T, self.U], ito_fix = to_fix, ito_mov=to_mov, read_in= False, modes_used=modes)
 		self.mesh.u, self.uvec, self.eGu, self.UVECS = heat_method(self.mesh)
 		self.mesh.getGlobalF(updateR=False, updateS=False, updateU=True)
 		CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
@@ -148,9 +148,9 @@ class Preprocessing:
 
 	def getMesh(self, name=None, modes_used=None, muscle=True):
 		if name is not None:
-			self.read_mesh_setup(name = name, modes_used=modes_used, muscle=muscle)
+			self.read_mesh_setup(name = name, modes_used=modes_used)
 		else:
-			self.createMesh(modes=modes_used, muscle=muscle)
+			self.createMesh(modes=modes_used)
 		return self.mesh
 
 	def display(self):
@@ -249,9 +249,10 @@ class Preprocessing:
 
 			if not self.mesh is None:
 				CAg = self.mesh.getC().dot(self.mesh.getA().dot(self.mesh.x0))
+				print(self.mesh.u)
 				for i in range(len(self.T)):
 					C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-					U = np.multiply(self.mesh.getU(i), np.array([[0.3],[0.3]])) + C
+					U = np.multiply(self.mesh.getU(i), np.array([[0.25],[0.25]])) + C
 					viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 
 		def pre_draw(viewer):
@@ -259,15 +260,11 @@ class Preprocessing:
 			for i in range(len(self.Fix)):
 				fixed_pts.append(self.V[self.Fix[i]])
 			viewer.data().add_points(igl.eigen.MatrixXd(np.array(fixed_pts)), red)
+
 			mov_pts = []
 			for i in range(len(self.Mov)):
 				mov_pts.append(self.V[self.Mov[i]])
 			viewer.data().add_points(igl.eigen.MatrixXd(np.array(mov_pts)), green)
-			# shit = []
-			# shit.append(self.V[96])
-			# shit.append(self.V[55])
-			# shit.append(self.V[56])
-			# shit.append(self.V[85])
 			
 			# viewer.data().add_points(igl.eigen.MatrixXd(np.array(shit)), purple)
 

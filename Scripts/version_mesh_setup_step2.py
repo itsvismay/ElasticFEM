@@ -9,6 +9,9 @@ from iglhelpers import *
 from scipy.spatial import Delaunay
 import random
 from Mesh import Mesh
+import Arap
+import Solvers
+import Neo
 
 FOLDER = "./MeshSetups/"+"TestArm/"
 print("reading from: "+FOLDER)
@@ -41,8 +44,17 @@ elem_material = e2p(emat)[:, 0]
 mesh = Mesh(read_in = True)
 mesh.init_muscle_bone(V, T, u, s_ind, r_ind, sW, elem_material,[0,1,10], [])
 
+#ARAP setup
+arap = Arap.ARAP(imesh=mesh, filen="snapshots/")
 
-def display_mesh(mesh):
+#Elasticity setup
+neo = Neo.NeohookeanElastic(imesh = mesh)
+
+#Solver setup
+ti = Solvers.TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neo)
+
+
+def display_mesh():
 	red = igl.eigen.MatrixXd([[1,0,0]])
 	purple = igl.eigen.MatrixXd([[1,0,1]])
 	green = igl.eigen.MatrixXd([[0,1,0]])
@@ -83,45 +95,49 @@ def display_mesh(mesh):
 
 	def key_down(viewer,aaa, bbb):
 		viewer.data().clear()
-		RV, RT = mesh.getContinuousVT()
+		if(aaa==65):
+			# ti.move_g()
+			ti.arap.iterate()
+			# ti.static_solve()
+			ti.time +=1
+
+		RV, RT = ti.mesh.getContinuousVT()
 		V2 = igl.eigen.MatrixXd(RV)
 		T2 = igl.eigen.MatrixXi(RT)
 		viewer.data().set_mesh(V2, T2)
 		
 
 		MOV = []
-		disp_g = mesh.getg()
-		for i in range(len(mesh.mov)):
-			MOV.append(disp_g[2*mesh.mov[i]:2*mesh.mov[i]+2])
+		disp_g = ti.mesh.getg()
+		for i in range(len(ti.mesh.mov)):
+			MOV.append(disp_g[2*ti.mesh.mov[i]:2*ti.mesh.mov[i]+2])
 		viewer.data().add_points(igl.eigen.MatrixXd(np.array(MOV)), green)
 
 
 		FIXED = []
-		disp_g = mesh.getg()
-		for i in range(len(mesh.fixed)):
-			FIXED.append(disp_g[2*mesh.fixed[i]:2*mesh.fixed[i]+2])
+		disp_g = ti.mesh.getg()
+		for i in range(len(ti.mesh.fixed)):
+			FIXED.append(disp_g[2*ti.mesh.fixed[i]:2*ti.mesh.fixed[i]+2])
 		viewer.data().add_points(igl.eigen.MatrixXd(np.array(FIXED)), red)
 		
-		CAx0 = mesh.getC().dot(mesh.getA().dot(mesh.x0))
-		for i in range(len(mesh.T)):
+		CAx0 = ti.mesh.getC().dot(ti.mesh.getA().dot(ti.mesh.x0))
+		for i in range(len(ti.mesh.T)):
 			c = np.matrix([CAx0[6*i:6*i+2],CAx0[6*i:6*i+2]])
-			alpha = mesh.u[i]
+			alpha = ti.mesh.u[i]
 			cU, sU = np.cos(alpha), np.sin(alpha)
 			U = np.array(((cU,-sU), (sU, cU)))
 			scaledU = np.multiply(U, np.array([[.1],[.1]])) + c
 			viewer.data().add_edges(igl.eigen.MatrixXd(c[0,:]), igl.eigen.MatrixXd(scaledU[0,:]), black)
-		Colors = np.ones(mesh.T.shape)
+		Colors = np.ones(ti.mesh.T.shape)
 
-		for i in range(len(mesh.T)): 
+		for i in range(len(ti.mesh.T)): 
 			color = black
-			Colors[i,:] = randc[mesh.r_element_cluster_map[i]]
+			Colors[i,:] = randc[ti.mesh.r_element_cluster_map[i]]
 		
-		Colors[np.array([mesh.s_handles_ind]),:] = np.array([0,0,0])
+		Colors[np.array([ti.mesh.s_handles_ind]),:] = np.array([0,0,0])
 		viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
 
-
-
-		
+	
 	key_down(viewer, "b", 123)
 	viewer.callback_mouse_down = mouse_down
 	viewer.callback_key_down = key_down
@@ -129,7 +145,7 @@ def display_mesh(mesh):
 	viewer.launch()
 
 
-display_mesh(mesh)
+display_mesh()
 
 
 
