@@ -175,7 +175,7 @@ class Mesh:
 		for t in range(len(self.T)):
 			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
 
-	def init_muscle_bone(self, V, T, u, s_ind, r_ind, sW, emat, fix, mov, modes_used=None):
+	def init_muscle_bone(self, V, T, u, s_ind, r_ind, sW, emat, fix, mov, modes_used):
 		self.elem_youngs = np.array([600000 if e<0.5 else 6e5 for e in emat])
 		self.elem_poissons = np.array([0.45 if e<0.5 else 0.45 for e in emat])
 		self.u_toggle = emat
@@ -210,10 +210,13 @@ class Mesh:
 		
 		# U clusters
 		# self.u_clusters_element_map = u_clusters_element_map
-
+		Q = []
 		# Modal analysis
 		if modes_used is not None and len(Q) != 0:
 			self.G = Q[:, :modes_used]
+		elif modes_used is not None:
+			self.Q =self.setupModes(modes_used=modes_used)
+			self.G = self.Q[:,:]
 		else:
 			self.G = np.eye(2*len(self.V))
 
@@ -242,9 +245,6 @@ class Mesh:
 		self.areas = []
 		for t in range(len(self.T)):
 			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
-
-
-
 
 	def setupModes(self, modes_used=None):
 		A = self.getA()

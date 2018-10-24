@@ -64,17 +64,17 @@ class TimeIntegrator:
 		# self.time += 1
 
 	def move_g(self):
-		if(self.time%self.add_on == 0):
-			if(self.add_on==25):
-				exit()
-			self.adder *= -1
-			self.add_on = 25
+		# if(self.time%self.add_on == 0):
+		# 	if(self.add_on==25):
+		# 		exit()
+		# 	self.adder *= -1
+		# 	self.add_on = 25
 
 		# self.mesh.red_s[6] += 0.2
 		# print(self.mesh.red_s)
 		# for i in range(len(self.mesh.mov)):
 			# self.mesh.g[2*self.mesh.fixed[i]+1] += self.adder
-			# self.mesh.g[2*self.mov[i]+1] += self.adder
+			# self.mesh.z[2*self.mesh.mov[i]+1] += self.adder
 		# print("moved")
 		# self.mesh.red_s[3*np.arange(len(self.mesh.red_s)/3)+1] += 0.2
 		# self.mesh.red_s[4] += 0.2

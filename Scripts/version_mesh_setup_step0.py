@@ -22,8 +22,11 @@ print("Writing to folder: "+FOLDER)
 
 
 mesh1 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,0))
-mesh2 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(5,0))
-mesh3 = Helpers.torus_mesh(r1=2, r2=3, r3=5, step=1.0, offset=(5,1))
+mesh3 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(2,1))
+mesh2 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,6))
+mesh4 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(-1,1))
+
+# mesh3 = Helpers.torus_mesh(r1=2, r2=3, r3=5, step=1.0, offset=(5,1))
 
 
 def output_meshes(meshes):
@@ -85,7 +88,7 @@ def display_mesh(meshes):
 	viewer.launch()
 
 
-meshes = [mesh1, mesh2, mesh3]
+meshes = [mesh1, mesh2, mesh3, mesh4]
 display_mesh(meshes)
 
 

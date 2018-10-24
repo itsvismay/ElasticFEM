@@ -52,6 +52,22 @@ class Display:
 			return False
 
 		def mouse_down(viewer, btn, bbb):
+			bc = igl.eigen.MatrixXd()
+			fid = igl.eigen.MatrixXi(np.array([-1]))
+			coord = igl.eigen.MatrixXd([viewer.current_mouse_x, viewer.core.viewport[3] - viewer.current_mouse_y])
+			hit = igl.unproject_onto_mesh(coord, viewer.core.view * viewer.core.model,
+			viewer.core.proj, viewer.core.viewport, igl.eigen.MatrixXd(self.time_integrator.mesh.V), igl.eigen.MatrixXi(self.time_integrator.mesh.T), fid, bc)
+			ind = e2p(fid)[0][0]
+			print(ind)
+			if hit and btn==0:
+				# paint hit red
+				print("fix",self.time_integrator.mesh.T[ind][np.argmax(bc)])
+				return True
+			
+			if hit and btn==2:
+				# paint hit red
+				print("mov",self.time_integrator.mesh.T[ind][np.argmax(bc)])
+				return True
 			return False
 
 		def key_down(viewer,aaa, bbb):
@@ -59,7 +75,12 @@ class Display:
 		
 			if(aaa==65):
 				# self.time_integrator.move_g()
+				# print(self.time_integrator.arap.Energy())
 				# self.time_integrator.arap.iterate()
+				# print(self.time_integrator.arap.Energy())
+				print(self.time_integrator.mesh.red_s)
+				# print(self.time_integrator.mesh.red_r)
+				# print(self.time_integrator.mesh.z)
 				self.time_integrator.static_solve()
 				self.time_integrator.time +=1
 

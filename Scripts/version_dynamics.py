@@ -65,7 +65,7 @@ r_ind = e2p(er_ind)[:, 0]
 sW = e2p(esW)
 elem_material = e2p(emat)[:, 0]
 mesh = Mesh.Mesh(read_in = True)
-mesh.init_muscle_bone(V, T, u, s_ind, r_ind, sW, elem_material,[0,1,10], [17])
+mesh.init_muscle_bone(V, T, u, s_ind, r_ind, sW, elem_material,[0,1], [], modes_used=None)
 
 
 
@@ -78,9 +78,9 @@ neo = Neo.NeohookeanElastic(imesh = mesh)
 #Solver setup
 ti = Solvers.TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neo)
 
-#Running
+# #Running
 disp = Display.Display(isolve = ti)
 
-# disp.headless()
-disp.display_dynamics()
+
+disp.display_statics()
 

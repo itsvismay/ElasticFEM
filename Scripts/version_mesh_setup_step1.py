@@ -23,6 +23,7 @@ print("Writing to folder: "+FOLDER)
 mesh1 = {}
 mesh2 = {}
 mesh3 = {}
+mesh4 = {}
 
 # mesh1 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,0))
 # mesh2 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(5,0))
@@ -43,6 +44,11 @@ mesh2["T"] = np.array(e2p(et2))
 print(mesh2["V"])
 print(mesh2["T"])
 mesh2["u"] = np.zeros(len(mesh2["T"]))
+ev4, et4 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"4mesh.obj", ev4, et4)
+mesh4["V"] = np.array(e2p(ev4)[:, :2])
+mesh4["T"] = np.array(e2p(et4))
+mesh4["u"] = np.zeros(len(mesh4["T"]))
 ev3, et3 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
 igl.readOBJ(FOLDER+"3mesh.obj", ev3, et3)
 mesh3["V"] = np.array(e2p(ev3)[:, :2])
@@ -59,11 +65,16 @@ mesh2["Mov"] = []
 mesh2["Fix"] = []
 mesh2["nrc"] = 1
 mesh2["nsh"] = 1
+mesh4["isMuscle"]= False
+mesh4["Mov"] = []
+mesh4["Fix"] = []
+mesh4["nrc"] = 1
+mesh4["nsh"] = 1
 mesh3["isMuscle"]= True
-mesh3["Mov"] = [59]
-mesh3["Fix"] = [2]
-mesh3["nrc"] = 3
-mesh3["nsh"] = 3
+mesh3["Mov"] = Helpers.get_max(mesh3["V"], a=1, eps=1e-2)
+mesh3["Fix"] = Helpers.get_min(mesh3["V"], a=1, eps=1e-2)
+mesh3["nrc"] = 2
+mesh3["nsh"] = 2
 
 
 def getA(iV, iT):
@@ -344,7 +355,8 @@ def setup_meshes(meshes):
 			mesh["P"] = getP(mesh["T"])
 			mesh["e_to_c"] = np.zeros(len(mesh["T"]), dtype='int32')
 			mesh["shandles_ind"] = np.array([0])
-			mesh["sW"] = bbw_skinning_matrix(mesh, handles = mesh["shandles_ind"])
+			mesh["sW"] = np.kron(np.ones((len(mesh["T"]), 1)), np.eye(3))#bbw_skinning_matrix(mesh, handles = mesh["shandles_ind"])
+			print(mesh["sW"])
 
 def output_meshes(meshes):
 	#Output all individually.
@@ -520,7 +532,7 @@ def display_mesh(meshes):
 	viewer.launch()
 
 
-meshes = [mesh1, mesh2, mesh3]
+meshes = [mesh1, mesh2, mesh4, mesh3]
 display_mesh(meshes)
 
 
