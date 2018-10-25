@@ -78,7 +78,6 @@ class Display:
 				# print(self.time_integrator.arap.Energy())
 				# self.time_integrator.arap.iterate()
 				# print(self.time_integrator.arap.Energy())
-				print(self.time_integrator.mesh.red_s)
 				# print(self.time_integrator.mesh.red_r)
 				# print(self.time_integrator.mesh.z)
 				self.time_integrator.static_solve()
@@ -94,10 +93,10 @@ class Display:
 			T2 = igl.eigen.MatrixXi(RT)
 			viewer.data().set_mesh(V2, T2)
 
-			for e in DT:
-				P = DV[e]
-				DP = np.array([P[1], P[2], P[0]])
-				viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
+			# for e in DT:
+			# 	P = DV[e]
+			# 	DP = np.array([P[1], P[2], P[0]])
+			# 	viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
 
 
 			MOV = []

@@ -505,8 +505,9 @@ class Mesh:
 		if(self.P is None):
 			sub_P = np.kron(np.matrix([[2, -1, -1], [-1, 2, -1], [-1, -1, 2]]), np.eye(2))/3.0
 			# sub_P = np.kron(np.matrix([[-1, 1, 0], [0, -1, 1], [1, 0, -1]]), np.eye(2))
-			self.P = sparse.kron(sparse.eye(len(self.T)), sub_P).tocsc()
-
+			# self.P = sparse.kron(sparse.eye(len(self.T)), sub_P).tocsc()
+			self.P = sparse.kron(sparse.diags((self.u_toggle-2))*-1, sub_P).tocsc()
+			# sparse.diags(self.u_toggle*10+1)
 		return self.P
 
 	def getA(self):

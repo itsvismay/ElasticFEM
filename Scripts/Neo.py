@@ -103,10 +103,11 @@ class NeohookeanElastic:
 		force = np.zeros(len(self.mesh.red_s))
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 		for t in range(len(self.mesh.T)):
-			md = 0.5*(self.mesh.elem_youngs[t]*self.mesh.elem_poissons[t])/((1.0+self.mesh.elem_poissons[t])*(1.0-2.0*self.mesh.elem_poissons[t]))
-			mc = 0.5*self.mesh.elem_youngs[t]/(2.0*(1.0+self.mesh.elem_poissons[t]))
-			area = self.mesh.areas[t]
-			force += self.WikipediaPrinStretchElementForce(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:], md, mc)
+			if self.mesh.u_toggle[t]>0.5:
+				md = 0.5*(self.mesh.elem_youngs[t]*self.mesh.elem_poissons[t])/((1.0+self.mesh.elem_poissons[t])*(1.0-2.0*self.mesh.elem_poissons[t]))
+				mc = 0.5*self.mesh.elem_youngs[t]/(2.0*(1.0+self.mesh.elem_poissons[t]))
+				area = self.mesh.areas[t]
+				force += self.WikipediaPrinStretchElementForce(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:], md, mc)
 
 		return force
 
@@ -130,10 +131,11 @@ class NeohookeanElastic:
 
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 		for t in range(len(self.mesh.T)):
-			md = 0.5*(self.mesh.elem_youngs[t]*self.mesh.elem_poissons[t])/((1.0+self.mesh.elem_poissons[t])*(1.0-2.0*self.mesh.elem_poissons[t]))
-			mc = 0.5*self.mesh.elem_youngs[t]/(2.0*(1.0+self.mesh.elem_poissons[t]))
-			area = self.mesh.areas[t]
-			E += self.WikipediaPrinStretchElementEnergy(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:],self.mesh.sW[3*t+2,:], md, mc)
+			if self.mesh.u_toggle[t]>0.5:
+				md = 0.5*(self.mesh.elem_youngs[t]*self.mesh.elem_poissons[t])/((1.0+self.mesh.elem_poissons[t])*(1.0-2.0*self.mesh.elem_poissons[t]))
+				mc = 0.5*self.mesh.elem_youngs[t]/(2.0*(1.0+self.mesh.elem_poissons[t]))
+				area = self.mesh.areas[t]
+				E += self.WikipediaPrinStretchElementEnergy(area, _rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:],self.mesh.sW[3*t+2,:], md, mc)
 
 		return E
 

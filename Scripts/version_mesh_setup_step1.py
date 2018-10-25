@@ -540,7 +540,7 @@ def display_mesh(meshes):
 	viewer.launch()
 
 
-meshes = [mesh1, mesh2, mesh3, mesh4]
+meshes = [mesh1, mesh2, mesh4, mesh3]
 display_mesh(meshes)
 
 
