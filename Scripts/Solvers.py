@@ -28,7 +28,22 @@ class TimeIntegrator:
 		self.elastic = ielastic
 		self.adder = .3
 		# self.set_random_strain()
-		self.bnds = [(None, None) if i%3==2 else (1e-5, 1e6) for i in range(len(self.mesh.red_s)) ]
+		self.bnds = []
+		if (len(self.mesh.shandle_muscle) == 0):
+			self.bnds = [(None, None) if i%3==2 else (1e-5, 1e6) for i in range(len(self.mesh.red_s)) ]
+		else:
+			for i in range(len(self.mesh.shandle_muscle)):
+				if self.mesh.shandle_muscle[i]<0.5:
+					#bone
+					self.bnds.append((1-1e-3, 1+1e-3))
+					self.bnds.append((1-1e-3, 1+1e-3))
+					self.bnds.append((-1e-3, 1e-3))
+				if self.mesh.shandle_muscle[i]>0.5:
+					#muscle
+					self.bnds.append((1e-5, 1e6))
+					self.bnds.append((1e-5, 1e6))
+					self.bnds.append((None, None))
+
 		self.add_on = 10
 
 	def constTimeMassJ(self, idrds):

@@ -22,9 +22,12 @@ print("Writing to folder: "+FOLDER)
 
 
 mesh1 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,0))
-mesh3 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(2,1))
+# mesh1["V"][:,0] = mesh1["V"][:,0]*5
+mesh3 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(4,1))
 mesh2 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,6))
+# mesh2["V"][:,0] = mesh2["V"][:,0]*5
 mesh4 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(-1,1))
+# mesh4["V"][:,1] = mesh4["V"][:,1]*5 + 1
 
 # mesh3 = Helpers.torus_mesh(r1=2, r2=3, r3=5, step=1.0, offset=(5,1))
 

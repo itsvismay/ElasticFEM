@@ -38,7 +38,7 @@ class Mesh:
 			self.fixed = list(set(ito_fix).union(set(ito_mov)))
 			nrc = 1
 			nsh = 1
-
+		self.shandle_muscle = []
 		self.V = np.array(iVTU[0])
 		self.T = iVTU[1]
 		print("MeshSize:")
@@ -110,6 +110,7 @@ class Mesh:
 		self.elem_poissons = [0.45 for i in range(len(T))]
 		self.V = V
 		self.T = T
+		self.shandle_muscle = []
 		# print("MeshSize:")
 		# print(self.V.shape, self.T.shape)
 		# self.fixed = np.hstack((fix[0,:],mov[0,:]))
@@ -175,10 +176,11 @@ class Mesh:
 		for t in range(len(self.T)):
 			self.areas.append(get_area(Ax[6*t+0:6*t+2], Ax[6*t+2:6*t+4], Ax[6*t+4:6*t+6]))
 
-	def init_muscle_bone(self, V, T, u, s_ind, r_ind, sW, emat, fix, mov, modes_used):
+	def init_muscle_bone(self, V, T, u, s_ind, r_ind, sW, emat, fix, mov, shandle_muscle, modes_used):
 		self.elem_youngs = np.array([600000 if e<0.5 else 6e5 for e in emat])
 		self.elem_poissons = np.array([0.45 if e<0.5 else 0.45 for e in emat])
 		self.u_toggle = emat
+		self.shandle_muscle = shandle_muscle
 
 		self.V = V
 		self.T = T

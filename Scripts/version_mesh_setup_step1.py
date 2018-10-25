@@ -342,7 +342,7 @@ def setup_meshes(meshes):
 			mesh["P"] = getP(mesh["T"])
 			mesh["M"] = sparse.diags(getVertexWiseMassDiags(mesh["V"], mesh["T"]))
 			mesh["BLOCK"], mesh["ANTI_BLOCK"] = getBlockingMatrices(mesh["V"], mesh["Fix"]) 
-			mesh["u"] = heat_method(mesh["V"], mesh["T"], mesh["Fix"], mesh["Mov"])
+			mesh["u"] = np.ones(len(mesh["T"]))*np.pi/2#heat_method(mesh["V"], mesh["T"], mesh["Fix"], mesh["Mov"])
 			mesh["G"] = modal_analysis(mesh)
 			mesh["e_to_c"] = rotation_clusters(mesh, nrc=mesh["nrc"])
 			mesh["shandles_ind"] = skinning_handles(mesh, nsh = mesh["nsh"])
@@ -356,7 +356,6 @@ def setup_meshes(meshes):
 			mesh["e_to_c"] = np.zeros(len(mesh["T"]), dtype='int32')
 			mesh["shandles_ind"] = np.array([0])
 			mesh["sW"] = np.kron(np.ones((len(mesh["T"]), 1)), np.eye(3))#bbw_skinning_matrix(mesh, handles = mesh["shandles_ind"])
-			print(mesh["sW"])
 
 def output_meshes(meshes):
 	#Output all individually.
@@ -415,6 +414,10 @@ def output_meshes(meshes):
 	e_to_c = meshes[0]["e_to_c"]
 	tot_clusters = meshes[0]["nrc"]
 	elem_material = np.ones(meshes[0]["T"].shape[0])*meshes[0]["isMuscle"]
+	shandle_for_muscle = np.ones(meshes[0]["nsh"])
+	if not meshes[0]["isMuscle"]:
+		shandle_for_muscle*=0
+
 	for im in range(1, len(meshes)):
 		u = np.concatenate((u, meshes[im]["u"]))
 		sW_blocks.append(meshes[im]["sW"])
@@ -423,6 +426,10 @@ def output_meshes(meshes):
 		elem_material = np.concatenate((elem_material, np.ones(meshes[im]["T"].shape[0])*meshes[im]["isMuscle"]))
 		v += meshes[im]["T"].shape[0]
 		tot_clusters += meshes[im]["nrc"]
+		if meshes[im]["isMuscle"]:
+			shandle_for_muscle = np.concatenate((shandle_for_muscle, np.ones(meshes[im]["nsh"])))
+		else:
+			shandle_for_muscle = np.concatenate((shandle_for_muscle, np.zeros(meshes[im]["nsh"])))
 	
 	sW = scipy.linalg.block_diag(*sW_blocks)
 
@@ -432,6 +439,7 @@ def output_meshes(meshes):
 	igl.writeDMAT(FOLDER + "muscle_bone/" + "e_to_c.dmat", igl.eigen.MatrixXi(np.array(e_to_c, dtype="int32")), True)
 	igl.writeDMAT(FOLDER + "muscle_bone/" + "sW.dmat", igl.eigen.MatrixXd(sW), True)
 	igl.writeDMAT(FOLDER + "muscle_bone/" + "elem_material.dmat", igl.eigen.MatrixXd(elem_material), True)
+	igl.writeDMAT(FOLDER + "muscle_bone/" + "is_shandle_for_muscle.dmat", igl.eigen.MatrixXd(shandle_for_muscle), True)
 	return
 
 def display_mesh(meshes):
@@ -532,7 +540,7 @@ def display_mesh(meshes):
 	viewer.launch()
 
 
-meshes = [mesh1, mesh2, mesh4, mesh3]
+meshes = [mesh1, mesh2, mesh3, mesh4]
 display_mesh(meshes)
 
 

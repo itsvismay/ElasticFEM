@@ -88,16 +88,16 @@ class Display:
 				self.time_integrator.toggle_muscle_group(aaa-49)
 
 			print("DRAWING--------")
-			# DV, DT = self.time_integrator.mesh.getDiscontinuousVT()
+			DV, DT = self.time_integrator.mesh.getDiscontinuousVT()
 			RV, RT = self.time_integrator.mesh.getContinuousVT()
 			V2 = igl.eigen.MatrixXd(RV)
 			T2 = igl.eigen.MatrixXi(RT)
 			viewer.data().set_mesh(V2, T2)
 
-			# for e in DT:
-			# 	P = DV[e]
-			# 	DP = np.array([P[1], P[2], P[0]])
-			# 	viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
+			for e in DT:
+				P = DV[e]
+				DP = np.array([P[1], P[2], P[0]])
+				viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
 
 
 			MOV = []
