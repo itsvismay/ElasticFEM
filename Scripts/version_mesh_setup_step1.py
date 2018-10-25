@@ -73,8 +73,8 @@ mesh4["nsh"] = 1
 mesh3["isMuscle"]= True
 mesh3["Mov"] = Helpers.get_max(mesh3["V"], a=1, eps=1e-2)
 mesh3["Fix"] = Helpers.get_min(mesh3["V"], a=1, eps=1e-2)
-mesh3["nrc"] = 2
-mesh3["nsh"] = 2
+mesh3["nrc"] = 3
+mesh3["nsh"] = 3
 
 
 def getA(iV, iT):

@@ -118,7 +118,7 @@ class Display:
 			for i in range(len(self.time_integrator.mesh.T)):
 				S = self.time_integrator.mesh.getS(i)
 				C = np.matrix([CAg[6*i:6*i+2],CAg[6*i:6*i+2]])
-				U = 0.3*self.time_integrator.mesh.getU(i)+C
+				U = 0.1*self.time_integrator.mesh.getU(i)+C
 				viewer.data().add_edges(igl.eigen.MatrixXd(C[0,:]), igl.eigen.MatrixXd(U[0,:]), black)
 
 			Colors = np.ones(self.time_integrator.mesh.T.shape)
@@ -141,7 +141,7 @@ class Display:
 						Colors[i,:] = black
 
 
-			Colors[np.array([self.time_integrator.mesh.s_handles_ind]),:] = np.array([0,0,0])
+			Colors[np.array([self.time_integrator.mesh.s_handles_ind]),:] = np.array([1,0.5,1])
 			viewer.data().set_colors(igl.eigen.MatrixXd(np.array(Colors)))
 			print("Done drawing--------")
 			#snapshot

@@ -28,21 +28,23 @@ class TimeIntegrator:
 		self.elastic = ielastic
 		self.adder = .3
 		# self.set_random_strain()
-		self.bnds = []
+		self.s_bnds = []
 		if (len(self.mesh.shandle_muscle) == 0):
-			self.bnds = [(None, None) if i%3==2 else (1e-5, 1e6) for i in range(len(self.mesh.red_s)) ]
+			self.s_bnds = [(None, None) if i%3==2 else (1e-5, 1e6) for i in range(len(self.mesh.red_s)) ]
 		else:
 			for i in range(len(self.mesh.shandle_muscle)):
 				if self.mesh.shandle_muscle[i]<0.5:
 					#bone
-					self.bnds.append((1-1e-3, 1+1e-3))
-					self.bnds.append((1-1e-3, 1+1e-3))
-					self.bnds.append((-1e-3, 1e-3))
+					self.s_bnds.append((1-1e-3, 1+1e-3))
+					self.s_bnds.append((1-1e-3, 1+1e-3))
+					self.s_bnds.append((-1e-3, 1e-3))
 				if self.mesh.shandle_muscle[i]>0.5:
 					#muscle
-					self.bnds.append((1e-5, 1e6))
-					self.bnds.append((1e-5, 1e6))
-					self.bnds.append((None, None))
+					self.s_bnds.append((1e-5, 1e6))
+					self.s_bnds.append((1e-5, 1e6))
+					self.s_bnds.append((None, None))
+
+		self.s_dot_bnds = []
 
 		self.add_on = 10
 
@@ -99,7 +101,7 @@ class TimeIntegrator:
 		print("Static Solve")
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 
-		alpha1 =1e5
+		alpha1 =1e3
 		alpha2 =1e1
 
 		def energy(s):
@@ -130,7 +132,7 @@ class TimeIntegrator:
 			J_elastic = self.elastic.PEGradient(irs = self.mesh.red_s, idgds=dgds)
 			return  alpha1*J_arap + alpha2*J_elastic
 
-		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
+		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.s_bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
 
 		for i in range(len(res.x)):
 			self.mesh.red_s[i] = res.x[i]
