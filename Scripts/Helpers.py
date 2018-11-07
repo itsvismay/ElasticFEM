@@ -10,21 +10,20 @@ import pyigl as igl
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.3f}'.format(x)})
 from iglhelpers import *
 
-def general_eig_solve(A, B=None, modes=5):
+def general_eig_solve(A, B=None, modes=None):
 	#pass in A = K matrix, and B = M matrix
 	print("+General Eig Solve")
-	if(A.shape[0]<= modes):
-		print("Too many modes")
-		exit()
-	# A1 = A.toarray()
-	# B1 = B.toarray()
-	# e, ev = scipy.linalg.eigh(A1, b=B1, eigvals=(0,modes))
-	e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), k = modes, which="SM")
+	print(A.shape, B.shape)
+	if modes is None:
+		e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), which="SM")
+	else:
+		if(A.shape[0]<= modes):
+			print("Too many modes")
+			exit()
+		e, ev = scipy.sparse.linalg.eigsh(A.tocsc(), M=B.tocsc(), k=modes+2, which="SM")
 
-	eigvals = e[0:modes]
-	eigvecs = ev[:, 0:modes]
 	print("-Done with Eig Solve")
-	return eigvals, eigvecs
+	return e, ev
 
 def snapshot_basis(filen):
 	
@@ -37,26 +36,6 @@ def snapshot_basis(filen):
 	A = np.array(U)
 	red, S, V = np.linalg.svd(A[:,:,0].T)
 	return red[:,:len(S)]
-
-def generate_bbw_matrix():
-	# List of boundary indices (aka fixed value indices into VV)
-	b = igl.eigen.MatrixXi()
-	# List of boundary conditions of each weight function
-	bc = igl.eigen.MatrixXd()
-
-	igl.boundary_conditions(V, T, C, igl.eigen.MatrixXi(), BE, igl.eigen.MatrixXi(), b, bc)
-
-	bbw_data = igl.BBWData()
-	# only a few iterations for sake of demo
-	bbw_data.active_set_params.max_iter = 8
-	bbw_data.verbosity = 2
-	if not igl.bbw(V, T, b, bc, bbw_data, W):
-		exit(-1)
-
-	# Normalize weights to sum to one
-	igl.normalize_row_sums(W, W)
-	# precompute linear blend skinning matrix
-	igl.lbs_matrix(V, W, M)
 
 def generate_euclidean_weights(CAx, handles, others):
 	W = np.zeros((len(handles) + len(others), len(handles)))
@@ -80,23 +59,23 @@ def get_area(p1, p2, p3):
 def get_centroid(p1, p2, p3):
 	return (np.array(p1)+np.array(p2)+np.array(p3))/3.0
 
-def torus_mesh(r1, r2, r3, step):
+def torus_mesh(r1, r2, r3, step, offset=(0,0)):
 	V = []
 	T = []
-	for theta in range(0, 80):
-		angle = theta*np.pi/69
+	for theta in range(0, 20):
+		angle = theta*np.pi/19
 		if(angle<=np.pi):
-			V.append([step*r1*np.cos(angle), step*r1*np.sin(angle)])
-			V.append([step*r2*np.cos(angle), step*r2*np.sin(angle)])
-			V.append([step*r3*np.cos(angle), step*r3*np.sin(angle)])
+			V.append([step*r1*np.cos(angle)+offset[0], step*r1*np.sin(angle) + offset[1]])
+			V.append([step*r2*np.cos(angle)+offset[0], step*r2*np.sin(angle) + offset[1]])
+			V.append([step*r3*np.cos(angle)+offset[0], step*r3*np.sin(angle) + offset[1]])
 
 	V.append([0,0])
 	for e in Delaunay(V).simplices:
-		if e[0]!=len(V)-1 and e[1]!=len(V)-1 and e[2]!=len(V)-1 and get_area(V[e[0]], V[e[1]], V[e[2]])<5:
+		if e[0]!=len(V)-1 and e[1]!=len(V)-1 and e[2]!=len(V)-1 and get_area(V[e[0]], V[e[1]], V[e[2]])<1:
 			T.append([e[0], e[1], e[2]])
 			# T.append(list(e))
 
-	return np.array(V[:len(V)-1]), np.array(T), None
+	return {"V": np.array(V[:len(V)-1]), "T": np.array(T), "u": np.zeros(len(T))}
 
 def triangle_mesh():
 	V = [[0,0], [1,0], [1,1]]
@@ -147,3 +126,118 @@ def get_corners(iV, top=True, eps=1e-1):
 
 	return tr[0], tl[0], br[0], bl[0]
 
+def get_unit_normal(p1, p2, p3):
+	n = np.cross((np.array(p1) - np.array(p2)), (np.array(p1) - np.array(p3)))
+	return n/np.linalg.norm(n)
+
+def rectangle_mesh(x, y, step=1, offset=(0,0)):
+	V = []
+
+	for i in range(0,x+1):
+		for j in range(0,y+1):
+			V.append([step*i + offset[0], step*j + offset[1]])
+	
+	T = Delaunay(V).simplices
+	return {"V": np.array(V), "T": T, "u": np.zeros(len(T))}
+
+def feather_muscle1_test_setup(x = 3, y = 2):
+	step = 0.1
+	V,T,U = rectangle_mesh(x, y, step=step)
+	# V,T, U = torus_mesh(5, 4, 3, step)
+
+	half_x = step*(x)/2.0
+	half_y = step*(y)/2.0
+	u = []
+	for i in range(len(T)):
+		e = T[i]
+		c = get_centroid(V[e[0]], V[e[1]], V[e[2]])
+		if(c[1]<half_y):
+			u.append(-0.15)
+		else:
+			u.append(0.15)
+
+	to_fix =[]
+	for i in get_min_max(V,1):
+		if(V[i][0]>half_x):
+			to_fix.append(i)
+
+	return (V, T, u), to_fix
+
+def feather_muscle2_test_setup(r1 =1, r2=2, r3=3, r4 = 4, p1 = 50, p2 = 25):
+	step = 0.1
+	V = []
+	T = []
+	u = []
+	
+	for theta in range(0, p1):
+		angle = theta*np.pi/p2
+		# for i in range(2):
+		V.append([2*step*r1*np.cos(angle), step*r1*np.sin(angle)])
+	print(np.array(V))
+	T = Delaunay(V).simplices
+
+
+	to_fix =get_max(V,0)
+	return (V, T, u), to_fix
+
+def heat_method(mesh):
+	t = 1e-1
+	eLc = igl.eigen.SparseMatrixd()
+	igl.cotmatrix(igl.eigen.MatrixXd(mesh.V), igl.eigen.MatrixXi(mesh.T), eLc)
+	Lc = e2p(eLc)
+	Mdiag = mesh.getVertexWiseMassDiags()[2*np.arange(Lc.shape[0])]
+	Mc = sparse.diags(Mdiag)
+
+
+	#Au = b st. Cu = Cu0
+	u0 = np.zeros(len(mesh.V))
+	fixed = list(set(mesh.fixed) - set(mesh.mov))
+	u0[fixed] = 2
+	u0[mesh.mov] = -2
+
+	Id = sparse.eye(len(mesh.V)).tocsc()
+	fixedverts = [i for i in range(len(u0)) if u0[i]!=0]
+	C = Id[:,fixedverts]
+
+	# print(Lc.shape)
+	# print(mesh.V.shape)
+	A = (Mc - t*Lc)
+	col1 = sparse.vstack((A, C.T))
+	col2 = sparse.vstack((C, sparse.csc_matrix((C.shape[1], C.shape[1]))))
+	KKT = sparse.hstack((col1, col2))
+	lhs = np.concatenate((u0, C.T.dot(u0)))
+	u = sparse.linalg.spsolve(KKT.tocsc(), lhs)[0:len(u0)]
+	
+	eG = igl.eigen.SparseMatrixd()
+	nV = np.concatenate((mesh.V, u[:,np.newaxis]), axis=1)
+	igl.grad(igl.eigen.MatrixXd(nV), igl.eigen.MatrixXi(mesh.T), eG)
+	eu = igl.eigen.MatrixXd(u)
+	eGu = (eG*eu).MapMatrix(len(mesh.T), 3)
+	Gu = e2p(eGu)
+
+	gradu = np.zeros(len(mesh.T))
+	uvecs = np.zeros((len(mesh.T),2))
+	for i in range(len(mesh.T)):
+		e = mesh.T[i]
+		
+		# area2 = 2*get_area(mesh.V[e[0]], mesh.V[e[1]], mesh.V[e[2]])
+		# p0 = np.concatenate((mesh.V[e[0]], [0]))
+		# p1 = np.concatenate((mesh.V[e[1]], [0]))
+		# p2 = np.concatenate((mesh.V[e[2]], [0]))
+		# normal = get_unit_normal(p0, p1, p2)
+		# s1 = u[e[0]]*np.cross(normal, mesh.V[e[1]] - mesh.V[e[2]])[0:2]
+		# s2 = u[e[1]]*np.cross(normal, mesh.V[e[2]] - mesh.V[e[0]])[0:2]
+		# s3 = u[e[2]]*np.cross(normal, mesh.V[e[0]] - mesh.V[e[1]])[0:2]
+		# uvec = (1/area2)*(s1+s2+s3)
+		uvec = Gu[i,0:2]
+		uvecs[i,:] = uvec
+		veca = uvec
+		vecb = np.array([1,0])
+		# theta = np.arccos(np.dot(veca,vecb)/(np.linalg.norm(veca)*np.linalg.norm(vecb)))
+		x1 = np.cross(veca, vecb).dot(np.array([0,0,1]))
+		x2 = np.linalg.norm(veca)*np.linalg.norm(vecb) + veca.dot(vecb)
+		theta = 2*np.arctan2(x1, x2)[2]
+		# print(theta)
+		gradu[i] = theta
+
+	return gradu, u, eGu, uvecs

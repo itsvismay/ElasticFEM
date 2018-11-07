@@ -2,7 +2,6 @@
 /Scripts/frames/*
 /Scripts/snapshots/*
 /Scripts/*.pyc
-/Scripts/MeshSetups/*
 # Prerequisites
 *.d
 
