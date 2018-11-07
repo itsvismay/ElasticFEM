@@ -52,7 +52,6 @@ class TimeIntegrator:
 		self.mesh.getGlobalF(updateR = True, updateS = True, updateU = False)
 		RU = self.mesh.GR.dot(self.mesh.GU).toarray()
 		UtPAx0 = self.mesh.GU.T.dot(self.mesh.getP().dot(self.mesh.getA().dot(self.mesh.x0)))
-		dxdS = np.einsum("ij, k", RU, UtPAx0)
 		dSds = self.arap.sparseDSds()
 
 		J = np.zeros((6*len(self.mesh.T), len(dSds)))
@@ -64,16 +63,20 @@ class TimeIntegrator:
 
 
 		J2 = np.zeros((6*len(self.mesh.T), len(self.mesh.red_s)))
-		dxdS = np.einsum("ij, k", RU, UtPAx0)
-		for i in range(dxdS.shape[0]):
-			for j in range(len(dSds)):
-				J2[i, j] = dSds[j].multiply(dxdS[i,:,:]).sum()
+		cvec = []
+		for i in range(len(self.mesh.red_r)):
+			c1, c2 = np.cos(self.mesh.red_r[i]), -np.sin(self.mesh.red_r[i])
+			cvec.append(c1)
+			cvec.append(c2)
+		cvec = np.array(cvec)
+		for i in range(len(self.mesh.red_s)):
+			J2[:,i] = self.arap.PreProcJ[1][i].dot(cvec)
 
 		J = J1.dot(idrds) + J2
 		M = self.mesh.getMassMatrix()
 
 		return J.T.dot(M.dot(J))
-	
+
 	def iterate(self):
 		pass
 		# self.elastic.muscle_fibre_mag += 100
@@ -96,7 +99,7 @@ class TimeIntegrator:
 		# self.mesh.red_s[3*np.arange(len(self.mesh.red_s)/3)+1] += 0.2
 		# self.mesh.red_s[4] += 0.2
 		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
-		
+
 	def static_solve(self):
 		print("Static Solve")
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
@@ -114,7 +117,7 @@ class TimeIntegrator:
 
 			E_arap = self.arap.Energy()
 			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
-			
+
 			# print("s", self.mesh.red_s)
 			# print("E", E_arap, E_elastic)
 
@@ -124,7 +127,7 @@ class TimeIntegrator:
 			for i in range(len(s)):
 				self.mesh.red_s[i] = s[i]
 			self.arap.updateConstUSUtPAx()
-			
+
 			dgds = None
 			# self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()
@@ -156,7 +159,7 @@ class TimeIntegrator:
 			for i in range(len(s_dot)):
 				self.mesh.red_s[i] = s0[i] + self.timestep*s_dot[i]
 				self.mesh.red_s_dot[i] = s_dot[i]
-			
+
 			# for i in range(len(s)):
 				# self.mesh.red_s[i] = s[i]
 
@@ -167,7 +170,7 @@ class TimeIntegrator:
 			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
 			V_energy = alpha1*E_arap + alpha2*E_elastic
 			print("arap, elastic ", E_arap, E_elastic)
-			
+
 			J_arap, dgds, drds = self.arap.Jacobian()
 			JMJ = self.constTimeMassJ(idrds=drds)
 
@@ -188,7 +191,7 @@ class TimeIntegrator:
 			self.arap.updateConstUSUtPAx()
 			print("s")
 			print(self.mesh.red_s)
-			
+
 			dgds = None
 			# self.arap.iterate()
 			J_arap, dgds, drds = self.arap.Jacobian()
@@ -204,11 +207,11 @@ class TimeIntegrator:
 			return totGrad
 
 		res = scipy.optimize.minimize(energy, s_dot0, method='L-BFGS-B',  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
-		
+
 		for i in range(len(s0)):
 			self.mesh.red_s_dot[i] = res.x[i]
 			self.mesh.red_s[i] = s0[i]+self.timestep*self.mesh.red_s_dot[i]
 			# self.mesh.red_s_dot[i] = (self.mesh.red_s[i] - s0[i])*self.timestep
-		
+
 		self.arap.updateConstUSUtPAx()
 		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)

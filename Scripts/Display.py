@@ -80,7 +80,7 @@ class Display:
 				# print(self.time_integrator.arap.Energy())
 				# print(self.time_integrator.mesh.red_r)
 				# print(self.time_integrator.mesh.z)
-				self.time_integrator.static_solve()
+				self.time_integrator.dynamics()
 				self.time_integrator.time +=1
 
 			if(aaa>=49 and aaa<=57):

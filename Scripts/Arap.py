@@ -375,8 +375,6 @@ class ARAP:
 				UtPAxDS[1:,  3*t+2] += np.multiply(diag_o[:-1], UtPAx[:-1]) 
 				UtPAxDS[:-1, 3*t+2] += np.multiply(diag_o[:-1], UtPAx[1:])
 		self.constErs_Terms.append(UtPAxDS)
-		print(UtPAxDS[0])
-		# exit()
 
 	def setupConstEgsTerms(self):
 		wr_cols = []
@@ -684,6 +682,69 @@ class ARAP:
 
 
 		PreProcJ2 = []
+		#RU -> [a1, b1, a2, b2....]
+		wr_cols = []
+		for i in range(len(self.mesh.red_r)):
+			ce_map = np.array(self.mesh.r_cluster_element_map[i])
+			wr_c1 = np.zeros(2*len(self.mesh.T))
+			wr_c2 = np.zeros(2*len(self.mesh.T))
+			wr_c1[2*ce_map] = 1
+			wr_c2[2*ce_map+1] = 1
+			wr_cols.append(wr_c1)
+			wr_cols.append(wr_c2)
+		Wr = np.vstack(wr_cols).T
+
+		UU = sparse.lil_matrix((2*len(self.mesh.T), 2*len(self.mesh.T)))
+		zsize = len(self.mesh.z)
+		for t in range(len(self.mesh.T)):
+			u1, u2 = np.cos(self.mesh.u[t]), np.sin(self.mesh.u[t])
+
+			UU[2*t, 2*t]    = u1
+			UU[2*t, 2*t+1]  = -u2
+			UU[2*t+1, 2*t]  = -u2
+			UU[2*t+1, 2*t+1]= -u1 
+
+		UWr = UU.dot(Wr)
+		repeat3 = sparse.kron(sparse.eye(len(self.mesh.T)), np.array([[1,0],[0,1], [1,0],[0,1], [1,0],[0,1]]))
+		repeatUWr = repeat3.dot(UWr)
+
+		#UtPAx0:dSds -> matrix layers
+		UtPAx0 = self.mesh.GU.T.dot(self.PAx)
+		for t in range(len(self.mesh.red_s)):
+			s_t = self.mesh.sW[:,t]
+		
+			diag = np.zeros(6*len(self.mesh.T))
+			off_diag = np.zeros(6*len(self.mesh.T))
+
+			for i in range(len(self.mesh.T)):
+				p1 = UtPAx0[6*i]
+				p2 = UtPAx0[6*i+1]
+				p3 = UtPAx0[6*i+2]
+				p4 = UtPAx0[6*i+3]
+				p5 = UtPAx0[6*i+4]
+				p6 = UtPAx0[6*i+5]
+
+				s1 = s_t[3*i]
+				s2 = s_t[3*i+1]
+				s3 = s_t[3*i+2]
+
+				diag[6*i+0] = p1*s1 + p2*s3
+				diag[6*i+1] = -p1*s1 - p2*s3
+				diag[6*i+2] = p3*s1 + p4*s3
+				diag[6*i+3] = -p3*s1 - p4*s3
+				diag[6*i+4] = p5*s1 + p6*s3
+				diag[6*i+5] = -p5*s1 - p6*s3
+
+				off_diag[6*i+0] = p1*s3 + p2*s2
+				off_diag[6*i+1] = 0
+				off_diag[6*i+2] = p3*s3 + p4*s2
+				off_diag[6*i+3] = 0
+				off_diag[6*i+4] = p5*s3 + p6*s2
+				off_diag[6*i+5] = 0
+
+			layer = sparse.diags([off_diag[:-1], diag, off_diag[:-1]],[-1,0,1]).tocsc()
+			PreProcJ2.append(layer.dot(repeatUWr))
+		
 
 		self.PreProcJ.append(PreProcJ1)
 		self.PreProcJ.append(PreProcJ2)

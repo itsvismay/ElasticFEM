@@ -35,7 +35,7 @@ class NeohookeanElastic:
 		self.grav = np.array([0, 981]) #cm/s^2
 		self.rho = 6.4 #in Grams/cm^2
 
-		self.muscle_fibre_mag = 1000000 #g*cm/s^2
+		self.muscle_fibre_mag = 100000 #g*cm/s^2
 
 		self.fastMuscleEnergy = []
 

@@ -12,7 +12,7 @@ def FiniteDifferencesARAP():
 
 	# VTU = Meshwork.rectangle_mesh(x=5, y=5, step=0.1)
 	# mw = Meshwork.Preprocessing(_VT = VTU)
-	# mw.Fix = get_max(mw.V, a=1, eps=1e-2)		
+	# mw.Fix = get_max(mw.V, a=1, eps=1e-2)
 	# mw.Mov = get_min(mw.V, a=1, eps=1e-2)
 
 	mw = Meshwork.Preprocessing()
@@ -96,7 +96,7 @@ def FiniteDifferencesARAP():
 				dg[j] -= eps
 
 				Egg[i].append((Eij - Ei - Ej + E0)/(eps*eps))
-		
+
 		# print("Egg")
 		print(real)
 		print("Egg ", np.sum(np.array(Egg) - real))
@@ -160,7 +160,7 @@ def FiniteDifferencesARAP():
 		print(real)
 		print(np.array(Err))
 		print("Err ", np.sum(np.array(Err) - real))
-	
+
 	def check_Hessian_dEdrds():
 		real = arap.Hess_Ers()
 		Ers = []
@@ -250,7 +250,7 @@ def FiniteDifferencesARAP():
 				mesh.red_s[j] -= eps
 
 				Egs[i].append((Eij - Ei - Ej + E0)/(eps*eps))
-		
+
 		print(real)
 		print("\n")
 		print(np.array(Egs))
@@ -265,7 +265,7 @@ def FiniteDifferencesARAP():
 
 		z0 = np.zeros(len(mesh.z)) + mesh.z
 		g0 = np.zeros(len(mesh.g)) + mesh.g
-		r0 = np.array(mesh.red_r) 
+		r0 = np.array(mesh.red_r)
 		for i in range(0,len(mesh.red_s)):
 			mesh.z = np.zeros(len(mesh.z)) + z0
 
@@ -278,7 +278,7 @@ def FiniteDifferencesARAP():
 			# exit()
 			drds_left = np.array(mesh.red_r)
 			dgds_left =mesh.z + np.zeros(len(mesh.z))
-	
+
 			mesh.red_s[i] -= 0.5*eps
 			mesh.getGlobalF()
 			arap.updateConstUSUtPAx()
@@ -290,7 +290,7 @@ def FiniteDifferencesARAP():
 			arap.iterate()
 			drds_right = np.array(mesh.red_r)
 			dgds_right =mesh.z + np.zeros(len(mesh.z))
-	
+
 			mesh.red_s[i] += 0.5*eps
 			mesh.getGlobalF()
 			arap.updateConstUSUtPAx()
@@ -300,7 +300,7 @@ def FiniteDifferencesARAP():
 			dgds.append((dgds_left - dgds_right)/(eps))
 			drds.append((drds_left - drds_right)/(eps))
 			# exit()
-				
+
 
 		print("FD")
 		print(np.array(dgds).T)
@@ -328,7 +328,7 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrds()
 	check_dgds_drds()
 
-FiniteDifferencesARAP()
+# FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-1
@@ -336,7 +336,7 @@ def FiniteDifferencesElasticity():
 	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
 	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
 	mw = Meshwork.Preprocessing(_VT = VTU)
-	mw.Fix = get_max(mw.V, a=1, eps=1e-2)		
+	mw.Fix = get_max(mw.V, a=1, eps=1e-2)
 	mw.Mov = get_min(mw.V, a=1, eps=1e-2)
 	mesh = mw.getMesh()
 	arap = Arap.ARAP(imesh = mesh, filen="crap/")
@@ -351,7 +351,7 @@ def FiniteDifferencesElasticity():
 			mesh.red_s[i] += 0.5*eps
 			left = ne.WikipediaEnergy(_rs=mesh.red_s)
 			mesh.red_s[i] -= 0.5*eps
-			
+
 			mesh.red_s[i] -= 0.5*eps
 			right = ne.WikipediaEnergy(_rs=mesh.red_s)
 			mesh.red_s[i] += 0.5*eps
@@ -366,12 +366,12 @@ def FiniteDifferencesElasticity():
 		e0 = ne.GravityEnergy()
 		print("E0", e0)
 		arap.iterate()
-		
+
 		real = -1*ne.GravityForce(dzds=arap.Jacobian()[1])
 
 		dEgds = []
 		for i in range(len(mesh.red_s)):
-			mesh.z = np.zeros(len(mesh.z))	
+			mesh.z = np.zeros(len(mesh.z))
 			mesh.red_s[i] += eps
 			mesh.getGlobalF(updateR=False, updateS=True)
 			arap.updateConstUSUtPAx()
@@ -388,7 +388,7 @@ def FiniteDifferencesElasticity():
 		print("Diff", np.sum(real - np.array(dEgds)))
 
 	def check_muscleForce():
-		
+
 		e0 = ne.MuscleEnergy(_rs = mesh.red_s)
 		real = -ne.MuscleForce(_rs = mesh.red_s)
 		print("e0", e0)
@@ -397,7 +397,7 @@ def FiniteDifferencesElasticity():
 			mesh.red_s[i] += 0.5*eps
 			left = ne.MuscleEnergy(_rs=mesh.red_s)
 			mesh.red_s[i] -= 0.5*eps
-			
+
 			mesh.red_s[i] -= 0.5*eps
 			right = ne.MuscleEnergy(_rs=mesh.red_s)
 			mesh.red_s[i] += 0.5*eps
@@ -418,21 +418,20 @@ def FiniteDifferencePositions():
 	eps = 1e-5
 	its = 100
 	# VTU,tofix = Meshwork.feather_muscle2_test_setup()
-	VTU = Meshwork.rectangle_mesh(x=5, y=5, step=0.1)
+	VTU = Meshwork.rectangle_mesh(x=2, y=2, step=0.1)
 	mw = Meshwork.Preprocessing(_VT = VTU)
-	mw.Fix = get_max(mw.V, a=1, eps=1e-2)		
+	mw.Fix = get_max(mw.V, a=1, eps=1e-2)
 	mw.Mov = get_min(mw.V, a=1, eps=1e-2)
 	mesh = mw.getMesh()
 	arap = Arap.ARAP(imesh = mesh, filen="crap/")
 
-	# mesh.red_s[2] = 0.1
 	ne = Neo.NeohookeanElastic(imesh = mesh)
 	arap.iterate()
 	J_arap, dgds, drds = arap.Jacobian()
 	dRdr = arap.sparseDRdr()
-	dSds = arap.sparseDSds()	
+	dSds = arap.sparseDSds()
 	dxdR, dxdS = ne.JMJ_MassMatrix(idrds=drds, idRdr =dRdr, idSds=dSds)
-
+	
 	J = np.zeros((dxdR.shape[0], len(dSds)))
 	J1 = np.zeros((dxdR.shape[0], len(dRdr)))
 	J2 = np.zeros((dxdS.shape[0], len(dSds)))
@@ -446,14 +445,17 @@ def FiniteDifferencePositions():
 
 	# print(dxdS[0,:,:])
 	J = J1.dot(drds) + J2
-	
+
+	JMJ = J.T.dot(mesh.getMassMatrix().dot(J))
+
 
 	# ##OPTIMIZED MATH##
-	# print("shit")
-	# ti = Solvers.TimeIntegrator(imesh = mesh, iarap = arap, ielastic = ne)
-	# J_red = ti.constTimeMassJ(idrds = drds)
-	# ##################
-	# exit()
+	ti = Solvers.TimeIntegrator(imesh = mesh, iarap = arap, ielastic = ne)
+	JMJ_red = ti.constTimeMassJ(idrds = drds)
+	print("shit")
+	print(np.linalg.norm(JMJ_red - JMJ))
+	##################
+	exit()
 
 
 
@@ -464,7 +466,7 @@ def FiniteDifferencePositions():
 		mesh.getGlobalF(updateR=False, updateS=True)
 		left = mesh.GF.dot(mesh.getP().dot(mesh.getA().dot(mesh.x0)))
 		mesh.red_s[i] -= 0.5*eps
-		
+
 		mesh.red_s[i] -= 0.5*eps
 		mesh.getGlobalF(updateR=False, updateS=True)
 		right = mesh.GF.dot(mesh.getP().dot(mesh.getA().dot(mesh.x0)))
@@ -481,4 +483,4 @@ def FiniteDifferencePositions():
 	print(np.linalg.norm(np.array(dxds) - J.T))
 	exit()
 
-# FiniteDifferencePositions()
+FiniteDifferencePositions()
