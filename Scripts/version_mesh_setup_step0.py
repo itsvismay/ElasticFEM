@@ -12,7 +12,7 @@ from scipy.cluster.vq import vq, kmeans, whiten
 import Helpers
 import random
 
-FOLDER = "./MeshSetups/"+"TestArm/"
+FOLDER = "./MeshSetups/"+"ChainedArm/"
 # os.mkdir(FOLDER)
 # os.mkdir(FOLDER+"muscles")
 # os.mkdir(FOLDER+"bones")
@@ -22,14 +22,15 @@ print("Writing to folder: "+FOLDER)
 
 
 mesh1 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,0))
-# mesh1["V"][:,0] = mesh1["V"][:,0]*5
-mesh3 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(4,1))
 mesh2 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,6))
-# mesh2["V"][:,0] = mesh2["V"][:,0]*5
+mesh3 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(4,1))#muscle
 mesh4 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(-1,1))
-# mesh4["V"][:,1] = mesh4["V"][:,1]*5 + 1
-
-# mesh3 = Helpers.torus_mesh(r1=2, r2=3, r3=5, step=1.0, offset=(5,1))
+mesh5 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(4,7))#muscle
+mesh6 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(-1,7))
+mesh7 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,12))
+mesh8 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(4,13))#muscle
+mesh9 = Helpers.rectangle_mesh(x=1, y=5, step=1.0, offset=(-1,13))
+mesh10 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,18))
 
 
 def output_meshes(meshes):
@@ -72,6 +73,7 @@ def display_mesh(meshes):
 	def key_down(viewer,aaa, bbb):
 		viewer.data().clear()
 		if aaa==48:
+			#'0'
 			for im in range(len(meshes)):
 				for e in meshes[im]["T"]:
 					P = meshes[im]["V"][e]
@@ -79,6 +81,7 @@ def display_mesh(meshes):
 					viewer.data().add_edges(igl.eigen.MatrixXd(P), igl.eigen.MatrixXd(DP), purple)
 
 		if aaa==83:
+			#'s'
 			#output mesh
 			output_meshes(meshes)
 
@@ -91,7 +94,8 @@ def display_mesh(meshes):
 	viewer.launch()
 
 
-meshes = [mesh1, mesh2, mesh3, mesh4]
+meshes = [mesh1, mesh2, mesh3, mesh4,
+		 mesh5, mesh6, mesh7, mesh8, mesh9, mesh10]
 display_mesh(meshes)
 
 

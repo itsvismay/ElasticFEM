@@ -13,7 +13,7 @@ import Arap
 import Solvers
 import Neo
 
-FOLDER = "./MeshSetups/"+"TestArm/"
+FOLDER = "./MeshSetups/"+"ChainedArm/"
 print("reading from: "+FOLDER)
 
 eV = igl.eigen.MatrixXd()

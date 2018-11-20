@@ -28,14 +28,12 @@ class NeohookeanElastic:
 		# self.M = self.mesh.getMassMatrix()
 		self.BLOCK, self.ANTI_BLOCK = self.mesh.createBlockingMatrix()
 
-
-		
 		self.dimensions = 2
 
 		self.grav = np.array([0, 981]) #cm/s^2
 		self.rho = 6.4 #in Grams/cm^2
 
-		self.muscle_fibre_mag = 100000 #g*cm/s^2
+		self.muscle_fibre_mag = 2000000 #g*cm/s^2
 
 		self.fastMuscleEnergy = []
 
@@ -123,12 +121,11 @@ class NeohookeanElastic:
 		if(sx<=0 or sy<=0 or sx*sy-so*so<=0):
 			return 1e40
 
-		functionValue = ((mc * (((sx - 2) + sy) - t_2) ) + ((md * (t_2 ** 2)) / 4))
+		functionValue = ((mc * ((sx - 2 + sy) - t_2) ) + ((md * (t_2 ** 2)) / 4))
 		return functionValue
 
 	def WikipediaEnergy(self,_rs):
 		E = 0
-
 		Ax = self.mesh.getA().dot(self.mesh.x0)
 		for t in range(len(self.mesh.T)):
 			if self.mesh.u_toggle[t]>0.5:
@@ -147,7 +144,7 @@ class NeohookeanElastic:
 			return 1e40
 
 		c = np.array([[sx, so],[so, sy]])
-
+		print(c.dot(c.T))
 		return 0.5*self.muscle_fibre_mag*tog*(u.dot(c.dot(c.T.dot(u.T))))
 
 	def MuscleEnergy(self, _rs):
@@ -158,11 +155,11 @@ class NeohookeanElastic:
 		# for t in range(len(self.mesh.T)):
 		# 	alpha = self.mesh.u[t]
 		# 	c, s = np.cos(alpha), np.sin(alpha)
-		# 	u = np.array([c,s]).dot(np.array([[c,-s],[s, c]]))
+		# 	u = np.array([c,s]).dot(np.array([[c,-s], [s, c]]))
 		# 	toggle = self.mesh.u_toggle[t]
 		# 	E = self.MuscleElementEnergy(_rs, self.mesh.sW[3*t,:], self.mesh.sW[3*t+1,:], self.mesh.sW[3*t+2,:],u, toggle)
 		# 	En += E
-
+		# exit()
 		return En
 
 	def MuscleElementForce(self, rs, wx, wy, wo, u1, u2, tog):

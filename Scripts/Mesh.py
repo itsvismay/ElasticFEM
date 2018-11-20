@@ -279,7 +279,6 @@ class Mesh:
 		# eVN = np.append(eVeH, np.zeros((len(self.self.x0),1)),1)
 		# eVN[:,-1] = self.self.x0
 		Q1, QR1 = np.linalg.qr(eHeV.toarray(), mode="reduced")
-
 		# Q = eHeV
 		return Q1
 

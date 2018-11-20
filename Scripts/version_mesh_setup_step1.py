@@ -12,7 +12,7 @@ from scipy.cluster.vq import vq, kmeans, whiten
 import Helpers
 import random
 
-FOLDER = "./MeshSetups/"+"TestArm/"
+FOLDER = "./MeshSetups/"+"ChainedArm/"
 # os.mkdir(FOLDER)
 # os.mkdir(FOLDER+"muscles")
 # os.mkdir(FOLDER+"bones")
@@ -24,6 +24,12 @@ mesh1 = {}
 mesh2 = {}
 mesh3 = {}
 mesh4 = {}
+mesh5 = {}
+mesh6 = {}
+mesh7 = {}
+mesh8 = {}
+mesh9 = {}
+mesh10 = {}
 
 # mesh1 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(0,0))
 # mesh2 = Helpers.rectangle_mesh(x=5, y=1, step=1.0, offset=(5,0))
@@ -41,19 +47,48 @@ ev2, et2 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
 igl.readOBJ(FOLDER+"2mesh.obj", ev2, et2)
 mesh2["V"] = np.array(e2p(ev2)[:, :2])
 mesh2["T"] = np.array(e2p(et2))
-print(mesh2["V"])
-print(mesh2["T"])
 mesh2["u"] = np.zeros(len(mesh2["T"]))
-ev4, et4 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
-igl.readOBJ(FOLDER+"4mesh.obj", ev4, et4)
-mesh4["V"] = np.array(e2p(ev4)[:, :2])
-mesh4["T"] = np.array(e2p(et4))
-mesh4["u"] = np.zeros(len(mesh4["T"]))
 ev3, et3 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
 igl.readOBJ(FOLDER+"3mesh.obj", ev3, et3)
 mesh3["V"] = np.array(e2p(ev3)[:, :2])
 mesh3["T"] = np.array(e2p(et3))
 mesh3["u"] = np.zeros(len(mesh3["T"]))
+ev4, et4 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"4mesh.obj", ev4, et4)
+mesh4["V"] = np.array(e2p(ev4)[:, :2])
+mesh4["T"] = np.array(e2p(et4))
+mesh4["u"] = np.zeros(len(mesh4["T"]))
+ev5, et5 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"5mesh.obj", ev5, et5)
+mesh5["V"] = np.array(e2p(ev5)[:, :2])
+mesh5["T"] = np.array(e2p(et5))
+mesh5["u"] = np.zeros(len(mesh5["T"]))
+ev6, et6 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"6mesh.obj", ev6, et6)
+mesh6["V"] = np.array(e2p(ev6)[:, :2])
+mesh6["T"] = np.array(e2p(et6))
+mesh6["u"] = np.zeros(len(mesh6["T"]))
+ev7, et7 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"7mesh.obj", ev7, et7)
+mesh7["V"] = np.array(e2p(ev7)[:, :2])
+mesh7["T"] = np.array(e2p(et7))
+mesh7["u"] = np.zeros(len(mesh7["T"]))
+ev8, et8 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"8mesh.obj", ev8, et8)
+mesh8["V"] = np.array(e2p(ev8)[:, :2])
+mesh8["T"] = np.array(e2p(et8))
+mesh8["u"] = np.zeros(len(mesh8["T"]))
+ev9, et9 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"9mesh.obj", ev9, et9)
+mesh9["V"] = np.array(e2p(ev9)[:, :2])
+mesh9["T"] = np.array(e2p(et9))
+mesh9["u"] = np.zeros(len(mesh9["T"]))
+ev10, et10 = igl.eigen.MatrixXd(), igl.eigen.MatrixXi()
+igl.readOBJ(FOLDER+"10mesh.obj", ev10, et10)
+mesh10["V"] = np.array(e2p(ev10)[:, :2])
+mesh10["T"] = np.array(e2p(et10))
+mesh10["u"] = np.zeros(len(mesh10["T"]))
+
 
 mesh1["isMuscle"]= False
 mesh1["Mov"] = []
@@ -65,16 +100,47 @@ mesh2["Mov"] = []
 mesh2["Fix"] = []
 mesh2["nrc"] = 1
 mesh2["nsh"] = 1
-mesh4["isMuscle"]= False
-mesh4["Mov"] = []
-mesh4["Fix"] = []
-mesh4["nrc"] = 1
-mesh4["nsh"] = 1
 mesh3["isMuscle"]= True
 mesh3["Mov"] = Helpers.get_max(mesh3["V"], a=1, eps=1e-2)
 mesh3["Fix"] = Helpers.get_min(mesh3["V"], a=1, eps=1e-2)
 mesh3["nrc"] = 3
 mesh3["nsh"] = 3
+mesh4["isMuscle"]= False
+mesh4["Mov"] = []
+mesh4["Fix"] = []
+mesh4["nrc"] = 1
+mesh4["nsh"] = 1
+mesh5["isMuscle"]= True
+mesh5["Mov"] = Helpers.get_max(mesh5["V"], a=1, eps=1e-2)
+mesh5["Fix"] = Helpers.get_min(mesh5["V"], a=1, eps=1e-2)
+mesh5["nrc"] = 3
+mesh5["nsh"] = 3
+mesh6["isMuscle"]= False
+mesh6["Mov"] = []
+mesh6["Fix"] = []
+mesh6["nrc"] = 1
+mesh6["nsh"] = 1
+mesh7["isMuscle"]= False
+mesh7["Mov"] = []
+mesh7["Fix"] = []
+mesh7["nrc"] = 1
+mesh7["nsh"] = 1
+mesh8["isMuscle"]= True
+mesh8["Mov"] = Helpers.get_max(mesh8["V"], a=1, eps=1e-2)
+mesh8["Fix"] = Helpers.get_min(mesh8["V"], a=1, eps=1e-2)
+mesh8["nrc"] = 3
+mesh8["nsh"] = 3
+mesh9["isMuscle"]= False
+mesh9["Mov"] = []
+mesh9["Fix"] = []
+mesh9["nrc"] = 1
+mesh9["nsh"] = 1
+mesh10["isMuscle"]= False
+mesh10["Mov"] = []
+mesh10["Fix"] = []
+mesh10["nrc"] = 1
+mesh10["nsh"] = 1
+
 
 
 def getA(iV, iT):
@@ -540,7 +606,7 @@ def display_mesh(meshes):
 	viewer.launch()
 
 
-meshes = [mesh1, mesh2, mesh4, mesh3]
+meshes = [mesh1, mesh2, mesh3, mesh4, mesh5, mesh6, mesh7, mesh8, mesh9, mesh10]
 display_mesh(meshes)
 
 

@@ -98,13 +98,15 @@ class TimeIntegrator:
 		# print("moved")
 		# self.mesh.red_s[3*np.arange(len(self.mesh.red_s)/3)+1] += 0.2
 		# self.mesh.red_s[4] += 0.2
-		self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
+		# self.mesh.getGlobalF(updateR=False, updateS=True, updateU=False)
+		self.elastic.muscle_fibre_mag *= 2
+		print(self.elastic.muscle_fibre_mag)
 
 	def static_solve(self):
 		print("Static Solve")
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 
-		alpha1 =1e3
+		alpha1 =1e4
 		alpha2 =1e1
 
 		def energy(s):
@@ -113,9 +115,9 @@ class TimeIntegrator:
 			self.arap.updateConstUSUtPAx()
 
 
-			self.arap.iterate()
+			# self.arap.iterate()
 
-			E_arap = self.arap.Energy()
+			E_arap = 0#self.arap.Energy()
 			E_elastic =  self.elastic.Energy(irs=self.mesh.red_s)
 
 			# print("s", self.mesh.red_s)
@@ -129,11 +131,11 @@ class TimeIntegrator:
 			self.arap.updateConstUSUtPAx()
 
 			dgds = None
-			# self.arap.iterate()
-			J_arap, dgds, drds = self.arap.Jacobian()
+
+			# J_arap, dgds, drds = self.arap.Jacobian()
 
 			J_elastic = self.elastic.PEGradient(irs = self.mesh.red_s, idgds=dgds)
-			return  alpha1*J_arap + alpha2*J_elastic
+			return  alpha2*J_elastic
 
 		res = scipy.optimize.minimize(energy, s0, method='L-BFGS-B', bounds=self.s_bnds,  jac=jacobian, options={'gtol': 1e-6, 'ftol':1e-4, 'disp': False, 'eps':1e-8})
 
@@ -152,7 +154,7 @@ class TimeIntegrator:
 		print("Dynamics Solve")
 		s0 = self.mesh.red_s + np.zeros(len(self.mesh.red_s))
 		s_dot0 = self.mesh.red_s_dot + np.zeros(len(self.mesh.red_s))
-		alpha1 =1e5
+		alpha1 =1e4
 		alpha2 =1e1
 
 		def energy(s_dot):
@@ -189,8 +191,7 @@ class TimeIntegrator:
 			# for i in range(len(s)):
 			# 	self.mesh.red_s[i] = s[i]
 			self.arap.updateConstUSUtPAx()
-			print("s")
-			print(self.mesh.red_s)
+		
 
 			dgds = None
 			# self.arap.iterate()

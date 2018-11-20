@@ -14,11 +14,11 @@ from scipy.spatial import Delaunay
 
 #Mesh creation
 # #Read-in mesh: read V, T, U, rot-clusters, skinning handles, Modes (if reduced)
-VTU = Meshwork.rectangle_mesh(x=5, y=5, step=1.0)
-mw = Meshwork.Preprocessing(_VT = VTU)
-mw.Fix = Meshwork.get_max(mw.V, a=1, eps=1e-2)	
-mw.Mov = Meshwork.get_min(mw.V, a=1, eps=1e-2)
-mesh = mw.getMesh(modes_used=20)
+# VTU = Meshwork.rectangle_mesh(x=10, y=10, step=1.0)
+# mw = Meshwork.Preprocessing(_VT = VTU)
+# mw.Fix = Meshwork.get_max(mw.V, a=1, eps=1e-2)	
+# mw.Mov = Meshwork.get_min(mw.V, a=1, eps=1e-2)
+# mesh = mw.getMesh(modes_used=20)
 # mw.display()
 # exit()
 
@@ -34,15 +34,22 @@ mesh = mw.getMesh(modes_used=20)
 # mw.display()
 # exit()
 
-# mw = Meshwork.Preprocessing()
-# mesh = mw.getMesh(name= "test2x2", modes_used=30)
-# emat = igl.eigen.MatrixXd()
-# igl.readDMAT("./MeshSetups/TestArm/muscle_bone/"+"elem_material.dmat", emat)
-# elem_material = e2p(emat)[:, 0]
-# mesh.elem_youngs = np.array([600000 if e<0.5 else 6e10 for e in elem_material])
-# mesh.elem_poisson = np.array([0.45 if e<0.5 else 0.45 for e in elem_material])
-# mesh.u_toggle = elem_material
+V = igl.eigen.MatrixXd()
+F = igl.eigen.MatrixXi()
+igl.readOFF("./MeshSetups/3koval/3koval.off", V, F)
+V1 = e2p(V)[:,:]
+F1 = e2p(F)
+VTU = {"V": np.array(V1[:,:2]*100.0), "T": F1}
+mw = Meshwork.Preprocessing(_VT = VTU, modes_used=50)
+mw.Fix = Meshwork.get_max(mw.V, a=0, eps=2e-1)
+# for v in range(len(mw.V)):
+# 	if mw.V[v][0] > 6 and mw.V[v][1]<1e-1 and mw.V[v][1]>-1e-1:
+# 		mw.Fix.append(v)
+mw.Mov = Meshwork.get_min(mw.V, a=0, eps=2e-1)
+mesh = mw.getMesh(name= "3koval", modes_used=30)
 
+# mw.Mov = mw.Mov + Meshwork.get_min(mw.V, a=1, eps=1e-3)
+# mw.Mov = mw.Mov + Meshwork.get_max(mw.V, a=1, eps=1e-3)
 
 #ARAP setup
 arap = Arap.ARAP(imesh=mesh, filen="snapshots/")
@@ -57,5 +64,5 @@ ti = Solvers.TimeIntegrator(imesh = mesh, iarap = arap, ielastic = neo)
 disp = Display.Display(isolve = ti)
 
 
-disp.display_dynamics()
+disp.display_statics()
 
