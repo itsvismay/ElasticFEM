@@ -30,19 +30,17 @@ class Mesh:
 			self.elem_poissons = [0.45 for i in range(len(iVTU[1]))]
 			self.poissons = 0.45
 			self.fixed = list(set(ito_fix))#.union(set(ito_mov)))
-			nrc = 5
-			nsh = 5
+			nrc = len(iVTU[1])
+			nsh = len(iVTU[1])
 		else:
 			self.elem_youngs = [600000 for i in range(len(T))] #g/cm*s^2
 			self.elem_poissons = [0.45 for i in range(len(T))]
 			self.fixed = list(set(ito_fix).union(set(ito_mov)))
-			nrc = 1
+			nrc = 3
 			nsh = 1
 		self.shandle_muscle = []
 		self.V = np.array(iVTU[0])
 		self.T = iVTU[1]
-		print("MeshSize:")
-		print(self.V.shape, self.T.shape)
 		self.mov = list(set(ito_mov))
 
 		self.x0 = np.ravel(self.V)
@@ -268,6 +266,7 @@ class Mesh:
 		KKT = sparse.hstack((col1, col2))
 		eHconstrains = sparse.vstack((sparse.csc_matrix((K.shape[0], C.shape[0])), sparse.eye(C.shape[0])))
 		eH = sparse.linalg.spsolve(KKT.tocsc(), eHconstrains.tocsc())[0:K.shape[0]]
+		# print(eH.toarray().shape)
 		# eH *= np.logical_or(1e-10<eH , eH<-1e-10)
 		# eHFac =  scipy.sparse.linalg.splu(KKT.tocsc())
 		# eH = eHFac.solve(eHconstrains.toarray())[0:K.shape[0]]
@@ -304,6 +303,7 @@ class Mesh:
 		
 			self.s_handles_ind = []
 			CAx0 = self.getC().dot(self.getA().dot(self.x0))
+		
 			for k in range(len(skinning_r_cluster_element_map.keys())):
 				els = np.array(skinning_r_cluster_element_map[k], dtype='int32')
 				centx = CAx0[6*els]
@@ -333,6 +333,7 @@ class Mesh:
 		vertex_handles = self.T[handles]
 		unique_vert_handles = np.unique(vertex_handles)
 		helper = np.add(np.zeros(unique_vert_handles[-1]+1), -1)
+		print("here1");
 
 		for i in range(len(unique_vert_handles)):
 			helper[unique_vert_handles[i]] = i 
@@ -341,9 +342,9 @@ class Mesh:
 		for i in range(vertex_handles.shape[0]):
 			vert_to_tet[i,:] = helper[vertex_handles[i]]
 
+		print("here2");
 		C = self.V[unique_vert_handles]
 		P = np.array([np.arange(len(C))], dtype="int32").T
-
 		V = igl.eigen.MatrixXd(self.V)
 		T = igl.eigen.MatrixXi(self.T)
 		M = igl.eigen.MatrixXd()
@@ -354,13 +355,8 @@ class Mesh:
 		b = igl.eigen.MatrixXi()
 		# List of boundary conditions of each weight function
 		bc = igl.eigen.MatrixXd()
-		# print(unique_vert_handles)
-		# print(self.V[np.array([989, 1450, 1610])])
-		# print(C)
-		# exit()
+		print("here3");
 		igl.boundary_conditions(V, T, C, P, igl.eigen.MatrixXi(), igl.eigen.MatrixXi(), b, bc)	
-
-		
 		bbw_data = igl.BBWData()
 		# only a few iterations for sake of demo
 		bbw_data.active_set_params.max_iter = 8
@@ -374,8 +370,8 @@ class Mesh:
 		igl.lbs_matrix(V, W, M)
 		
 		vW = e2p(W) #v x verts of handles
-
 		tW = np.zeros((len(self.T), len(handles))) #T x handles
+		print("here4");
 		#get average of vertices for each triangle
 		for i in range(len(self.T)):
 			e = self.T[i]
@@ -421,6 +417,7 @@ class Mesh:
 			bo = sparse.eye(len(self.T)).tocsc()
 
 			b = sparse.kron(bo[:,nf], sparse.eye(6))
+			print(nf)
 			self.RotationBLOCK.append(b.tocsc())
 
 		print("Done setting up rotation clusters \n")
@@ -432,14 +429,12 @@ class Mesh:
 		G = np.add(self.G.T, self.x0)
 		#all modes at once
 		CAG = C.dot(A.dot(G.T))#scipy wants data in format: observations(elem) x features (modes)
-
+		
 		Data = np.zeros((len(self.T), 2*self.G.shape[1]))
-		# print(CAG.shape, Data.shape)
 		for i in range(len(self.T)):
 			point = CAG[6*i:6*i+2, :]
 			Data[i,:] = np.ravel(point) #triangle by x1,y1,x2,y2, x3,y3....
 
-		print(clusters, Data.shape)
 		centroids,_ = kmeans(Data, clusters)
 		idx,_ = vq(Data,centroids)
 		return idx

@@ -209,6 +209,9 @@ class NeohookeanElastic:
 		USUtPAx0 = self.mesh.GU.dot(self.mesh.GS.dot(UtPAx0))
 
 		dxdR = np.einsum("ij, k", np.eye(len(USUtPAx0), len(USUtPAx0)), USUtPAx0)
+		print(dxdR[0])
+		print(USUtPAx0)
+		exit()
 		dxdS = np.einsum("ij, k", RU, UtPAx0)
 		return dxdR, dxdS
 				

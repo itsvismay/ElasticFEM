@@ -119,13 +119,10 @@ class ARAP:
 		#NEW KKT SOLVE
 		if kkt:
 			C = self.ANTI_BLOCK.T.dot(self.mesh.G)
-			r_size = C.shape[1]
 			gb_size = C.shape[0]
 			r_size = R.shape[1]
 			rb_size = R.shape[0]
 
-			
-				
 			col1 = np.vstack((lhs_left, C))
 			# print("col", col1.shape, col1.nnz)
 			col2 = np.vstack((lhs_right, np.zeros((gb_size, r_size))))
@@ -851,11 +848,12 @@ class ARAP:
 
 	def Gradients(self):
 		PAg = self.PA.dot(self.mesh.getg())
-		# USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
-		# DR = self.sparseDRdr()
+		USUt = self.mesh.GU.dot(self.mesh.GS.dot(self.mesh.GU.T))
+		DR = self.sparseDRdr()
 		# DS = self.sparseDSds()
-
 		# dEdR = -1*self.sparseOuterProdDiags(PAg, USUt.dot(self.PAx))
+		# dEdR = np.outer(-(PAg - self.mesh.GR.dot(USUt.dot(self.PAx))), USUt.dot(self.PAx))
+		# print(np.outer(PAg, USUt.dot(self.PAx)))
 		# dEdr = np.zeros(len(self.mesh.red_r))
 		# for i in range(len(dEdr)):
 		# 	dEdr[i] = DR[i].multiply(dEdR).sum()
@@ -867,6 +865,7 @@ class ARAP:
 		# UtPAx = self.mesh.GU.T.dot(self.PAx)
 		# RU = self.mesh.GR.dot(self.mesh.GU)
 		# dEdS = self.sparseOuterProdDiags(self.mesh.GS.dot(UtPAx), UtPAx) -self.sparseOuterProdDiags(RU.T.dot(PAg), UtPAx)
+		# print(dEdS.toarray())
 		# dEds = np.zeros(len(self.mesh.red_s))
 		# for i in range(len(dEds)):
 		# 	dEds[i] = DS[i].multiply(dEdS).sum()
@@ -887,7 +886,6 @@ class ARAP:
 			dRdr_e = np.array(((-s,-c), (c, -s)))
 			blocked = sparse.kron(sparse.eye(3*len(self.mesh.r_cluster_element_map[t])), dRdr_e)
 			DR.append((blocked, dRdr_e))
-
 		return DR
 
 	def sparseDRdr(self):
@@ -942,12 +940,10 @@ class ARAP:
 				sWy = self.mesh.sW[:,3*t+1]
 				sWo = self.mesh.sW[:,3*t+2]
 
-
 				#for each handle, figure out the weight on other elements
 				diag_x = np.kron(sWx[3*np.arange(len(sWx)/3)], np.array([1,0,1,0,1,0]))
 				diag_y = np.kron(sWy[3*np.arange(len(sWy)/3)+1], np.array([0,1,0,1,0,1]))
 				diag_o = np.kron(sWo[3*np.arange(len(sWo)/3)+2], np.array([1,0,1,0,1,0]))
-
 				gdSdsx = sparse.diags(diag_x,0).tocsc()
 				gdSdsy = sparse.diags(diag_y,0).tocsc()
 				gdSdso = sparse.diags([diag_o[:-1], diag_o[:-1]], [-1,1]).tocsc()

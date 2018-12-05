@@ -7,19 +7,20 @@ import Solvers
 np.set_printoptions(threshold="nan", linewidth=190, precision=8, formatter={'all': lambda x:'{:2.5f}'.format(x)})
 
 def FiniteDifferencesARAP():
-	eps = 1e-1
+	eps = 1e-4
 	its = 100
 
-	# VTU = Meshwork.rectangle_mesh(x=5, y=5, step=0.1)
-	# mw = Meshwork.Preprocessing(_VT = VTU)
-	# mw.Fix = get_max(mw.V, a=1, eps=1e-2)
-	# mw.Mov = get_min(mw.V, a=1, eps=1e-2)
+	VTU = Meshwork.rectangle_mesh(x=1, y=1, step=0.1)
+	mw = Meshwork.Preprocessing(_VT = VTU)
+	mw.Fix = get_max(mw.V, a=1, eps=1e-2)
+	mw.Mov = get_min(mw.V, a=1, eps=1e-2)
+	mesh = mw.getMesh(modes_used=None);
 
-	mw = Meshwork.Preprocessing()
-	mesh = mw.getMesh(name= "/3koval/PennateMuscle", modes_used=10)
+
+	# mw = Meshwork.Preprocessing()
+	# mesh = mw.getMesh(name= "/3koval/PennateMuscle", modes_used=10)
 	arap = Arap.ARAP(imesh = mesh, filen="crap/")
 	E0 = arap.energy(_z=mesh.z, _R =mesh.GR, _S=mesh.GS, _U=mesh.GU)
-	print("Default Energy ", E0)
 
 	def check_dEdg():
 		real = arap.dEdg()
@@ -34,8 +35,6 @@ def FiniteDifferencesARAP():
 			z[i] += 0.5*eps
 			dEdz.append((Eleft - Eright)/eps)
 
-		print(np.array(dEdz))
-		print(real)
 		print("Eg ", np.linalg.norm(real - np.array(dEdz)))
 
 	def check_dEds():
@@ -49,11 +48,12 @@ def FiniteDifferencesARAP():
 			dEds.append((Ei - E0)/eps)
 			mesh.red_s[i] -= eps
 
+		print("Es ", np.sum(np.array(dEds)-realdEds))
 		print(realdEds)
 		print(np.array(dEds))
-		print("Es ", np.sum(np.array(dEds)-realdEds))
 
 	def check_dEdr():
+
 		realdEdR, realdEdr = arap.dEdr()
 		dEdr = []
 		for i in range(len(mesh.red_r)):
@@ -69,9 +69,9 @@ def FiniteDifferencesARAP():
 
 			dEdr.append((Eleft - Eright)/eps)
 
+		print("Er ", np.sum(np.array(dEdr) - realdEdr))
 		print(realdEdr)
 		print(np.array(dEdr))
-		print("Er ", np.sum(np.array(dEdr) - realdEdr))
 
 	def check_Hessian_dEdgdg():
 		real = arap.Hess_Egg()
@@ -97,8 +97,6 @@ def FiniteDifferencesARAP():
 
 				Egg[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 
-		# print("Egg")
-		print(real)
 		print("Egg ", np.sum(np.array(Egg) - real))
 
 	def check_Hessian_dEdrdg():
@@ -251,8 +249,8 @@ def FiniteDifferencesARAP():
 
 				Egs[i].append((Eij - Ei - Ej + E0)/(eps*eps))
 
-		print(real)
 		print("\n")
+		print(real)
 		print(np.array(Egs))
 		print("Egs ", np.linalg.norm(np.array(Egs) - real))
 
@@ -273,9 +271,7 @@ def FiniteDifferencesARAP():
 			mesh.getGlobalF()
 			arap.updateConstUSUtPAx()
 			arap.iterate()
-			# print(mesh.red_r)
-			# print(arap.Energy())
-			# exit()
+			
 			drds_left = np.array(mesh.red_r)
 			dgds_left =mesh.z + np.zeros(len(mesh.z))
 
@@ -318,8 +314,8 @@ def FiniteDifferencesARAP():
 		# print("grad",  np.linalg.norm(arap.dEdg()), np.linalg.norm(arap.dEdr()[1]))
 
 	# check_dEdg()
-	# check_dEds()
 	# check_dEdr()
+	# check_dEds()
 
 	# check_Hessian_dEdgdg()
 	# check_Hessian_dEdrdg()
@@ -328,7 +324,7 @@ def FiniteDifferencesARAP():
 	# check_Hessian_dEdrds()
 	check_dgds_drds()
 
-# FiniteDifferencesARAP()
+FiniteDifferencesARAP()
 
 def FiniteDifferencesElasticity():
 	eps = 1e-1
@@ -431,7 +427,7 @@ def FiniteDifferencePositions():
 	dRdr = arap.sparseDRdr()
 	dSds = arap.sparseDSds()
 	dxdR, dxdS = ne.JMJ_MassMatrix(idrds=drds, idRdr =dRdr, idSds=dSds)
-	
+
 	J = np.zeros((dxdR.shape[0], len(dSds)))
 	J1 = np.zeros((dxdR.shape[0], len(dRdr)))
 	J2 = np.zeros((dxdS.shape[0], len(dSds)))
@@ -483,4 +479,4 @@ def FiniteDifferencePositions():
 	print(np.linalg.norm(np.array(dxds) - J.T))
 	exit()
 
-FiniteDifferencePositions()
+# FiniteDifferencePositions()
